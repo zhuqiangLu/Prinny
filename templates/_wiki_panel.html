@@ -17,14 +17,31 @@
                      or overview.reading_paths or overview.field_overview.one_paragraph) %}
     {% include "_wiki_overview.html" %}
   {% elif not pages %}
-  <div class="rounded border border-slate-200 bg-white p-3">
-    <p class="text-sm text-slate-600">No starter overview yet.</p>
-    <p class="text-xs text-slate-400 mt-1">Draft a problem-oriented map from the papers’ abstracts — an AI starting point that points you at what to read and why:</p>
-    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="mt-2">
-      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
-      <span class="htmx-indicator text-xs text-slate-400 ml-1">drafting… (one LLM pass)</span>
-    </form>
+  <div class="rounded border border-slate-200 bg-white p-3" id="wiki-firstdraft-form">
+    {# Idle state #}
+    <div class="wiki-draft-idle">
+      <p class="text-sm text-slate-600">No starter overview yet.</p>
+      <p class="text-xs text-slate-400 mt-1">Draft a curiosity-driven map from the papers’ abstracts + cached PDFs — an AI starting point that tells you what to read and why:</p>
+      <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+            hx-disabled-elt="find button" hx-indicator="#wiki-firstdraft-form" class="mt-2">
+        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
+        <span class="ml-1 text-xs text-slate-400">~1 min, one LLM pass over all your papers’ abstracts + cached PDFs</span>
+      </form>
+    </div>
+    {# In-flight state — visibility owned by our CSS, not HTMX's opacity rule. #}
+    <div class="wiki-draft-busy items-center gap-2">
+      <span class="inline-block animate-spin text-lg text-slate-700">⟳</span>
+      <div class="flex-1">
+        <div class="text-sm font-medium text-slate-900">Drafting starter wiki…</div>
+        <div class="text-xs text-slate-500">Reading every cached PDF and running one LLM pass — usually ~1 min for a 30-paper collection. Please wait; the panel will reload when ready.</div>
+      </div>
+    </div>
   </div>
+  <style>
+    #wiki-firstdraft-form .wiki-draft-busy { display: none; }
+    #wiki-firstdraft-form.htmx-request .wiki-draft-busy { display: flex; }
+    #wiki-firstdraft-form.htmx-request .wiki-draft-idle { display: none; }
+  </style>
   {% endif %}
 
   {# --- notes-based wiki (reviewed diffs from your own notes/thoughts) --- #}
