@@ -167,50 +167,134 @@
        relative wrapper at the top of this template. Server pre-renders the
        initial state (action + subline + progress) so the user sees the right
        thing immediately; the polling script keeps it updated. The script runs
-       only when an overlay is present, so a panel with no job doesn't poll. #}
+       only when an overlay is present, so a panel with no job doesn't poll.
+
+       Layout styles are in a regular CSS block below (`#wiki-draft-cover` etc.)
+       NOT Tailwind utilities. Reason: the cover only renders inside HTMX-swapped
+       HTML, never in the initial page, so the Tailwind CDN JIT can race the
+       MutationObserver and miss the swap — the user sees the cover content
+       flowing inline between paper cards instead of as a positioned overlay.
+       Plain CSS doesn't depend on the JIT, so it always lands. #}
   {% if draft_job %}
-  <div class="absolute inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]
-              flex items-center justify-center rounded-lg overflow-hidden"
-       id="wiki-draft-cover" data-slug="{{ slug }}"
+  <div id="wiki-draft-cover" data-slug="{{ slug }}"
        data-poll-url="/c/{{ slug }}/wiki/draft/status"
-       data-refresh-url="/c/{{ slug }}/wiki/panel">
-    <div class="bg-white rounded-2xl shadow-xl p-5 w-72 max-w-[90%] text-center">
-      <div class="relative inline-block w-24 h-24">
+       data-refresh-url="/c/{{ slug }}/wiki/panel"
+       role="status" aria-live="polite">
+    <div class="wiki-draft-cover-card">
+      <div class="wiki-draft-cover-ringwrap">
         {# Spinning purple arc — pure motion #}
-        <svg class="w-24 h-24 absolute inset-0 wiki-draft-ring-spin"
+        <svg class="wiki-draft-cover-spinarc wiki-draft-ring-spin"
              viewBox="0 0 100 100" aria-hidden="true">
           <circle cx="50" cy="50" r="45" stroke="#7c3aed" stroke-width="6" fill="none"
                   stroke-dasharray="85 283" stroke-linecap="round" />
         </svg>
         {# Determinate ring — fills with real stage progress (not time guess) #}
-        <svg class="w-24 h-24 absolute inset-0" viewBox="0 0 100 100"
-             style="transform: rotate(-90deg);" aria-hidden="true">
+        <svg class="wiki-draft-cover-progarc" viewBox="0 0 100 100" aria-hidden="true">
           <circle cx="50" cy="50" r="45" stroke="#e2e8f0" stroke-width="3"
                   fill="none" stroke-linecap="round" />
           <circle id="wiki-draft-cover-progress" cx="50" cy="50" r="45"
                   stroke="#0f172a" stroke-width="3" fill="none"
                   stroke-dasharray="282.74"
                   stroke-dashoffset="{{ (282.74 * (1 - (draft_initial_progress or 0) / 100))|round(2) }}"
-                  stroke-linecap="round"
-                  style="transition: stroke-dashoffset 500ms linear; opacity: 0.4;" />
+                  stroke-linecap="round" />
         </svg>
-        <div class="absolute inset-0 flex items-center justify-center">
-          <span id="wiki-draft-cover-percent"
-                class="text-2xl font-semibold text-slate-900 tabular-nums">{{ draft_initial_progress or 0 }}%</span>
+        <div class="wiki-draft-cover-percentwrap">
+          <span id="wiki-draft-cover-percent">{{ draft_initial_progress or 0 }}%</span>
         </div>
       </div>
-      <div id="wiki-draft-cover-action"
-           class="mt-4 text-sm font-semibold text-slate-900">{{ draft_initial_action }}</div>
-      <div id="wiki-draft-cover-subline"
-           class="mt-1 text-xs text-slate-500 leading-relaxed min-h-[1.2em]">{{ draft_initial_subline }}</div>
-      <div class="mt-3 text-[11px] text-slate-400">
+      <div id="wiki-draft-cover-action" class="wiki-draft-cover-action">{{ draft_initial_action }}</div>
+      <div id="wiki-draft-cover-subline" class="wiki-draft-cover-subline">{{ draft_initial_subline }}</div>
+      <div class="wiki-draft-cover-foot">
         Working in the background — you can browse other tabs and come back.
       </div>
     </div>
   </div>
   <style>
+    /* Plain CSS, not Tailwind utilities — so the styles land even when the
+       Tailwind CDN's MutationObserver loses a race with an HTMX innerHTML swap.
+       Cover uses block (not flex) layout so the card can be `position: sticky`;
+       sticky inside a flex container is unreliable. */
+    #wiki-draft-cover {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      background-color: rgba(15, 23, 42, 0.32);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      border-radius: 0.5rem;
+      /* No `overflow: hidden`: that would clip the sticky card. Sticky is naturally
+         bounded by the parent's bottom, so it can't escape the cover anyway. */
+    }
+    .wiki-draft-cover-card {
+      /* Sticky to the scroll container's top — the card stays visible no matter
+         how far the user scrolls inside the wiki panel. The `top` value matches
+         `margin-top` so the initial position is the same as the sticky position
+         (no visual jump when sticky kicks in). */
+      position: sticky;
+      top: 5rem;
+      margin: 5rem auto 1.5rem;
+      width: 19rem;
+      max-width: calc(100% - 1.5rem);
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      padding: 1.5rem 1.5rem 1.25rem;
+      text-align: center;
+    }
+    .wiki-draft-cover-ringwrap {
+      position: relative;
+      display: inline-block;
+      width: 6rem;
+      height: 6rem;
+    }
+    .wiki-draft-cover-spinarc,
+    .wiki-draft-cover-progarc {
+      position: absolute;
+      inset: 0;
+      width: 6rem;
+      height: 6rem;
+    }
+    .wiki-draft-cover-progarc { transform: rotate(-90deg); }
+    .wiki-draft-cover-progarc #wiki-draft-cover-progress {
+      transition: stroke-dashoffset 500ms linear;
+      opacity: 0.45;
+    }
+    .wiki-draft-cover-percentwrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #wiki-draft-cover-percent {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+    .wiki-draft-cover-action {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .wiki-draft-cover-subline {
+      margin-top: 0.4rem;
+      font-size: 0.78rem;
+      color: #64748b;
+      line-height: 1.45;
+      min-height: 1.2em;
+    }
+    .wiki-draft-cover-foot {
+      margin-top: 0.75rem;
+      font-size: 0.7rem;
+      color: #94a3b8;
+    }
     @keyframes wiki-draft-ring-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .wiki-draft-ring-spin { animation: wiki-draft-ring-spin 1.4s linear infinite; transform-origin: 50% 50%; }
+    .wiki-draft-ring-spin {
+      animation: wiki-draft-ring-spin 1.4s linear infinite;
+      transform-origin: 50% 50%;
+    }
   </style>
   <script>
     // Poll the status endpoint until the job ends, then reload the panel. The
