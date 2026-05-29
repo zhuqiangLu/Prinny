@@ -18,50 +18,23 @@
 <div x-data="{ tab: '{{ first_tab }}', open: {} }" class="space-y-4">
 
   {# Provenance banner — collection-level only. Per-card chips inside each section
-     carry the "machine-drafted" signal so it stays visible after scrolling.
-     Regenerate is SLOW (always-deepen reads every cached PDF + one LLM pass; ~1 min
-     for a 30-paper collection). The in-flight state has to be unmistakable or the
-     user thinks the button is broken — hence the row-level htmx-indicator that
-     replaces the banner content while the request is in flight. #}
-  <div class="rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700"
-       id="wiki-draft-form">
-    {# Idle state — visible by default, hidden during htmx-request #}
-    <div class="flex items-center gap-2 wiki-draft-idle">
-      <span>✦</span>
-      <span>AI-drafted starter wiki — a guide to spark reading, <b>not</b> your own synthesis.
-        {% if overview.meta and overview.meta.pdfs_read is defined %}
-        <span class="text-violet-500">({{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts; the rest are abstract-only.)</span>
-        {% endif %}
-      </span>
-      {# data-estimated-seconds tunes the overlay's percent curve (see base.html).
-         Empirical: ~30s + ~1.5s/paper covers most collections. The overlay's curve
-         asymptotes at 95% over this duration, so a too-low estimate just leaves
-         the percent at ~95 until the real response lands — no overflow. #}
-      <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
-            hx-disabled-elt="find button" hx-indicator="#wiki-draft-form" class="ml-auto"
-            data-estimated-seconds="{{ 30 + ((overview.meta.paper_count or 20) * 1.5)|int }}">
-        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
-                title="Regenerate from abstracts + cached PDFs (~1 min; one LLM pass)">↻ Regenerate</button>
-      </form>
-    </div>
-    {# In-flight state — hidden by default, shown when parent gets .htmx-request.
-       NOT using the `htmx-indicator` class on purpose: that class has opacity:0 in
-       HTMX's injected stylesheet, fighting our display swap and leaving the busy
-       row invisible. We own the visibility ourselves via the rules below. #}
-    <div class="wiki-draft-busy items-center gap-2">
-      <span class="inline-block animate-spin text-base">⟳</span>
-      <span class="font-medium text-violet-900">Drafting starter wiki…</span>
-      <span class="text-violet-600">Reading every cached PDF and running one LLM pass — usually ~1 min for a 30-paper collection. Please wait; the panel will reload when ready.</span>
-    </div>
+     carry the "machine-drafted" signal so it stays visible after scrolling. The
+     async draft pipeline (POST /wiki/draft → background daemon → in-panel overlay
+     in _wiki_panel.html) handles all in-flight feedback; nothing to do here other
+     than fire the request. The panel re-renders with the overlay already visible. #}
+  <div class="flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
+    <span>✦</span>
+    <span>AI-drafted starter wiki — a guide to spark reading, <b>not</b> your own synthesis.
+      {% if overview.meta and overview.meta.pdfs_read is defined %}
+      <span class="text-violet-500">({{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts; the rest are abstract-only.)</span>
+      {% endif %}
+    </span>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
+              title="Re-draft the starter wiki — runs in the background; you can keep browsing.">↻ Regenerate</button>
+    </form>
   </div>
-
-  {# Idle/busy display swap. HTMX adds `htmx-request` to #wiki-draft-form during
-     the request (because hx-indicator points there); we toggle on that. #}
-  <style>
-    #wiki-draft-form .wiki-draft-busy { display: none; }
-    #wiki-draft-form.htmx-request .wiki-draft-busy { display: flex; }
-    #wiki-draft-form.htmx-request .wiki-draft-idle { display: none; }
-  </style>
 
   {# --- Field overview (the hook) --- #}
   {% if fo.one_sentence or fo.one_paragraph or fo.core_tension %}

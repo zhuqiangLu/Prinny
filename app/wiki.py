@@ -1233,25 +1233,41 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
 
-def generate_overview(slug: str, force: bool = False) -> bool:
+def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     """Generate the curiosity-driven starter wiki from the papers' abstracts + (where
     cached) PDF excerpts, via the ``starter-wiki`` skill. Always-Deepen at init (user
     decision 2026-05-29) — papers with PDFs contribute the first ~2000 chars of body text
     so the agent can populate mechanism/evidence/limitation fields honestly.
 
     Direct-write agent seed (CLAUDE.md amendment broadened 2026-05-29), stored as
-    ``wiki/overview.json``. Non-destructive unless ``force``. Returns True on success."""
+    ``wiki/overview.json``. Non-destructive unless ``force``. Returns True on success.
+
+    ``stage_cb`` is an optional callable invoked at each pipeline stage with the
+    stage name and any kwargs (paper counts, PDF progress). Used by ``start_draft_async``
+    to publish progress for the UI polling endpoint. No-op if None."""
+    def stage(name, **extra):
+        if stage_cb:
+            try:
+                stage_cb(name, **extra)
+            except Exception:  # noqa: BLE001 - never let UI callback errors abort generation
+                pass
+
     if _overview_path(slug).exists() and not force:
         return False
+    stage("gathering")
     papers = _collection_abstracts(slug)
     with_abs = [p for p in papers if p["abstract"]]
     # Pull cached PDF excerpts in one pass (best-effort; missing PDFs just mean
     # abstract-only cards). This is the always-deepen step.
-    for p in with_abs:
+    total = len(with_abs)
+    for i, p in enumerate(with_abs):
+        stage("reading_pdfs", pdfs_done=i, pdfs_total=total)
         p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
+    stage("reading_pdfs", pdfs_done=total, pdfs_total=total)
     digest, included_refs, pdf_refs = _overview_digest(with_abs)
     if not digest.strip():
         return False
+    stage("drafting", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
     from . import agent_skills
     system = agent_skills.skill_body("starter-wiki") or "Output a JSON starter wiki from the papers."
     try:
@@ -1260,6 +1276,7 @@ def generate_overview(slug: str, force: bool = False) -> bool:
         data = _extract_json(out)
     except Exception:  # noqa: BLE001 - no agent / bad output
         return False
+    stage("validating", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
     overview = _validate_overview(data or {}, included_refs, pdf_refs)
     # Accept if ANY major section came back populated. field_overview alone isn't enough
     # (the agent may dump only the hook); paper_cards alone IS — that's the spine.
@@ -1276,6 +1293,125 @@ def generate_overview(slug: str, force: bool = False) -> bool:
     _wikidir(slug).mkdir(parents=True, exist_ok=True)
     _overview_path(slug).write_text(json.dumps(overview, indent=2), encoding="utf-8")
     _append_log(slug, f"generated starter wiki ({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
+    return True
+
+
+# --- async draft job ('the agent works in the background') ---------------------------
+# In-memory only on purpose: a uvicorn restart wipes any in-flight job, which is the
+# honest behavior (the background thread is gone too). The UI's polling endpoint will
+# return "idle" after a restart and the user can re-Regenerate. Survives the user
+# navigating away / closing the wiki tab — when they reopen, the panel checks
+# get_draft_job(slug) and re-renders the overlay with the live stage.
+import threading
+
+_DRAFT_JOBS: dict[str, dict] = {}
+_DRAFT_LOCK = threading.Lock()
+
+# Per-stage human-voice messages the UI shows. Kept here (not in JS) so the agent's
+# voice is server-controlled and easy to localize / edit later.
+_STAGE_MESSAGES = {
+    "gathering":    {"action": "I'm collecting your papers' abstracts.",
+                     "subline": ""},
+    "reading_pdfs": {"action": "I'm reading the PDFs.",
+                     "subline": ""},  # filled in with "{done} of {total}" at render
+    "drafting":     {"action": "I'm drafting the wiki.",
+                     "subline": "This is the long part — the LLM is reading everything and writing the map. Usually under a minute."},
+    "validating":   {"action": "I'm checking the refs and saving.",
+                     "subline": ""},
+    "done":         {"action": "Done.",
+                     "subline": ""},
+    "failed":       {"action": "Something went wrong.",
+                     "subline": "Try Regenerate again, or check the server log."},
+}
+
+
+def _set_job(slug: str, **kwargs) -> None:
+    """Merge updates into a slug's job dict. Thread-safe."""
+    with _DRAFT_LOCK:
+        job = _DRAFT_JOBS.get(slug, {})
+        job.update(kwargs)
+        _DRAFT_JOBS[slug] = job
+
+
+def get_draft_job(slug: str) -> dict | None:
+    """Snapshot of the running job for this slug, or None if no job is tracked.
+    A copy, so callers can read/mutate without holding the lock."""
+    with _DRAFT_LOCK:
+        job = _DRAFT_JOBS.get(slug)
+        return dict(job) if job else None
+
+
+def clear_draft_job(slug: str) -> None:
+    """Forget a slug's job. Used by the panel renderer to clean up after a done/
+    failed job has been observed, so the next render is back to the idle path."""
+    with _DRAFT_LOCK:
+        _DRAFT_JOBS.pop(slug, None)
+
+
+def _stage_message(job: dict) -> dict:
+    """Compose the human-voice action + subline for the UI from the job's current
+    stage and extras. Pure function so it's testable and the template can call it."""
+    stage = job.get("stage", "gathering")
+    msg = dict(_STAGE_MESSAGES.get(stage, _STAGE_MESSAGES["gathering"]))
+    if stage == "reading_pdfs":
+        done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0)
+        if total:
+            msg["subline"] = f"{done} of {total}"
+    elif stage == "drafting":
+        pc, pr = job.get("paper_count"), job.get("pdfs_read")
+        if pc is not None and pr is not None:
+            msg["subline"] = (f"Working with {pc} paper(s), {pr} with PDF excerpts. "
+                              + msg["subline"])
+    return msg
+
+
+def _stage_progress(job: dict) -> int:
+    """A coarse 0-100 progress estimate from the stage. Reading-pdfs has a real
+    fraction; drafting/validating fall back to fixed milestones (the LLM call gives
+    no events). Capped at 95 until status='done' lands on 100 — same honesty rule as
+    the old time-based bar: never claim 100% before the response actually arrives."""
+    stage = job.get("stage", "gathering")
+    if job.get("status") in ("done", "failed"):
+        return 100
+    if stage == "gathering":
+        return 3
+    if stage == "reading_pdfs":
+        done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0) or 1
+        # PDF reading is the first 30% of the bar
+        return min(30, 5 + int(25 * done / total))
+    if stage == "drafting":
+        return 60   # mid-drafting — we have no inner progress
+    if stage == "validating":
+        return 95
+    return 0
+
+
+def start_draft_async(slug: str, force: bool = True) -> bool:
+    """Kick off the starter-wiki draft on a daemon thread. Returns True if a job was
+    started, False if one was already running for this slug. The thread updates
+    _DRAFT_JOBS as the pipeline advances; UI polls get_draft_job for the live state."""
+    existing = get_draft_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    _set_job(slug, status="running", stage="gathering", started_at=_now(),
+             pdfs_done=0, pdfs_total=0, paper_count=None, pdfs_read=None,
+             error=None, finished_at=None)
+
+    def cb(name: str, **extra):
+        _set_job(slug, stage=name, **extra)
+
+    def runner():
+        try:
+            ok = generate_overview(slug, force=force, stage_cb=cb)
+            _set_job(slug, status="done" if ok else "failed",
+                     stage="done" if ok else "failed",
+                     finished_at=_now(),
+                     error=None if ok else "the agent produced no usable output")
+        except Exception as exc:  # noqa: BLE001 - publish, don't crash the worker
+            _set_job(slug, status="failed", stage="failed",
+                     finished_at=_now(), error=str(exc))
+
+    threading.Thread(target=runner, daemon=True, name=f"draft-{slug}").start()
     return True
 
 

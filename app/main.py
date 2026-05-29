@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -1483,9 +1483,23 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     """Render the inline wiki panel. ``attention_since`` is the user's PREVIOUS
     last_wiki_viewed_at (the GET handler bumps it via wiki.read_and_bump_viewed and
     passes the old value here). POST handlers pass None to suppress the "new since
-    last view" badges so a re-render after ↻ Regenerate doesn't reset badge state."""
+    last view" badges so a re-render after ↻ Regenerate doesn't reset badge state.
+
+    Async draft contract: if a draft job exists for this slug, pass it through so
+    the template can render the in-panel overlay. A done/failed job is observed
+    once here and then cleared, so the next render is back to the idle path and
+    /wiki/draft/status starts returning 'idle' for new polls."""
     index_md = wiki._read(wiki._wikidir(slug) / "index.md")
     from . import debt as debt_mod, triage as triage_mod
+    job = wiki.get_draft_job(slug)
+    if job and job.get("status") in ("done", "failed"):
+        # Job finished; this render shows the regenerated panel (no overlay).
+        # Clear the job so polls return 'idle' and we don't loop a refresh.
+        wiki.clear_draft_job(slug)
+        job_err = job.get("error") if job["status"] == "failed" else None
+        job = None
+    else:
+        job_err = None
     return templates.TemplateResponse(
         request, "_wiki_panel.html",
         {"slug": slug, "pages": _wiki_pages(slug),
@@ -1493,7 +1507,12 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "overview": wiki.load_overview(slug, attention_since=attention_since),
          "pending": len(wiki.list_proposed(slug)), "gaps": gaps,
          "open_questions": debt_mod.list_debt(slug),
-         "recommended_papers": triage_mod.list_triage(slug, status="pending")},
+         "recommended_papers": triage_mod.list_triage(slug, status="pending"),
+         "draft_job": job,                       # active running job, or None
+         "draft_initial_action": wiki._stage_message(job)["action"] if job else "",
+         "draft_initial_subline": wiki._stage_message(job)["subline"] if job else "",
+         "draft_initial_progress": wiki._stage_progress(job) if job else 0,
+         "draft_error": job_err},
     )
 
 
@@ -1613,13 +1632,36 @@ def wiki_panel(request: Request, slug: str) -> HTMLResponse:
 
 @app.post("/c/{slug}/wiki/draft", response_class=HTMLResponse)
 def wiki_draft_seed(request: Request, slug: str) -> HTMLResponse:
-    """Generate the curiosity-driven starter wiki from abstracts + cached PDF excerpts
-    (always-deepen at init, user decision 2026-05-29). Writes directly — see the
-    CLAUDE.md amendment. Re-renders the panel without bumping last-viewed so the
-    user's badge state survives this re-render."""
+    """Kick off the starter-wiki draft on a background daemon thread and re-render
+    the panel immediately. The new panel renders the in-progress overlay (because
+    wiki.get_draft_job(slug) now returns status='running'); the overlay's polling
+    script handles refresh on completion. Last-viewed isn't bumped here, so the
+    badge state survives this re-render."""
     _require_collection(slug)
-    wiki.generate_overview(slug, force=True)
+    wiki.start_draft_async(slug, force=True)
     return _wiki_panel(request, slug)
+
+
+@app.get("/c/{slug}/wiki/draft/status", response_class=JSONResponse)
+def wiki_draft_status(slug: str) -> JSONResponse:
+    """Live state of the slug's draft job for the in-panel overlay to poll. Returns
+    status, stage, the agent's human-voice message + subline, a progress estimate,
+    and the started_at timestamp. Status 'idle' means no job is tracked (either
+    nothing was started, or the job was cleaned up after the next panel render)."""
+    _require_collection(slug)
+    job = wiki.get_draft_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    msg = wiki._stage_message(job)
+    return JSONResponse({
+        "status": job.get("status", "running"),
+        "stage": job.get("stage", "gathering"),
+        "action": msg["action"],
+        "subline": msg["subline"],
+        "progress": wiki._stage_progress(job),
+        "started_at": job.get("started_at"),
+        "error": job.get("error"),
+    })
 
 
 def _find_wiki_page(slug: str, name: str):

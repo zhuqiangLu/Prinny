@@ -1,15 +1,31 @@
 {# Wiki, rendered inline in the collection's left pane (#left-panel). Mutations
    hx-post into #left-panel; navigation uses loadPanel() from collectionView().
    Leads with the interactive problem-oriented overview (abstract seed); the notes-based
-   wiki (Phase 5, reviewed diffs) lives under a collapsible section below. #}
-<div class="p-3" x-data="{ build: {{ 'false' if overview else 'true' }} }">
+   wiki (Phase 5, reviewed diffs) lives under a collapsible section below.
+
+   Async-draft contract (2026-05-30): when a starter-wiki draft is running for this
+   slug, the in-panel overlay is rendered at the bottom of this template (so it's a
+   sibling of the panel content and absolute-positioned inside the wrapper). Polling
+   the status endpoint updates the agent's "current action" line; on completion the
+   polling reloads the panel via HTMX. `relative` here is what scopes the overlay. #}
+<div class="relative p-3" x-data="{ build: {{ 'false' if overview else 'true' }} }">
   <div class="flex items-center gap-2 mb-2">
     <h2 class="text-sm font-semibold text-slate-700">Wiki</h2>
+    {% if draft_job %}
+    <span class="text-[10px] rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5"
+          title="A starter-wiki draft is running in the background.">drafting…</span>
+    {% endif %}
     <button @click="loadPanel('/c/{{ slug }}/proposed/panel')"
             class="ml-auto text-xs rounded border border-slate-200 bg-white px-2 py-1 hover:bg-slate-50">
       Review queue{% if pending %} <span class="rounded-full bg-amber-200 px-1.5">{{ pending }}</span>{% endif %}
     </button>
   </div>
+
+  {% if draft_error %}
+  <div class="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
+    <b>The last draft failed.</b> {{ draft_error }} — try ↻ Regenerate again.
+  </div>
+  {% endif %}
 
   {# --- interactive starter overview (curiosity-driven blueprint) --- #}
   {% if overview and (overview.paper_cards or overview.problems or overview.methods
@@ -17,31 +33,15 @@
                      or overview.reading_paths or overview.field_overview.one_paragraph) %}
     {% include "_wiki_overview.html" %}
   {% elif not pages %}
-  <div class="rounded border border-slate-200 bg-white p-3" id="wiki-firstdraft-form">
-    {# Idle state #}
-    <div class="wiki-draft-idle">
-      <p class="text-sm text-slate-600">No starter overview yet.</p>
-      <p class="text-xs text-slate-400 mt-1">Draft a curiosity-driven map from the papers’ abstracts + cached PDFs — an AI starting point that tells you what to read and why:</p>
-      <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
-            hx-disabled-elt="find button" hx-indicator="#wiki-firstdraft-form" class="mt-2">
-        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
-        <span class="ml-1 text-xs text-slate-400">~1 min, one LLM pass over all your papers’ abstracts + cached PDFs</span>
-      </form>
-    </div>
-    {# In-flight state — visibility owned by our CSS, not HTMX's opacity rule. #}
-    <div class="wiki-draft-busy items-center gap-2">
-      <span class="inline-block animate-spin text-lg text-slate-700">⟳</span>
-      <div class="flex-1">
-        <div class="text-sm font-medium text-slate-900">Drafting starter wiki…</div>
-        <div class="text-xs text-slate-500">Reading every cached PDF and running one LLM pass — usually ~1 min for a 30-paper collection. Please wait; the panel will reload when ready.</div>
-      </div>
-    </div>
+  <div class="rounded border border-slate-200 bg-white p-3">
+    <p class="text-sm text-slate-600">No starter overview yet.</p>
+    <p class="text-xs text-slate-400 mt-1">Draft a curiosity-driven map from the papers’ abstracts + cached PDFs — an AI starting point that tells you what to read and why:</p>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="mt-2">
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
+      <span class="ml-1 text-xs text-slate-400">~1 min, one LLM pass over all your papers’ abstracts + cached PDFs</span>
+    </form>
   </div>
-  <style>
-    #wiki-firstdraft-form .wiki-draft-busy { display: none; }
-    #wiki-firstdraft-form.htmx-request .wiki-draft-busy { display: flex; }
-    #wiki-firstdraft-form.htmx-request .wiki-draft-idle { display: none; }
-  </style>
   {% endif %}
 
   {# --- notes-based wiki (reviewed diffs from your own notes/thoughts) --- #}
@@ -161,4 +161,114 @@
       {% endif %}
     </div>
   </div>
+
+  {# --- In-panel draft overlay (scoped to this wiki panel only — does NOT cover
+       chat/thoughts on the right or the global nav). Sits absolute inside the
+       relative wrapper at the top of this template. Server pre-renders the
+       initial state (action + subline + progress) so the user sees the right
+       thing immediately; the polling script keeps it updated. The script runs
+       only when an overlay is present, so a panel with no job doesn't poll. #}
+  {% if draft_job %}
+  <div class="absolute inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]
+              flex items-center justify-center rounded-lg overflow-hidden"
+       id="wiki-draft-cover" data-slug="{{ slug }}"
+       data-poll-url="/c/{{ slug }}/wiki/draft/status"
+       data-refresh-url="/c/{{ slug }}/wiki/panel">
+    <div class="bg-white rounded-2xl shadow-xl p-5 w-72 max-w-[90%] text-center">
+      <div class="relative inline-block w-24 h-24">
+        {# Spinning purple arc — pure motion #}
+        <svg class="w-24 h-24 absolute inset-0 wiki-draft-ring-spin"
+             viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" stroke="#7c3aed" stroke-width="6" fill="none"
+                  stroke-dasharray="85 283" stroke-linecap="round" />
+        </svg>
+        {# Determinate ring — fills with real stage progress (not time guess) #}
+        <svg class="w-24 h-24 absolute inset-0" viewBox="0 0 100 100"
+             style="transform: rotate(-90deg);" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" stroke="#e2e8f0" stroke-width="3"
+                  fill="none" stroke-linecap="round" />
+          <circle id="wiki-draft-cover-progress" cx="50" cy="50" r="45"
+                  stroke="#0f172a" stroke-width="3" fill="none"
+                  stroke-dasharray="282.74"
+                  stroke-dashoffset="{{ (282.74 * (1 - (draft_initial_progress or 0) / 100))|round(2) }}"
+                  stroke-linecap="round"
+                  style="transition: stroke-dashoffset 500ms linear; opacity: 0.4;" />
+        </svg>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span id="wiki-draft-cover-percent"
+                class="text-2xl font-semibold text-slate-900 tabular-nums">{{ draft_initial_progress or 0 }}%</span>
+        </div>
+      </div>
+      <div id="wiki-draft-cover-action"
+           class="mt-4 text-sm font-semibold text-slate-900">{{ draft_initial_action }}</div>
+      <div id="wiki-draft-cover-subline"
+           class="mt-1 text-xs text-slate-500 leading-relaxed min-h-[1.2em]">{{ draft_initial_subline }}</div>
+      <div class="mt-3 text-[11px] text-slate-400">
+        Working in the background — you can browse other tabs and come back.
+      </div>
+    </div>
+  </div>
+  <style>
+    @keyframes wiki-draft-ring-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .wiki-draft-ring-spin { animation: wiki-draft-ring-spin 1.4s linear infinite; transform-origin: 50% 50%; }
+  </style>
+  <script>
+    // Poll the status endpoint until the job ends, then reload the panel. The
+    // overlay element itself is the "is this panel still expecting updates?" gate —
+    // if the panel is swapped (e.g. user navigated tabs), this element disappears
+    // and the polling loop exits on its next tick. No global state, no leaked timers.
+    (function () {
+      var cover = document.getElementById("wiki-draft-cover");
+      if (!cover) return;
+      var slug = cover.getAttribute("data-slug");
+      var url  = cover.getAttribute("data-poll-url");
+      var refresh = cover.getAttribute("data-refresh-url");
+      var CIRC = 282.74;
+      function setProgress(p) {
+        var pct = Math.max(0, Math.min(100, p|0));
+        var pe = document.getElementById("wiki-draft-cover-percent");
+        var pr = document.getElementById("wiki-draft-cover-progress");
+        if (pe) pe.textContent = pct + "%";
+        if (pr) pr.style.strokeDashoffset = (CIRC * (1 - pct / 100)).toFixed(2);
+      }
+      function setText(action, subline) {
+        var a = document.getElementById("wiki-draft-cover-action");
+        var s = document.getElementById("wiki-draft-cover-subline");
+        if (a && action != null) a.textContent = action;
+        if (s) s.textContent = subline || "";
+      }
+      function tick() {
+        // Bail if the overlay was swapped away (panel switched / panel refreshed).
+        if (!document.body.contains(cover)) return;
+        fetch(url, {headers: {"Accept": "application/json"}})
+          .then(function (r) { return r.json(); })
+          .then(function (job) {
+            if (!document.body.contains(cover)) return;
+            if (job.status === "idle") {
+              // Job vanished (uvicorn restart, or already cleared) — refresh once.
+              if (window.htmx) htmx.ajax("GET", refresh, {target: "#left-panel", swap: "innerHTML"});
+              else window.location.reload();
+              return;
+            }
+            setProgress(job.progress);
+            setText(job.action, job.subline);
+            if (job.status === "done" || job.status === "failed") {
+              setProgress(100);
+              setTimeout(function () {
+                if (window.htmx) htmx.ajax("GET", refresh, {target: "#left-panel", swap: "innerHTML"});
+                else window.location.reload();
+              }, 350);
+              return;
+            }
+            setTimeout(tick, 1200);
+          })
+          .catch(function () {
+            // Transient network error — try again in 2s rather than giving up.
+            if (document.body.contains(cover)) setTimeout(tick, 2000);
+          });
+      }
+      setTimeout(tick, 800);
+    })();
+  </script>
+  {% endif %}
 </div>

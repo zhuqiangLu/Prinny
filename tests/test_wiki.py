@@ -484,6 +484,105 @@ def test_is_hot_and_is_new_badges(tmp_path, monkeypatch):
     assert all(c["is_new"] is False for c in loaded2["paper_cards"])
 
 
+def test_stage_callback_fires_through_pipeline(tmp_path, monkeypatch):
+    """generate_overview calls stage_cb in the right order with the right shape."""
+    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+    stages = []
+    wiki.generate_overview("vlms", force=True, stage_cb=lambda n, **kw: stages.append((n, kw)))
+    names = [s[0] for s in stages]
+    # gathering -> at least one reading_pdfs -> drafting -> validating
+    assert names[0] == "gathering"
+    assert "reading_pdfs" in names
+    assert "drafting" in names and "validating" in names
+    # reading_pdfs reports pdfs_done/pdfs_total
+    rp = next(s for s in stages if s[0] == "reading_pdfs")
+    assert "pdfs_done" in rp[1] and "pdfs_total" in rp[1]
+    # drafting/validating carry paper_count + pdfs_read
+    dr = next(s for s in stages if s[0] == "drafting")
+    assert "paper_count" in dr[1] and "pdfs_read" in dr[1]
+
+
+def test_stage_callback_errors_dont_abort_generation(tmp_path, monkeypatch):
+    """A broken UI callback can't take down a draft."""
+    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+    def bad(name, **kw):
+        raise RuntimeError("UI exploded")
+    assert wiki.generate_overview("vlms", force=True, stage_cb=bad) is True
+    assert (wdir / "overview.json").exists()
+
+
+def test_stage_message_renders_for_each_stage():
+    """_stage_message returns the right voice line for each known stage; reading_pdfs
+    composes the 'N of M' subline from job extras."""
+    assert wiki._stage_message({"stage": "gathering"})["action"].startswith("I'm collecting")
+    rp = wiki._stage_message({"stage": "reading_pdfs", "pdfs_done": 3, "pdfs_total": 12})
+    assert rp["action"].startswith("I'm reading")
+    assert "3 of 12" in rp["subline"]
+    dr = wiki._stage_message({"stage": "drafting", "paper_count": 12, "pdfs_read": 8})
+    assert "12 paper" in dr["subline"] and "8 with PDF" in dr["subline"]
+    assert wiki._stage_message({"stage": "done"})["action"] == "Done."
+    # Unknown stage falls back to gathering voice rather than crashing.
+    assert wiki._stage_message({"stage": "wat"})["action"].startswith("I'm collecting")
+
+
+def test_stage_progress_monotone_and_capped():
+    """_stage_progress climbs in the right order and stays <100 until status='done'."""
+    p_gather = wiki._stage_progress({"stage": "gathering"})
+    p_pdf_0  = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 0, "pdfs_total": 10})
+    p_pdf_5  = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 5, "pdfs_total": 10})
+    p_pdf_10 = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 10, "pdfs_total": 10})
+    p_draft  = wiki._stage_progress({"stage": "drafting"})
+    p_valid  = wiki._stage_progress({"stage": "validating"})
+    assert p_gather < p_pdf_0 < p_pdf_5 < p_pdf_10 < p_draft < p_valid < 100
+    # Done flips to 100 regardless of stage payload.
+    assert wiki._stage_progress({"stage": "drafting", "status": "done"}) == 100
+    assert wiki._stage_progress({"stage": "validating", "status": "failed"}) == 100
+
+
+def test_start_draft_async_publishes_state_and_completes(tmp_path, monkeypatch):
+    """The async runner: kicks off in a thread, publishes state via get_draft_job,
+    transitions to 'done' on success, writes overview.json. Tests the contract end-
+    to-end with a fast in-process llm.complete stub."""
+    import time
+    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+    wiki.clear_draft_job("vlms")   # ensure clean
+    assert wiki.start_draft_async("vlms", force=True) is True
+    # A second start while running is rejected.
+    assert wiki.start_draft_async("vlms", force=True) is False
+    # Wait for completion (the runner is in a daemon thread; this test's LLM stub is sync).
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        job = wiki.get_draft_job("vlms")
+        if job and job["status"] in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    job = wiki.get_draft_job("vlms")
+    assert job is not None and job["status"] == "done"
+    assert (wdir / "overview.json").exists()
+    # Cleared on demand.
+    wiki.clear_draft_job("vlms")
+    assert wiki.get_draft_job("vlms") is None
+
+
+def test_start_draft_async_publishes_failure(tmp_path, monkeypatch):
+    """If generate_overview returns False (no usable LLM output), the job ends as
+    status='failed' with a human-readable error."""
+    import time
+    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")  # empty -> validator rejects
+    wiki.clear_draft_job("vlms")
+    wiki.start_draft_async("vlms", force=True)
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        job = wiki.get_draft_job("vlms")
+        if job and job["status"] in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    job = wiki.get_draft_job("vlms")
+    assert job is not None and job["status"] == "failed"
+    assert job.get("error")
+    wiki.clear_draft_job("vlms")
+
+
 def test_generate_overview_no_abstracts_returns_false(tmp_path, monkeypatch):
     wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")
     con = connect(tmp_path / "app.sqlite")
