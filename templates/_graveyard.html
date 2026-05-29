@@ -1,0 +1,73 @@
+{# Graveyard: two tiers of removed papers. Expects: slug, items (graveyard tier),
+   deleted (permanently-deleted tombstones). Pull-only model — nothing is written to Zotero. #}
+{% macro removal_list(slug, rows, kind) %}
+  {# kind: 'grave' (Restore + Permanently delete) | 'tomb' (Restore + Purge) #}
+  <form method="post"
+        x-data='{ sel: [], ids: {{ rows|map(attribute="id")|list|tojson }}.map(String),
+                  all() { return this.sel.length === this.ids.length; },
+                  toggleAll(e) { this.sel = e.target.checked ? [...this.ids] : []; },
+                  async go(action, msg) {
+                    if (!this.sel.length) return;
+                    if (msg && !(await window.paConfirm(msg, { danger: true }))) return;
+                    this.$root.action = action; this.$root.submit();
+                  } }'>
+    <div class="flex items-center gap-2 mb-2 text-sm">
+      <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
+        <input type="checkbox" class="rounded border-slate-300" :checked="all()" @change="toggleAll($event)"
+               :indeterminate.camel="sel.length > 0 && !all()">
+        <span x-text="sel.length ? `${sel.length} selected` : 'Select all'"></span>
+      </label>
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" @click="go('/c/{{ slug }}/graveyard/restore')" :disabled="!sel.length"
+                class="rounded border border-slate-300 bg-white px-3 py-1 hover:bg-slate-50 disabled:opacity-40">↩ Restore</button>
+        {% if kind == 'grave' %}
+        <button type="button" :disabled="!sel.length"
+                @click="go('/c/{{ slug }}/graveyard/delete', `Permanently delete ${sel.length} paper(s)? They leave the Graveyard and won't be re-added by a Pull. Your notes/chat/highlights are kept and you can still Restore them.`)"
+                class="rounded border border-rose-300 bg-white px-3 py-1 text-rose-700 hover:bg-rose-50 disabled:opacity-40">🗑 Permanently delete</button>
+        {% else %}
+        <button type="button" :disabled="!sel.length"
+                @click="go('/c/{{ slug }}/graveyard/purge', `Purge ${sel.length} paper(s)? This forgets their metadata AND your work (notes, chat, highlights) for good. A future Pull may re-add them as brand-new papers. This cannot be undone.`)"
+                class="rounded border-2 border-rose-500 bg-rose-50 px-3 py-1 font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40">⚠ Purge metadata</button>
+        {% endif %}
+      </div>
+    </div>
+    <ul class="divide-y divide-slate-100 max-h-[40vh] overflow-auto">
+      {% for it in rows %}
+      <li class="py-2 flex items-start gap-2">
+        <input type="checkbox" name="paper_ids" value="{{ it.id }}" x-model="sel"
+               class="mt-1 shrink-0 rounded border-slate-300 cursor-pointer">
+        <div class="min-w-0">
+          <div class="text-sm font-medium text-slate-800">{{ it.title }}</div>
+          <div class="text-xs text-slate-500">{{ it.authors }}{% if it.authors and it.year %} · {% endif %}{{ it.year }}
+            · removed {{ it.created_at[:10] if it.created_at }}</div>
+          {% if it.abstract %}<div class="text-xs text-slate-500 mt-0.5 line-clamp-2">{{ it.abstract }}…</div>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </form>
+{% endmacro %}
+
+{% if not items and not deleted %}
+<p class="text-sm text-slate-500 py-4 text-center">Nothing here — no removed papers.</p>
+{% else %}
+<div x-data="{ tab: '{{ 'grave' if items else 'tomb' }}' }">
+  <div class="flex gap-1 mb-3 text-sm border-b border-slate-200">
+    <button type="button" @click="tab = 'grave'"
+            :class="tab === 'grave' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500'"
+            class="px-3 py-1.5 -mb-px border-b-2">🪦 Graveyard ({{ items|length }})</button>
+    <button type="button" @click="tab = 'tomb'"
+            :class="tab === 'tomb' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500'"
+            class="px-3 py-1.5 -mb-px border-b-2">⚰ Permanently deleted ({{ deleted|length }})</button>
+  </div>
+
+  <div x-show="tab === 'grave'">
+    {% if items %}{{ removal_list(slug, items, 'grave') }}
+    {% else %}<p class="text-sm text-slate-500 py-4 text-center">Graveyard is empty.</p>{% endif %}
+  </div>
+  <div x-show="tab === 'tomb'" x-cloak>
+    {% if deleted %}{{ removal_list(slug, deleted, 'tomb') }}
+    {% else %}<p class="text-sm text-slate-500 py-4 text-center">No permanently-deleted papers.</p>{% endif %}
+  </div>
+</div>
+{% endif %}

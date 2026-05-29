@@ -1,0 +1,74 @@
+{# One paper row. Expects: slug, p (id,title,authors,year,source_flag,added_at,has_pdf,
+   fetching,failed,pct). Lives inside the collectionView Alpine scope (read/toolsOpen/selected/
+   toggleOne). While fetching it polls itself (whole-row swap) so the ring, Preview button and
+   clickable title all update together; a downloading/failed paper is NOT openable. #}
+<li x-data="{ open: false }"
+    data-title="{{ p.title }}" data-authors="{{ p.authors }}"
+    data-year="{{ p.year }}" data-added="{{ p.added_at }}">
+  <div class="flex items-start gap-3 px-4 py-3">
+    <input type="checkbox" value="{{ p.id }}" x-model="selected" x-show="toolsOpen" x-cloak
+           class="mt-1 shrink-0 rounded border-slate-300 cursor-pointer" title="Select">
+    {% if p.fetching or p.failed %}
+    {# not openable yet — plain text, no link #}
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2">
+        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="unread"></span>
+        <div class="font-medium text-slate-500">{{ p.title }}</div>
+      </div>
+      <div class="text-sm text-slate-400 mt-0.5">{{ p.authors }}{% if p.authors and p.year %} · {% endif %}{{ p.year }}</div>
+    </div>
+    {% else %}
+    <a href="/c/{{ slug }}/p/{{ p.id }}" class="min-w-0 flex-1 group"
+       @click="if (toolsOpen) { $event.preventDefault(); toggleOne('{{ p.id }}'); }">
+      <div class="flex items-center gap-2">
+        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="unread"></span>
+        <div class="font-medium text-slate-900 group-hover:text-slate-600">{{ p.title }}</div>
+      </div>
+      <div class="text-sm text-slate-500 mt-0.5">{{ p.authors }}{% if p.authors and p.year %} · {% endif %}{{ p.year }}</div>
+      {% if p.added_at %}
+      <div x-show="toolsOpen" x-cloak class="text-xs text-slate-400 mt-0.5">added {{ p.added_at[:10] }}</div>
+      {% endif %}
+    </a>
+    {% endif %}
+    <div class="shrink-0 flex items-center gap-1.5">
+      {% if p.source_flag == "new-from-zotero" %}<span x-show="!read['{{ p.id }}']" class="text-xs rounded bg-sky-100 text-sky-700 px-1.5 py-0.5">new</span>{% endif %}
+      {% if p.source_flag == "removed-in-zotero" %}<span class="text-xs rounded bg-rose-100 text-rose-700 px-1.5 py-0.5">removed in Zotero</span>{% endif %}
+      {% if p.source_flag == "arxiv-suggested" %}<span class="text-xs rounded bg-violet-100 text-violet-700 px-1.5 py-0.5">suggested</span>{% endif %}
+
+      {% if p.fetching %}
+      <span class="inline-flex items-center gap-1.5 text-xs text-slate-500"
+            hx-get="/c/{{ slug }}/p/{{ p.id }}/pdf-status" hx-trigger="load delay:900ms"
+            hx-target="closest li" hx-swap="outerHTML">
+        <svg class="w-[18px] h-[18px] -rotate-90" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="none" stroke="#e2e8f0" stroke-width="4"></circle>
+          {% if p.pct is not none %}
+          <circle cx="18" cy="18" r="16" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"
+                  stroke-dasharray="{{ (p.pct / 100 * 100.53)|round(1) }} 100.53"></circle>
+          {% else %}
+          <circle cx="18" cy="18" r="16" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"
+                  stroke-dasharray="25 100.53" class="origin-center animate-spin" style="animation-duration:0.9s"></circle>
+          {% endif %}
+        </svg>
+        <span>{% if p.pct is not none %}{{ p.pct }}%{% else %}…{% endif %}</span>
+      </span>
+      {% elif p.failed %}
+      <span class="text-xs text-rose-600">download failed</span>
+      <button hx-post="/c/{{ slug }}/p/{{ p.id }}/retry-download" hx-target="closest li" hx-swap="outerHTML"
+              class="text-xs rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50">Retry</button>
+      <button hx-post="/c/{{ slug }}/p/{{ p.id }}/drop" hx-target="closest li" hx-swap="outerHTML"
+              class="text-xs rounded border border-rose-300 px-2 py-0.5 text-rose-600 hover:bg-rose-50">Remove</button>
+      {% elif p.has_pdf %}
+      <button x-show="!toolsOpen" @click="open = !open" class="text-xs rounded border border-slate-200 px-2 py-0.5 text-slate-500 hover:bg-slate-50" x-text="open ? 'Hide' : 'Preview'"></button>
+      {% else %}
+      <span x-show="!toolsOpen" class="text-xs rounded bg-slate-100 text-slate-400 px-1.5 py-0.5">no PDF</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if p.has_pdf and not p.fetching and not p.failed %}
+  <div x-show="open" x-cloak class="px-4 pb-4">
+    <iframe x-bind:src="open ? '/pdf/{{ p.id }}#toolbar=0&navpanes=0&view=FitH' : ''" loading="lazy"
+            class="w-full h-[26rem] rounded border border-slate-200 bg-slate-50"></iframe>
+    <a href="/c/{{ slug }}/p/{{ p.id }}" class="mt-1 inline-block text-xs text-slate-500 hover:text-slate-800">Open full reader →</a>
+  </div>
+  {% endif %}
+</li>

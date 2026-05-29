@@ -1,0 +1,50 @@
+{# Reading-debt queue (AGENTIC_PLAN P7). Per item: Fill / Ignore / Brainstorm. #}
+<div id="left-panel-body" class="p-3 space-y-3">
+  <div class="flex items-center gap-2">
+    <h3 class="text-sm font-semibold text-slate-700">Reading debt</h3>
+    <span class="text-xs text-slate-400">reasoning you owe</span>
+    <form hx-post="/c/{{ slug }}/debt/find" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded bg-slate-900 px-2.5 py-1 text-xs text-white hover:bg-slate-700">Find reading debt</button>
+    </form>
+  </div>
+
+  {% if error %}
+  <div class="rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+    {{ error }}{% if "API key" in error or "unavailable" in error %} — check <a href="/settings" class="underline">Settings</a>.{% endif %}
+  </div>
+  {% endif %}
+
+  {% if items %}
+  <form hx-post="/c/{{ slug }}/debt/brainstorm-all" hx-target="#left-panel" hx-swap="innerHTML"
+        hx-disabled-elt="find button">
+    <button class="text-xs text-slate-500 hover:text-slate-800 underline">✦ Brainstorm all open debts (speculative)</button>
+  </form>
+  <ul class="space-y-2">
+    {% for d in items %}
+    <li class="rounded border border-slate-200 p-2 text-sm" x-data="{ fill: false }">
+      <p class="text-slate-800">{{ d.question }}</p>
+      {% if d.sources %}<p class="mt-0.5 text-[11px] text-slate-400">from: {{ d.sources | join(", ") }}</p>{% endif %}
+      <div class="mt-1.5 flex items-center gap-2 text-xs">
+        <button type="button" @click="fill = !fill" class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Fill</button>
+        <form hx-post="/c/{{ slug }}/debt/{{ d.id }}/ignore" hx-target="#left-panel" hx-swap="innerHTML">
+          <button class="rounded border border-slate-300 px-2 py-0.5 text-slate-500 hover:bg-slate-50">Ignore</button>
+        </form>
+        <form hx-post="/c/{{ slug }}/debt/{{ d.id }}/brainstorm" hx-target="#left-panel" hx-swap="innerHTML"
+              hx-disabled-elt="find button">
+          <button class="rounded border border-slate-300 px-2 py-0.5 text-indigo-600 hover:bg-indigo-50" title="Speculative machine notes, quarantined in brainstorming/">Brainstorm</button>
+        </form>
+      </div>
+      <form x-show="fill" x-cloak class="mt-1.5 space-y-1"
+            hx-post="/c/{{ slug }}/debt/{{ d.id }}/fill" hx-target="#left-panel" hx-swap="innerHTML">
+        <textarea name="reasoning" rows="3" required placeholder="your reasoning (becomes a reasoning note that can ground the wiki)…"
+                  class="w-full rounded border border-slate-300 px-2 py-1 text-sm"></textarea>
+        <button class="rounded bg-slate-900 px-2.5 py-1 text-xs text-white hover:bg-slate-700">Save reasoning</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif not error %}
+  <p class="text-sm text-slate-500">No open reading debt. Click <strong>Find reading debt</strong> to surface the seed fragments you’ve flagged but not yet reasoned over.</p>
+  {% endif %}
+</div>

@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}{{ paper.title }} — Paper Agent{% endblock %}
+{% block main_width %}max-w-none{% endblock %}
+{% block main_pad %}pt-3 pb-2{% endblock %}
+{% block main_inner %}h-full{% endblock %}
+{% block content %}
+<div x-data="paperView()" class="flex flex-col h-full min-h-0">
+
+  <!-- top toolbar: Return · title · highlight legend (center) · actions -->
+  <div class="flex items-center gap-3 flex-wrap border-b border-slate-200 pb-2 mb-2 shrink-0">
+    <div class="flex-1 flex items-center gap-3 min-w-0">
+      <a href="/c/{{ slug }}" class="text-sm text-slate-600 hover:text-slate-900 shrink-0">← Return</a>
+      <a href="/c/{{ slug }}" class="text-sm font-medium text-slate-800 hover:text-slate-600 truncate max-w-[28ch]" title="Collection: {{ name }}">{{ name }}</a>
+    </div>
+
+    {% if paper.has_pdf and show_highlight_legend %}
+    <!-- highlight legend: centered (display-only; meaning of each color). Hide via Settings. -->
+    <div class="flex items-center gap-2 flex-wrap text-xs text-slate-500 shrink-0">
+      <span>highlight:</span>
+      {% for c in highlight_scheme %}
+      <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm" style="background:{{ c.color }}"></span>{{ c.label }}</span>
+      {% endfor %}
+      <span>· <span class="rounded bg-slate-200 px-1">Z</span> Zotero</span>
+    </div>
+    {% endif %}
+
+    <div class="flex-1 flex items-center justify-end gap-2">
+      {% if paper.has_pdf %}
+      <button type="button" @click="togglePdfDark()"
+              class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+        <span class="text-base leading-none" x-text="pdfDark ? '🌙' : '☀️'"></span>
+        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">
+          PDF: <span x-text="pdfDark ? 'dark' : 'light'"></span> — click to flip</span>
+      </button>
+      {% endif %}
+      <button type="button" @click="prevPaper()"
+              class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+        <span class="text-base leading-none">⏮</span>
+        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">Previous paper (reading history)</span>
+      </button>
+      <a href="/c/{{ slug }}/p/{{ paper.id }}/next-unread"
+         class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+        <span class="text-base leading-none">⏭</span>
+        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">Next unread paper</span>
+      </a>
+      <button type="button" @click="openJump()"
+              class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+        <span class="text-base leading-none">🔍</span>
+        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">Jump to paper…</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- split: PDF | divider | right pane (tabs) · or a reopen rail when collapsed -->
+  <div class="flex flex-1 min-h-0" x-ref="split">
+    <!-- Left: prebuilt PDF.js viewer -->
+    <div class="relative min-w-0 flex-1 rounded border border-slate-200 overflow-hidden">
+      {% if paper.has_pdf %}
+      <iframe id="pdfjs-frame" class="w-full h-full border-0"
+              data-slug="{{ slug }}" data-key="{{ paper.id }}"
+              data-scheme='{{ highlight_scheme|tojson }}'
+              src="/static/pdfjs/web/viewer.html?file=/pdf/{{ paper.id }}#pagemode=none"></iframe>
+      {% else %}
+      <div class="p-6 text-slate-500">No PDF attached to this paper in Zotero.</div>
+      {% endif %}
+    </div>
+
+    <!-- draggable divider with a centered hide handle -->
+    <div x-show="paneOpen" @mousedown.prevent="startDrag($event)"
+         class="relative w-1.5 mx-1.5 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
+      <button type="button" @mousedown.stop @click="paneOpen=false"
+              class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer"
+              title="Hide panel">›</button>
+    </div>
+
+    <!-- Right pane: tabbed Chat / Notes / Highlights -->
+    <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
+         class="shrink-0 flex flex-col min-h-0 rounded border border-slate-200 bg-white overflow-hidden">
+      <div class="flex items-center border-b border-slate-200 text-sm shrink-0">
+        <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
+        <button @click="tab='notes'" :class="tabCls('notes')">Notes</button>
+        {% if paper.has_pdf %}<button @click="tab='highlights'" :class="tabCls('highlights')">Highlights</button>{% endif %}
+      </div>
+
+      <div class="flex-1 min-h-0">
+        <!-- Chat tab -->
+        <div x-show="tab==='chat'" class="h-full">
+          {% include "_chat.html" %}
+        </div>
+
+        <!-- Notes tab: free markdown editor with preview -->
+        <div x-show="tab==='notes'" x-cloak class="h-full flex flex-col p-4">
+          <div class="flex items-center gap-2 mb-2 text-sm">
+            <button @click="showPreview=false"
+                    :class="!showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
+                    class="rounded px-2 py-0.5">Write</button>
+            <button @click="preview()"
+                    :class="showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
+                    class="rounded px-2 py-0.5">Preview</button>
+            <label class="ml-auto text-xs text-slate-500">Status</label>
+            <select x-model="status" class="rounded border border-slate-300 px-2 py-0.5 text-xs">
+              {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+          </div>
+          <textarea x-show="!showPreview" x-model="noteMd"
+                    placeholder="Write your note in Markdown… (supports $LaTeX$ math)"
+                    class="flex-1 min-h-0 w-full resize-none rounded border border-slate-300 px-3 py-2 font-mono text-sm"></textarea>
+          <div x-show="showPreview" x-ref="notePreview" x-html="previewHtml"
+               class="flex-1 min-h-0 overflow-auto rounded border border-slate-200 px-3 py-2 prose prose-sm max-w-none"></div>
+          <div class="mt-3 flex flex-wrap items-center gap-2 shrink-0">
+            <button @click="draft()" :disabled="busy"
+                    class="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50">
+              <span x-text="busy ? 'Drafting…' : '✨ Draft from highlights + chat'"></span>
+            </button>
+            <span x-show="saved" x-cloak class="text-sm text-emerald-700">Saved.</span>
+            <button @click="save()" :disabled="busy"
+                    class="ml-auto rounded bg-slate-900 px-4 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50">Save</button>
+          </div>
+          <p x-show="err" x-text="err" class="mt-2 text-sm text-rose-700"></p>
+        </div>
+
+        <!-- Highlights tab (annotate.js renders into #hl-list) -->
+        {% if paper.has_pdf %}
+        <div x-show="tab==='highlights'" x-cloak class="h-full overflow-auto p-4">
+          <div id="hl-list"></div>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- collapsed rail: reopen the pane -->
+    <button x-show="!paneOpen" x-cloak @click="paneOpen=true"
+            class="shrink-0 ml-1.5 w-9 rounded border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center"
+            title="Show panel">⟨</button>
+  </div>
+
+  <!-- Jump-to-paper modal (cross-collection picker, loaded via HTMX) -->
+  <div x-show="jumpOpen" x-cloak @keydown.escape.window="jumpOpen=false" @click.self="jumpOpen=false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(600px,92vw)] h-[72vh] flex flex-col p-4">
+      <div class="flex items-center justify-between mb-2 shrink-0">
+        <h2 class="font-semibold text-sm">Jump to paper</h2>
+        <button @click="jumpOpen=false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div id="jump-body" class="flex-1 min-h-0"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+</div>
+
+{% if paper.has_pdf %}
+<!-- floating selection toolbar (parent-side; positioned over the iframe selection).
+     Click a color swatch = highlight in that color instantly; ✎ opens an inline note. -->
+<div id="beta-toolbar" class="hidden fixed z-50 rounded-lg shadow-lg bg-slate-900 text-white text-xs flex items-center gap-1 px-1.5 py-1">
+  {% for c in highlight_scheme %}
+  <button data-act="hl" data-color="{{ c.color }}" title="{{ c.label }}" style="background:{{ c.color }}" class="w-4 h-4 rounded-sm border border-black/20 hover:scale-110 transition"></button>
+  {% endfor %}
+  <span class="w-px h-4 bg-slate-600 mx-0.5"></span>
+  <button data-act="ask" class="px-1.5 py-0.5 rounded hover:bg-slate-700">Ask</button>
+  <button data-act="note" class="px-1.5 py-0.5 rounded hover:bg-slate-700">✎ Note</button>
+</div>
+<script src="/static/annotate.js"></script>
+{% endif %}
+
+<script>
+  function paperView() {
+    return {
+      tab: localStorage.getItem("pp.tab") || "chat",
+      paneOpen: localStorage.getItem("pp.open") !== "0",
+      paneW: parseInt(localStorage.getItem("pp.w") || "440", 10),
+      noteMd: {{ note_md|tojson }},
+      status: {{ note.status|tojson }},
+      showPreview: false, previewHtml: "",
+      busy: false, err: "", saved: false,
+      jumpOpen: false, jumpLoaded: false,
+      pdfDarkSetting: {{ pdf_dark|default(true)|tojson }},
+      pdfDark: false,                       // current effective state (reactive, for the toolbar icon)
+
+      _computePdfDark() {
+        const pref = localStorage.getItem("pp.pdfdark.{{ paper.id }}");   // 'on' | 'off' | null
+        if (pref === "on") return true;
+        if (pref === "off") return false;
+        return document.documentElement.classList.contains("dark") && this.pdfDarkSetting;
+      },
+      applyPdfDark() {
+        this.pdfDark = this._computePdfDark();
+        const f = document.getElementById("pdfjs-frame");
+        if (!f) return;
+        let doc;
+        try { doc = f.contentDocument; } catch (e) { return; }   // cross-origin guard
+        if (!doc || !doc.head) return;
+        let s = doc.getElementById("pa-pdf-dark");
+        if (this.pdfDark) {
+          if (!s) { s = doc.createElement("style"); s.id = "pa-pdf-dark"; doc.head.appendChild(s); }
+          // Invert only the rendered page image — the text layer and our highlight
+          // overlay sit above it and stay un-inverted (correct colors).
+          s.textContent = "#viewerContainer,.pdfViewer{background:#0b1220!important}" +
+            ".pdfViewer .canvasWrapper,.pdfViewer .page>canvas{filter:invert(0.92) hue-rotate(180deg)}";
+        } else if (s) { s.remove(); }
+      },
+      togglePdfDark() {
+        localStorage.setItem("pp.pdfdark.{{ paper.id }}", this.pdfDark ? "off" : "on");
+        this.applyPdfDark();
+      },
+
+      openJump() {
+        this.jumpOpen = true;
+        if (!this.jumpLoaded) {
+          this.jumpLoaded = true;
+          window.htmx && htmx.ajax("GET", "/jump?current={{ slug }}",
+            { target: "#jump-body", swap: "innerHTML" });
+        }
+      },
+      async prevPaper() {                       // browser-style back through the reading log
+        try {
+          const d = await (await fetch("/c/{{ slug }}/p/{{ paper.id }}/prev")).json();
+          if (d.paper_id) window.location.href = `/c/{{ slug }}/p/${d.paper_id}?nav=back`;
+          else await window.paAlert("This is the first paper you've read in this collection.");
+        } catch (e) { /* ignore */ }
+      },
+
+      init() {
+        // let annotate.js / the selection toolbar jump back to the chat tab
+        window.__showChat = () => { this.tab = "chat"; this.paneOpen = true; };
+        this.$watch("tab", (v) => {
+          localStorage.setItem("pp.tab", v);
+          if (v === "highlights" && window.__refreshHighlights) window.__refreshHighlights();
+        });
+        this.$watch("paneOpen", (v) => localStorage.setItem("pp.open", v ? "1" : "0"));
+        this.$watch("paneW", (v) => localStorage.setItem("pp.w", v));
+        if (this.tab === "highlights") {
+          // annotate.js defines this synchronously; refresh once it has booted
+          const t = setInterval(() => { if (window.__refreshHighlights) { window.__refreshHighlights(); clearInterval(t); } }, 150);
+          setTimeout(() => clearInterval(t), 3000);
+        }
+        // PDF dark mode: follow the app theme (re-applied on toggle) + per-paper override.
+        const f = document.getElementById("pdfjs-frame");
+        if (f) {
+          window.__onThemeChange = () => this.applyPdfDark();
+          f.addEventListener("load", () => this.applyPdfDark());
+          this.applyPdfDark();   // if the iframe already loaded; the injected style also covers pages rendered later
+        } else {
+          this.pdfDark = this._computePdfDark();
+        }
+      },
+
+      tabCls(t) {
+        return "px-3 py-2 border-b-2 " + (this.tab === t
+          ? "border-slate-800 text-slate-900 font-medium"
+          : "border-transparent text-slate-500 hover:text-slate-800");
+      },
+      selectTab(t) { this.tab = t; this.paneOpen = true; },
+
+      startDrag(e) {
+        const split = this.$refs.split.getBoundingClientRect();
+        // Shield: a full-window overlay so the PDF iframe doesn't swallow mousemove
+        // mid-drag (which made the resize lag behind / snap to the cursor).
+        const shield = document.createElement("div");
+        shield.style.cssText = "position:fixed;inset:0;z-index:9999;cursor:col-resize;";
+        document.body.appendChild(shield);
+        const move = (ev) => {
+          let w = split.right - ev.clientX;
+          w = Math.max(300, Math.min(w, split.width - 360));   // clamps: PDF ≥360, pane ≥300
+          this.paneW = Math.round(w);
+        };
+        const up = () => {
+          document.removeEventListener("mousemove", move);
+          document.removeEventListener("mouseup", up);
+          shield.remove();
+          document.body.style.userSelect = "";
+        };
+        document.body.style.userSelect = "none";
+        document.addEventListener("mousemove", move);
+        document.addEventListener("mouseup", up);
+      },
+
+      async preview() {
+        this.showPreview = true;
+        const body = new URLSearchParams({ text: this.noteMd || "" });
+        try {
+          const r = await fetch("/c/{{ slug }}/render", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+          this.previewHtml = (await r.json()).html || "<p class='text-slate-400'>(empty)</p>";
+        } catch (e) { this.previewHtml = "<p class='text-rose-600'>Preview failed.</p>"; }
+        this.$nextTick(() => window.renderMath && window.renderMath(this.$refs.notePreview));
+      },
+      async draft() {
+        this.busy = true; this.err = ""; this.saved = false;
+        try {
+          const r = await fetch("/c/{{ slug }}/p/{{ paper.id }}/note/draft.json", { method: "POST" });
+          const d = await r.json();
+          if (d.error) { this.err = d.error; }
+          else {
+            const parts = [];
+            if (d.fields.summary) parts.push("## Summary\n\n" + d.fields.summary);
+            if (d.fields.thoughts) parts.push("## Thoughts\n\n" + d.fields.thoughts);
+            if (d.fields.key_quotes) parts.push("## Key Quotes\n\n" + d.fields.key_quotes);
+            this.noteMd = parts.join("\n\n");
+            this.showPreview = false;
+          }
+        } catch (e) { this.err = "Draft failed: " + e.message; }
+        this.busy = false;
+      },
+      async save() {
+        this.busy = true; this.err = ""; this.saved = false;
+        // Free-markdown note is stored in the `thoughts` field.
+        const body = new URLSearchParams({ summary: "", thoughts: this.noteMd || "", key_quotes: "", status: this.status || "unread" });
+        try {
+          const r = await fetch("/c/{{ slug }}/p/{{ paper.id }}/notes", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+          if (r.ok) { this.saved = true; setTimeout(() => this.saved = false, 2500); } else { this.err = "Save failed (" + r.status + ")"; }
+        } catch (e) { this.err = "Save failed: " + e.message; }
+        this.busy = false;
+      },
+    };
+  }
+</script>
+{% endblock %}

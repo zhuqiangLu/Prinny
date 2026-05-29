@@ -1,0 +1,7 @@
+{# One message bubble. Expects m = {role, html}. #}
+<div class="flex {% if m.role == 'user' %}justify-end{% else %}justify-start{% endif %}">
+  <div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2
+              {% if m.role == 'user' %}bg-slate-900 text-white{% else %}bg-slate-100 text-slate-900{% endif %}">
+    {{ m.html | safe }}
+  </div>
+</div>

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ pa_branding().app_name }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <h1 class="text-xl font-semibold mb-4">Settings</h1>
+  {% include "_settings_form.html" %}
+</div>
+{% endblock %}

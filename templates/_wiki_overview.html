@@ -1,0 +1,176 @@
+{# Structured starter wiki (Phase-5 sections from the abstracts). Expects:
+   slug, overview (from wiki.load_overview): {intro, problems[], methods[], gaps[],
+   benchmarks[], synthesis[], reading_path[], meta}. A paper object is {id, title,
+   has_pdf}; clicking opens the reader at /c/<slug>/p/<id>. #}
+{% set first_tab = 'problems' if overview.problems
+                   else 'methods' if overview.methods
+                   else 'gaps' if overview.gaps
+                   else 'benchmarks' if overview.benchmarks
+                   else 'synthesis' if overview.synthesis
+                   else 'problems' %}
+<div x-data="{ tab: '{{ first_tab }}', open: {} }" class="space-y-3">
+  <div class="flex items-center gap-2 rounded bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
+    <span>✦</span>
+    <span>AI-drafted starter wiki from the abstracts — a guide to spark reading, <b>not</b> your own synthesis. Open any paper to dig in.</span>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto flex gap-1">
+      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Regenerate from abstracts">↻ Regenerate</button>
+      <button name="deep" value="true" class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Regenerate using abstracts + each cached PDF's first ~2k chars (richer, more tokens)">↻ Deepen (PDFs)</button>
+      <span class="htmx-indicator text-violet-400">…</span>
+    </form>
+  </div>
+
+  {% if overview.intro %}
+  <p class="text-sm text-slate-700 leading-relaxed">{{ overview.intro }}</p>
+  {% endif %}
+
+  {% if overview.reading_path %}
+  <div class="rounded-lg border border-slate-200 bg-white p-3">
+    <div class="text-xs font-medium text-slate-500 mb-1.5">Start here — a fast orientation path</div>
+    <div class="flex flex-wrap items-center gap-1.5 text-sm">
+      {% for p in overview.reading_path %}
+      <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 hover:bg-slate-200">{{ loop.index }}. {{ p.title|truncate(48) }}</a>
+      {% if not loop.last %}<span class="text-slate-300">→</span>{% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# --- section tabs (only show non-empty sections) --- #}
+  {% set tabs = [('problems', '🧩 Problems', overview.problems|length),
+                 ('methods', '🔧 Methods', overview.methods|length),
+                 ('gaps', '🕳 Gaps', overview.gaps|length),
+                 ('benchmarks', '📐 Benchmarks', overview.benchmarks|length),
+                 ('synthesis', '✦ Synthesis', overview.synthesis|length)] %}
+  <div class="flex flex-wrap gap-1 border-b border-slate-200">
+    {% for key, label, n in tabs %}{% if n %}
+    <button type="button" @click="tab = '{{ key }}'"
+            :class="tab === '{{ key }}' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            class="px-3 py-1.5 -mb-px border-b-2 text-sm">{{ label }} <span class="text-slate-400">{{ n }}</span></button>
+    {% endif %}{% endfor %}
+  </div>
+
+  {# --- Problems --- #}
+  <div x-show="tab === 'problems'" x-cloak class="space-y-2">
+    {% for prob in overview.problems %}
+    <div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <button type="button" @click="open[`p{{ loop.index0 }}`] = !open[`p{{ loop.index0 }}`]"
+              class="w-full text-left px-3 py-2.5 hover:bg-slate-50">
+        <div class="flex items-start gap-2">
+          <span class="text-base leading-tight">🧩</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-slate-900 leading-snug">{{ prob.title }}</div>
+            {% if prob.why %}<div class="text-sm text-slate-500 mt-0.5">{{ prob.why }}</div>{% endif %}
+          </div>
+          <span class="text-slate-300 mt-1" x-text="open[`p{{ loop.index0 }}`] ? '▴' : '▾'"></span>
+        </div>
+      </button>
+      <div x-show="open[`p{{ loop.index0 }}`]" x-cloak class="px-3 pb-3 pl-9 space-y-2.5 text-sm">
+        {% if prob.read_first %}
+        <div class="rounded bg-emerald-50 border border-emerald-100 px-2.5 py-1.5">
+          <span class="text-xs font-medium text-emerald-700">▸ Read first:</span>
+          <a href="/c/{{ slug }}/p/{{ prob.read_first.id }}" class="font-medium text-emerald-900 underline decoration-emerald-300 hover:decoration-emerald-600">{{ prob.read_first.title }}</a>
+          {% if prob.read_first_why %}<span class="text-emerald-700"> — {{ prob.read_first_why }}</span>{% endif %}
+        </div>
+        {% endif %}
+        {% if prob.approaches %}
+        <div>
+          <div class="text-xs font-medium text-slate-500 mb-1">Approaches</div>
+          <div class="space-y-1">
+            {% for a in prob.approaches %}
+            <div class="flex flex-wrap items-baseline gap-1.5">
+              <span class="text-slate-700">{{ a.label }}:</span>
+              {% for p in a.papers %}
+              <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200">{{ p.title|truncate(40) }}</a>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if prob.tension %}
+        <div class="rounded bg-amber-50 border border-amber-100 px-2.5 py-1.5 text-amber-800">
+          <span class="text-xs font-medium text-amber-700">⚠ Open tension:</span> {{ prob.tension }}
+        </div>
+        {% endif %}
+        {% if prob.papers %}
+        <details class="text-xs text-slate-500">
+          <summary class="cursor-pointer hover:text-slate-700">All {{ prob.papers|length }} paper(s)</summary>
+          <ul class="mt-1 space-y-0.5">
+            {% for p in prob.papers %}
+            <li><a href="/c/{{ slug }}/p/{{ p.id }}" class="hover:text-slate-900 hover:underline">{{ p.title }}</a></li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# --- Methods (and Benchmarks: same shape) --- #}
+  {% macro method_card(items, icon, label_for_papers) %}
+    <div class="space-y-2">
+      {% for m in items %}
+      <div class="rounded-lg border border-slate-200 bg-white p-3">
+        <div class="flex items-start gap-2">
+          <span class="text-base leading-tight">{{ icon }}</span>
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-slate-900 leading-snug">{{ m.title }}</div>
+            {% if m.key_idea %}<div class="text-sm text-slate-600 italic mt-0.5">{{ m.key_idea }}</div>{% endif %}
+            {% if m.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ m.body }}</p>{% endif %}
+            {% if m.papers %}
+            <div class="mt-2 flex flex-wrap gap-1">
+              <span class="text-xs text-slate-400 mr-0.5">{{ label_for_papers }}</span>
+              {% for p in m.papers %}
+              <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200">{{ p.title|truncate(40) }}</a>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endmacro %}
+
+  <div x-show="tab === 'methods'" x-cloak>{{ method_card(overview.methods, '🔧', 'used in:') }}</div>
+  <div x-show="tab === 'benchmarks'" x-cloak>{{ method_card(overview.benchmarks, '📐', 'used by:') }}</div>
+
+  {# --- Gaps --- #}
+  <div x-show="tab === 'gaps'" x-cloak class="space-y-2">
+    {% for g in overview.gaps %}
+    <div class="rounded-lg border border-rose-100 bg-rose-50/40 p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base leading-tight">🕳</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-slate-900 leading-snug">{{ g.title }}</div>
+          {% if g.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ g.body }}</p>{% endif %}
+          {% if g.papers %}
+          <div class="mt-2 flex flex-wrap gap-1">
+            <span class="text-xs text-slate-400 mr-0.5">from:</span>
+            {% for p in g.papers %}
+            <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-white px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-100 border border-slate-200">{{ p.title|truncate(40) }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# --- Synthesis --- #}
+  <div x-show="tab === 'synthesis'" x-cloak class="space-y-2">
+    {% for s in overview.synthesis %}
+    <div class="rounded-lg border border-slate-200 bg-white p-3">
+      <div class="flex items-start gap-2">
+        <span class="text-base leading-tight">✦</span>
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-slate-900 leading-snug">{{ s.title }}</div>
+          {% if s.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ s.body }}</p>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

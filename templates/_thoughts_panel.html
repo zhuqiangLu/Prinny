@@ -1,0 +1,34 @@
+{# Thoughts tab body (collection chat panel). Quick add + recent list; full
+   management (edit/delete/consolidate) lives on the /thoughts page. #}
+<div id="thoughts-panel" class="space-y-3">
+  <form hx-post="/c/{{ slug }}/thoughts/add" hx-target="#thoughts-panel" hx-swap="outerHTML"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    <textarea name="text" rows="3" required placeholder="A new thought…"
+              class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+    <div class="mt-1 flex items-center gap-2">
+      <button class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add thought</button>
+      <select name="synth_kind" title="seed = an attention signal; reasoning = an argument/connection you made"
+              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600">
+        <option value="seed" selected>seed</option>
+        <option value="reasoning">reasoning</option>
+      </select>
+      <a href="/c/{{ slug }}/thoughts" class="ml-auto text-xs text-slate-500 hover:text-slate-800">manage all →</a>
+    </div>
+  </form>
+  {% if not thoughts %}
+  <p class="text-sm text-slate-400">No thoughts yet.</p>
+  {% else %}
+  <ul class="space-y-2">
+    {% for t in thoughts %}
+    <li class="rounded border border-slate-200 p-2">
+      <div class="text-xs text-slate-400">{{ t.created }}
+        {% if t.synth_kind == "reasoning" %}<span class="ml-1 rounded bg-indigo-100 text-indigo-700 px-1">reasoning</span>{% endif %}
+        {% if t.author_origin == "agent" %}<span class="ml-1 rounded bg-amber-100 text-amber-700 px-1">agent</span>{% endif %}
+        {% for tag in t.tags %}<span class="ml-1 rounded bg-slate-100 px-1">{{ tag }}</span>{% endfor %}
+      </div>
+      <div class="text-sm mt-0.5 text-slate-700" style="white-space:pre-wrap">{{ t.body }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>

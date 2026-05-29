@@ -1,0 +1,6 @@
+{# Inline result for a directory export (swapped into the export popup). #}
+<div class="mt-2 rounded-md px-3 py-2 text-xs break-all
+            {{ 'bg-emerald-50 text-emerald-700 border border-emerald-200' if ok
+               else 'bg-rose-50 text-rose-700 border border-rose-200' }}">
+  {{ '✓' if ok else '✕' }} {{ msg }}
+</div>

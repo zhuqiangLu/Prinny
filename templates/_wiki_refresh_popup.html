@@ -1,0 +1,84 @@
+{# Result panel after a manual "Update wiki" run. Three count cards link to the existing
+   surfaces (review queue / debt page / triage page). HTMX-swapped into #refresh-result. #}
+<div class="rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+  <div class="flex items-center gap-2">
+    <span class="text-lg">✦</span>
+    <h2 class="font-semibold text-slate-900">Wiki refresh complete</h2>
+    <button type="button"
+            onclick="document.getElementById('refresh-result').innerHTML=''"
+            class="ml-auto text-xs text-slate-400 hover:text-slate-700">dismiss</button>
+  </div>
+
+  {% if summary.errors %}
+  <div class="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-0.5">
+    {% for e in summary.errors %}
+    <div><b>{{ e.step }}</b> — {{ e.msg }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <a href="/c/{{ slug }}/proposed"
+       class="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:border-slate-400 hover:shadow-sm transition">
+      <div class="text-2xl font-semibold text-slate-900 tabular-nums">{{ summary.edits.new|length }}</div>
+      <div class="text-xs text-slate-500">new proposed edits</div>
+      <div class="mt-1 text-xs text-slate-600">Review {{ summary.edits.total_pending }} pending →</div>
+    </a>
+    <a href="/c/{{ slug }}/debt/panel"
+       class="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:border-slate-400 hover:shadow-sm transition">
+      <div class="text-2xl font-semibold text-slate-900 tabular-nums">{{ summary.questions.new|length }}</div>
+      <div class="text-xs text-slate-500">new open questions</div>
+      <div class="mt-1 text-xs text-slate-600">{{ summary.questions.open_total }} open total →</div>
+    </a>
+    <a href="/c/{{ slug }}/triage"
+       class="block rounded-lg border border-slate-200 bg-slate-50 p-3 hover:border-slate-400 hover:shadow-sm transition">
+      <div class="text-2xl font-semibold text-slate-900 tabular-nums">{{ summary.triage.pending_total }}</div>
+      <div class="text-xs text-slate-500">pending triage <span class="text-emerald-600 font-medium">+{{ summary.arxiv.added }} from arXiv</span></div>
+      <div class="mt-1 text-xs text-slate-600">View triage →</div>
+    </a>
+  </div>
+
+  {% if summary.health.findings %}
+  <div class="rounded-lg border border-rose-200 bg-rose-50/60 p-3">
+    <div class="text-xs font-medium text-rose-800 mb-1.5">🩺 Wiki health — {{ summary.health.findings|length }} finding(s)</div>
+    <ul class="space-y-0.5">
+      {% for f in summary.health.findings[:5] %}
+      <li class="text-xs text-slate-700"><b>{{ f.kind|default('') }}</b>{% if f.page %} <code class="text-slate-500">{{ f.page }}</code>{% endif %} — {{ f.message|default(f.note|default('')) }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if summary.underread.papers %}
+  <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+    <div class="text-xs font-medium text-amber-800 mb-1.5">Go back to these — {{ summary.underread.papers|length }} under-read paper(s) <span class="text-amber-600">(no highlights or notes)</span></div>
+    <ul class="space-y-0.5">
+      {% for p in summary.underread.papers[:5] %}
+      <li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-sm text-slate-700 hover:underline">{{ p.title|truncate(80) }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if summary.edits.new %}
+  <details class="text-xs">
+    <summary class="cursor-pointer text-slate-500 hover:text-slate-800">Show new edits</summary>
+    <ul class="mt-1 pl-4 list-disc text-slate-600">
+      {% for p in summary.edits.new %}<li><code>{{ p.page_path }}</code></li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% if summary.questions.new %}
+  <details class="text-xs">
+    <summary class="cursor-pointer text-slate-500 hover:text-slate-800">Show new questions</summary>
+    <ul class="mt-1 pl-4 list-disc text-slate-600">
+      {% for q in summary.questions.new %}<li>{{ q.question|truncate(120) }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <p class="text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+    Edits land in the review queue — nothing was written to your wiki directly.
+    arXiv recs from the wiki's stated gaps were added to triage for your accept/reject.
+  </p>
+</div>

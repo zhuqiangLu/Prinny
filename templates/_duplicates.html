@@ -1,0 +1,75 @@
+{# Duplicate-review panel (loaded into the merge modal via HTMX).
+   Expects: slug, groups (from library.find_duplicate_groups).
+   Each group is a plain POST form: one 'keep_id' radio + every member id as 'drop_ids';
+   merge_papers() drops the kept id, so the same form does both "merge" and "remove". #}
+{% if not groups %}
+  <p class="text-sm text-slate-500 py-6 text-center">No duplicate titles in this collection. 🎉</p>
+{% else %}
+<div class="space-y-4">
+  {% if groups|length > 1 %}
+  <form method="post" action="/c/{{ slug }}/merge-all"
+        class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+    <span class="text-sm text-slate-600">Resolve all {{ groups|length }} groups using the recommended keep (the most-engaged copy) for each.</span>
+    <button type="submit"
+            onclick="var f=this.closest('form'); event.preventDefault(); window.paConfirm('Resolve all {{ groups|length }} duplicate groups now? Each keeps its recommended copy and removes/merges the rest. This can’t be undone.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;"
+            class="shrink-0 rounded bg-slate-900 px-3 py-1 text-sm text-white hover:bg-slate-700">Resolve all</button>
+  </form>
+  {% endif %}
+  {% for g in groups %}
+  <form method="post" action="/c/{{ slug }}/merge"
+        class="rounded-lg border border-slate-200">
+    <div class="border-b border-slate-100 bg-slate-50 px-3 py-2">
+      <div class="font-medium text-slate-800 text-sm">{{ g.title }}</div>
+      <div class="text-xs text-slate-500 mt-0.5">
+        {% if g.action == "remove" %}
+          {% if g.engaged %}One copy has your work — pick it to keep;{% else %}Neither copy has any of your work yet — keep one;{% endif %}
+          the other {{ "copy is" if g.members|length == 2 else "copies are" }} removed.
+        {% else %}
+          More than one copy has your work — they’ll be <b>merged</b> into the copy you keep
+          (its chat, notes &amp; highlights are combined; one PDF is kept).
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="divide-y divide-slate-100">
+      {% for m in g.members %}
+      {% set e = m.engagement %}
+      <label class="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50">
+        <input type="radio" name="keep_id" value="{{ m.id }}" required
+               {% if m.id == g.keep_id %}checked{% endif %} class="mt-1 shrink-0">
+        <input type="hidden" name="drop_ids" value="{{ m.id }}">
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center gap-2 flex-wrap">
+            <span class="text-sm text-slate-700">#{{ m.id }}</span>
+            {% if m.id == g.keep_id %}
+            <span class="text-xs rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5">recommended keep</span>
+            {% endif %}
+            {% if m.zotero_key %}<span class="text-xs text-slate-400 font-mono">{{ m.zotero_key }}</span>{% endif %}
+          </span>
+          <span class="mt-1 flex items-center gap-2 flex-wrap text-xs">
+            {% if e.has_attention %}
+              {% if e.chat %}<span class="rounded bg-sky-100 text-sky-700 px-1.5 py-0.5">💬 {{ e.chat }} msgs</span>{% endif %}
+              {% if e.notes %}<span class="rounded bg-amber-100 text-amber-700 px-1.5 py-0.5">✎ notes</span>{% endif %}
+              {% if e.highlights %}<span class="rounded bg-violet-100 text-violet-700 px-1.5 py-0.5">▥ {{ e.highlights }} highlights</span>{% endif %}
+            {% else %}
+              <span class="rounded bg-slate-100 text-slate-400 px-1.5 py-0.5">no attention yet</span>
+            {% endif %}
+            {% if m.has_pdf %}<span class="text-slate-400">PDF</span>{% else %}<span class="text-slate-300">no PDF</span>{% endif %}
+            {% if m.added_at %}<span class="text-slate-400">added {{ m.added_at[:10] }}</span>{% endif %}
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="flex justify-end gap-2 border-t border-slate-100 px-3 py-2">
+      <button type="submit"
+              onclick="var f=this.closest('form'); event.preventDefault(); window.paConfirm('Keep one copy and {{ 'remove the empty duplicate(s)' if g.action == 'remove' else 'merge the others into it' }}? This can’t be undone.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;"
+              class="rounded bg-slate-900 px-3 py-1 text-sm text-white hover:bg-slate-700">
+        {{ "Keep & remove duplicate" if g.action == "remove" else "Merge into kept copy" }}
+      </button>
+    </div>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}

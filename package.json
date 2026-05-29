@@ -1,0 +1,18 @@
+{
+  "name": "local_literatrue_agent_zotera",
+  "version": "1.0.0",
+  "description": "A personal research tool that maintains a **wiki per Zotero collection** — where the wiki reflects **your own thinking** (notes, thoughts, highlights, conversations), with papers as evidence.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1"
+  }
+}

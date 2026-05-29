@@ -1,0 +1,464 @@
+<!doctype html>
+{% set _t = pa_theme() %}
+{% set b = pa_branding() %}
+<html lang="en"{% if _t.active %} class="pa-themed"{% endif %}>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Paper Agent{% endblock %}</title>
+  <script>
+    // No-flash dark mode: set the .dark class before first paint.
+    (function () {
+      try {
+        var t = localStorage.getItem("pa.theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        if (t === "dark") document.documentElement.classList.add("dark");
+      } catch (e) {}
+    })();
+  </script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>tailwind.config = { darkMode: "class" };</script>
+  <!-- KaTeX: render LaTeX in chat + note previews -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <style>[x-cloak]{display:none !important}</style>
+  <style>
+    /* === Dark theme: remap the app's slate palette under html.dark ========= */
+    html.dark { color-scheme: dark; }
+    /* surfaces */
+    html.dark .bg-white { background-color:#1e293b !important; }
+    html.dark .bg-white\/90 { background-color:rgba(30,41,59,.9) !important; }
+    html.dark .bg-slate-50 { background-color:#0f172a !important; }
+    html.dark .bg-slate-50\/95 { background-color:rgba(15,23,42,.95) !important; }
+    html.dark .bg-slate-100 { background-color:#334155 !important; }
+    html.dark .bg-slate-200 { background-color:#334155 !important; }
+    html.dark .bg-slate-300 { background-color:#475569 !important; }
+    /* bg-slate-900 / bg-slate-800 stay dark on purpose (primary buttons, active tabs, code blocks) */
+    /* text */
+    html.dark .text-slate-900 { color:#f1f5f9 !important; }
+    html.dark .text-slate-800 { color:#e2e8f0 !important; }
+    html.dark .text-slate-700 { color:#d6deea !important; }
+    html.dark .text-slate-600 { color:#aeb9c8 !important; }
+    html.dark .text-slate-500 { color:#94a3b8 !important; }
+    html.dark .text-slate-400 { color:#6c7a90 !important; }
+    html.dark .text-slate-300 { color:#566275 !important; }
+    /* borders */
+    html.dark .border-slate-100 { border-color:#1f2937 !important; }
+    html.dark .border-slate-200 { border-color:#2b3a4f !important; }
+    html.dark .border-slate-300 { border-color:#3a4a60 !important; }
+    /* hover states */
+    html.dark .hover\:bg-slate-50:hover { background-color:#334155 !important; }
+    html.dark .hover\:bg-slate-100:hover { background-color:#3b4a5e !important; }
+    html.dark .hover\:text-slate-900:hover { color:#f1f5f9 !important; }
+    html.dark .hover\:text-slate-800:hover { color:#e2e8f0 !important; }
+    html.dark .hover\:text-slate-700:hover { color:#d6deea !important; }
+    html.dark .hover\:text-slate-600:hover { color:#aeb9c8 !important; }
+    html.dark .hover\:border-slate-300:hover { border-color:#475569 !important; }
+    /* form controls (default browser white otherwise) */
+    html.dark input, html.dark textarea, html.dark select {
+      background-color:#0f172a; color:#e2e8f0; border-color:#3a4a60;
+    }
+    html.dark input::placeholder, html.dark textarea::placeholder { color:#64748b; }
+    html.dark option { background-color:#1e293b; color:#e2e8f0; }
+    /* markdown (typography plugin) */
+    html.dark .prose {
+      --tw-prose-body:#cbd5e1; --tw-prose-headings:#f1f5f9; --tw-prose-bold:#f1f5f9;
+      --tw-prose-links:#7dd3fc; --tw-prose-code:#e2e8f0; --tw-prose-quotes:#cbd5e1;
+      --tw-prose-quote-borders:#334155; --tw-prose-bullets:#64748b; --tw-prose-hr:#334155;
+      --tw-prose-th-borders:#475569; --tw-prose-td-borders:#334155; --tw-prose-captions:#94a3b8;
+      --tw-prose-pre-bg:#0b1220; --tw-prose-pre-code:#e2e8f0;
+    }
+  </style>
+  {% if _t.active %}
+  <style id="pa-theme-vars">
+    /* === Custom palette (extracted from the user's uploaded image) ============
+       Applied in LIGHT mode only — dark mode keeps its own remap above. We tint
+       backgrounds + the primary accent app-wide; heading text stays near-black
+       for readability. Reversible via Settings → Reset. */
+    :root {
+      --pa-bg:{{ _t.bg }}; --pa-surface:{{ _t.surface }};
+      --pa-accent:{{ _t.accent }}; --pa-accent-hover:{{ _t.accent_hover or _t.accent }};
+      --pa-accent-fg:{{ _t.accent_fg or '#ffffff' }}; --pa-ink:{{ _t.ink or '#0f172a' }};
+    }
+    html.pa-themed:not(.dark) body,
+    html.pa-themed:not(.dark) .bg-slate-50 { background-color:var(--pa-bg) !important; }
+    html.pa-themed:not(.dark) .bg-white { background-color:var(--pa-surface) !important; }
+    html.pa-themed:not(.dark) .bg-white\/90 { background-color:color-mix(in srgb, var(--pa-surface) 90%, transparent) !important; }
+    /* primary accent: dark buttons + active states become the extracted accent */
+    html.pa-themed:not(.dark) .bg-slate-900 { background-color:var(--pa-accent) !important; }
+    html.pa-themed:not(.dark) .hover\:bg-slate-700:hover { background-color:var(--pa-accent-hover) !important; }
+    html.pa-themed:not(.dark) .text-slate-900 { color:var(--pa-ink) !important; }
+    html.pa-themed:not(.dark) .border-slate-900 { border-color:var(--pa-accent) !important; }
+    {% if _t.bg_light_url %}
+    /* light-mode wallpaper (fixed cover behind opaque cards) */
+    html.pa-themed:not(.dark) body {
+      background-image:url('{{ _t.bg_light_url }}'); background-size:cover;
+      background-position:center; background-attachment:fixed; background-repeat:no-repeat;
+    }
+    {% endif %}
+    {% if _t.bg_dark_url %}
+    html.pa-themed.dark body {
+      background-image:url('{{ _t.bg_dark_url }}'); background-size:cover;
+      background-position:center; background-attachment:fixed; background-repeat:no-repeat;
+    }
+    {% endif %}
+  </style>
+  {% endif %}
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden"
+      x-data="{ settingsOpen: false, skillOpen: false, skillTitle: '',
+                dark: document.documentElement.classList.contains('dark'),
+                toggleTheme() {
+                  this.dark = !this.dark;
+                  document.documentElement.classList.toggle('dark', this.dark);
+                  try { localStorage.setItem('pa.theme', this.dark ? 'dark' : 'light'); } catch (e) {}
+                  if (window.__onThemeChange) window.__onThemeChange();
+                } }">
+  <nav class="border-b border-slate-200 bg-white/90 backdrop-blur shrink-0">
+    <div class="px-4 py-3 flex items-center justify-between gap-4">
+      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight text-slate-900 shrink-0">
+        {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
+        <span>{{ b.app_name }}</span>
+      </a>
+      {% block header_center %}{% endblock %}
+      <div class="flex items-center gap-1 shrink-0">
+        <button type="button" @click="toggleTheme()"
+                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                title="Toggle dark mode" aria-label="Toggle dark mode">
+          <span x-show="!dark" class="grid place-items-center">{% if b.assets.moon %}<img src="{{ b.assets.moon }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">🌙</span>{% endif %}</span>
+          <span x-show="dark" class="grid place-items-center">{% if b.assets.sun %}<img src="{{ b.assets.sun }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">☀️</span>{% endif %}</span>
+        </button>
+        <button type="button" @click="settingsOpen = true"
+                hx-get="/settings/form?cat=agents" hx-target="#settings-modal-body" hx-swap="innerHTML"
+                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                title="Agents — sub-agent skills &amp; tools" aria-label="Agents">{% if b.assets.agents %}<img src="{{ b.assets.agents }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">🤖</span>{% endif %}</button>
+        <button type="button" @click="settingsOpen = true"
+                hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
+                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                title="Settings" aria-label="Settings">{% if b.assets.settings %}<img src="{{ b.assets.settings }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">⚙</span>{% endif %}</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Settings modal (loaded on open; form submits + refresh swap in place) -->
+  <div x-show="settingsOpen" x-cloak @keydown.escape.window="settingsOpen = false"
+       @click.self="settingsOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[90vh] overflow-auto p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold">Settings</h2>
+        <button type="button" @click="settingsOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div id="settings-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Skill-editor modal (body level so its <form> is never nested inside the Settings form).
+       Opened from the Agents UI on any page; z-[60] sits above the Settings modal. -->
+  <div x-show="skillOpen" x-cloak @keydown.escape.window="skillOpen = false" @click.self="skillOpen = false"
+       class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(720px,94vw)] max-h-[88vh] overflow-auto p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold">Edit skill · <code class="text-sm text-slate-500" x-text="skillTitle"></code></h2>
+        <button type="button" @click="skillOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div id="skill-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Reusable confirm/alert modal (window.paConfirm / window.paAlert; also drives hx-confirm) -->
+  <div id="pa-confirm" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+    <div class="bg-white rounded-lg shadow-xl w-[min(420px,92vw)] p-5">
+      <p id="pa-confirm-msg" class="text-sm text-slate-700 whitespace-pre-line"></p>
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="pa-confirm-cancel" type="button" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+        <button id="pa-confirm-ok" type="button" class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">OK</button>
+      </div>
+    </div>
+  </div>
+  <!-- full-width scroll container so the scrollbar sits at the window's right edge;
+       the centered max-width wrapper lives inside it -->
+  <main class="w-full flex-1 min-h-0 overflow-y-auto">
+    <div class="mx-auto {% block main_width %}max-w-6xl{% endblock %} w-full px-4 {% block main_pad %}py-6{% endblock %} {% block main_inner %}{% endblock %}">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+  <footer class="shrink-0 border-t border-slate-200 bg-white py-2 text-center text-xs text-slate-400">
+    {{ b.app_name }} · <a href="https://github.com/paper-agent/paper-agent" target="_blank"
+      class="hover:text-slate-700">GitHub ↗</a>
+  </footer>
+
+  <script>
+    // Custom-tag bar (used on landing cards + collection page). Saves to /c/<slug>/tags.
+    function tagBar(slug, initial) {
+      return {
+        tags: initial || [],
+        open: false,
+        label: "",
+        color: "#0ea5e9",
+        presets: ["#0ea5e9", "#10b981", "#f59e0b", "#f43f5e", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"],
+        pillStyle(c) { return `background:${c}22;color:${c};border:1px solid ${c}55`; },
+        add() {
+          const l = (this.label || "").trim();
+          if (!l) return;
+          this.tags.push({ label: l.slice(0, 40), color: this.color });
+          this.label = ""; this.open = false; this.save();
+        },
+        remove(i) { this.tags.splice(i, 1); this.save(); },
+        save() {
+          fetch(`/c/${slug}/tags`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ tags: JSON.stringify(this.tags) }),
+          });
+        },
+      };
+    }
+
+    // Reusable confirm/alert dialog (consistent in-app modal instead of native popups).
+    (function () {
+      const m = document.getElementById("pa-confirm");
+      const msg = document.getElementById("pa-confirm-msg");
+      const ok = document.getElementById("pa-confirm-ok");
+      const cancel = document.getElementById("pa-confirm-cancel");
+      let resolver = null;
+      function done(v) { m.classList.add("hidden"); const r = resolver; resolver = null; if (r) r(v); }
+      ok.addEventListener("click", () => done(true));
+      cancel.addEventListener("click", () => done(false));
+      m.addEventListener("click", (e) => { if (e.target === m) done(false); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !m.classList.contains("hidden")) done(false); });
+      window.paConfirm = function (message, opts) {
+        opts = opts || {};
+        msg.textContent = message;
+        cancel.style.display = "";
+        ok.textContent = opts.okText || "OK";
+        ok.className = opts.danger
+          ? "rounded bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700"
+          : "rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700";
+        m.classList.remove("hidden");
+        return new Promise((res) => { resolver = res; });
+      };
+      window.paAlert = function (message) {
+        msg.textContent = message;
+        cancel.style.display = "none";
+        ok.textContent = "OK";
+        ok.className = "rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700";
+        m.classList.remove("hidden");
+        return new Promise((res) => { resolver = () => res(); });
+      };
+      // Route every hx-confirm through the modal instead of the native confirm().
+      document.addEventListener("htmx:confirm", function (e) {
+        if (!e.detail.question) return;          // no hx-confirm on this element → proceed
+        e.preventDefault();
+        window.paConfirm(e.detail.question, { danger: true }).then((okay) => {
+          if (okay) e.detail.issueRequest(true);
+        });
+      });
+    })();
+
+    // Settings highlight-scheme editor: editable rows of {color, label}.
+    function schemeEditor(initial) {
+      return {
+        rows: (initial && initial.length) ? JSON.parse(JSON.stringify(initial)) : [],
+        add() { this.rows.push({ color: "#ffd400", label: "" }); },
+      };
+    }
+
+    // Two-way Sync panel state. Defined here (not in the loaded _sync_panel fragment) so
+    // Alpine finds it the moment HTMX swaps the modal — an inline <script> in the fragment
+    // races Alpine's MutationObserver and the component fails to init.
+    function syncBar(running, slug) {
+      return {
+        phase: running ? "running" : "idle",
+        total: 0, done: 0, current: "", result: null, error: null,
+        init() { if (this.phase === "running") this.poll(); },
+        async poll() {
+          try {
+            const r = await fetch(`/c/${slug}/sync/status`);
+            const d = await r.json();
+            this.phase = d.phase; this.total = d.total; this.done = d.done;
+            this.current = d.current || ""; this.result = d.result; this.error = d.error;
+            if (d.phase === "running") setTimeout(() => this.poll(), 600);
+          } catch (e) { setTimeout(() => this.poll(), 1200); }
+        },
+      };
+    }
+
+    // Jump-to-paper picker (loaded into the paper view's modal via HTMX). Defined here, not
+    // in the fragment, so Alpine resolves x-data the moment the fragment is swapped in.
+    function jumpPicker(groups, current) {
+      return {
+        groups: groups || [],
+        q: "",
+        col: current || (groups[0] && groups[0].slug) || "",
+        get cols() { return this.groups.map((g) => ({ slug: g.slug, name: g.name, current: g.current, count: g.papers.length })); },
+        _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
+        rows() {
+          const q = this.q.trim().toLowerCase();
+          if (!q) {
+            const g = this.groups.find((x) => x.slug === this.col);
+            return g ? g.papers.map((p) => this._row(p, g)) : [];
+          }
+          const out = [];
+          for (const g of this.groups)
+            for (const p of g.papers)
+              if ((p.title + " " + (p.authors || "")).toLowerCase().includes(q)) out.push(this._row(p, g));
+          return out;
+        },
+      };
+    }
+
+    // Theme customizer (Settings → Appearance). Pick a preset or upload an image → palette is
+    // extracted in-browser → POST to /theme (formless, so it nests safely in the settings form).
+    function themeWizard() {
+      return {
+        palette: null,                 // light-mode palette (from the light image); null = default
+        lightPreview: null, darkPreview: null, lightFile: null, darkFile: null,
+        bgLightUrl: "", bgDarkUrl: "", busy: false,
+        _load(url) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; }); },
+        _revoke(u) { if (u && u.startsWith("blob:")) URL.revokeObjectURL(u); },
+        // Light image → light wallpaper AND the palette (accent only shows in light mode).
+        onLightFile(e) {
+          const f = e.target.files && e.target.files[0];
+          this.bgLightUrl = ""; this.lightFile = f || null;
+          this._revoke(this.lightPreview);
+          if (!f) { this.lightPreview = null; this.palette = null; return; }
+          this.lightPreview = URL.createObjectURL(f);
+          const img = new Image();
+          img.onload = () => { this.palette = extractPalette(img); };
+          img.onerror = () => { this.palette = null; };
+          img.src = this.lightPreview;
+        },
+        // Dark image → dark wallpaper only (dark mode keeps its own slate palette).
+        onDarkFile(e) {
+          const f = e.target.files && e.target.files[0];
+          this.bgDarkUrl = ""; this.darkFile = f || null;
+          this._revoke(this.darkPreview);
+          this.darkPreview = f ? URL.createObjectURL(f) : null;
+        },
+        async pickPreset(lightUrl, darkUrl) {
+          try {
+            const pl = extractPalette(await this._load(lightUrl));
+            if (!pl) return;
+            this.palette = pl;
+            this.lightFile = null; this.darkFile = null;
+            this.lightPreview = lightUrl; this.darkPreview = darkUrl || null;
+            this.bgLightUrl = lightUrl; this.bgDarkUrl = darkUrl || "";
+          } catch (e) { /* leave palette null */ }
+        },
+        canApply() { return !!(this.palette || this.lightFile || this.darkFile || this.bgLightUrl || this.bgDarkUrl); },
+        cssVars() {
+          const p = this.palette; if (!p) return "";
+          return `--pa-bg:${p.bg};--pa-surface:${p.surface};--pa-accent:${p.accent};` +
+                 `--pa-accent-hover:${p.accent_hover};--pa-accent-fg:${p.accent_fg};--pa-ink:${p.ink}`;
+        },
+        async apply() {
+          if (!this.canApply() || this.busy) return;
+          this.busy = true;
+          const fd = new FormData(), p = this.palette || {};
+          ["bg", "surface", "accent", "accent_hover", "accent_fg", "ink"].forEach(k => fd.append(k, p[k] || ""));
+          fd.append("bg_light_url", this.bgLightUrl); fd.append("bg_dark_url", this.bgDarkUrl);
+          if (this.lightFile) fd.append("image_light", this.lightFile);
+          if (this.darkFile) fd.append("image_dark", this.darkFile);
+          try { await fetch("/theme", { method: "POST", body: fd }); location.reload(); }
+          catch (e) { this.busy = false; }
+        },
+        async resetTheme() {
+          if (this.busy) return; this.busy = true;
+          try { await fetch("/theme/reset", { method: "POST" }); location.reload(); }
+          catch (e) { this.busy = false; }
+        },
+      };
+    }
+    function _rgb2hsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      let h = 0; const l = (mx + mn) / 2;
+      const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      if (d !== 0) {
+        if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+        h *= 60; if (h < 0) h += 360;
+      }
+      return [h, s, l];
+    }
+    function _hsl2hex(h, s, l) {
+      s = Math.max(0, Math.min(1, s)); l = Math.max(0, Math.min(1, l));
+      const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+      let r = 0, g = 0, bb = 0;
+      if (h < 60) [r, g, bb] = [c, x, 0]; else if (h < 120) [r, g, bb] = [x, c, 0];
+      else if (h < 180) [r, g, bb] = [0, c, x]; else if (h < 240) [r, g, bb] = [0, x, c];
+      else if (h < 300) [r, g, bb] = [x, 0, c]; else [r, g, bb] = [c, 0, x];
+      const hx = (v) => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+      return `#${hx(r)}${hx(g)}${hx(bb)}`;
+    }
+    function extractPalette(img) {
+      const N = 64, cv = document.createElement("canvas"); cv.width = N; cv.height = N;
+      const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, N, N);
+      let data; try { data = ctx.getImageData(0, 0, N, N).data; } catch (e) { return null; }
+      const buckets = {};
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 125) continue;
+        const r = data[i] & 0xF0, g = data[i + 1] & 0xF0, b = data[i + 2] & 0xF0;
+        const k = (r << 16) | (g << 8) | b;
+        (buckets[k] || (buckets[k] = { r, g, b, n: 0 })).n++;
+      }
+      const arr = Object.values(buckets); if (!arr.length) return null;
+      arr.sort((a, b) => b.n - a.n);
+      const top = arr.slice(0, 14);
+      const lum = (c) => (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+      const sat = (c) => { const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b); return mx ? (mx - mn) / mx : 0; };
+      let accent = top[0], best = -1;
+      for (const c of top) {
+        const score = sat(c) * Math.sqrt(c.n) * (1 - Math.abs(lum(c) - 0.5));
+        if (score > best) { best = score; accent = c; }
+      }
+      let light = top[0], dark = top[0];
+      for (const c of top) { if (lum(c) > lum(light)) light = c; if (lum(c) < lum(dark)) dark = c; }
+      const [ah, ar_s] = _rgb2hsl(accent.r, accent.g, accent.b);
+      const [lh, ls] = _rgb2hsl(light.r, light.g, light.b);
+      const [dh, ds] = _rgb2hsl(dark.r, dark.g, dark.b);
+      const as_ = Math.max(0.45, Math.min(0.85, ar_s)), accentL = 0.42;
+      return {
+        bg: _hsl2hex(lh, Math.min(ls, 0.22), 0.955),
+        surface: _hsl2hex(lh, Math.min(ls, 0.12), 0.99),
+        accent: _hsl2hex(ah, as_, accentL),
+        accent_hover: _hsl2hex(ah, as_, accentL - 0.08),
+        accent_fg: "#ffffff",
+        ink: _hsl2hex(dh, Math.min(ds, 0.35), 0.18),
+      };
+    }
+
+    // Render LaTeX (KaTeX) inside an element. Safe to call repeatedly.
+    window.renderMath = function (el) {
+      if (!el || !window.renderMathInElement) return;
+      try {
+        renderMathInElement(el, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+          ],
+          throwOnError: false,
+        });
+      } catch (e) { /* ignore */ }
+    };
+    // Initial render (auto-render script is deferred, so wait for full load).
+    window.addEventListener("load", function () { window.renderMath(document.body); });
+    // Re-render after any HTMX swap (new chat turns, note preview, etc.).
+    document.body.addEventListener("htmx:afterSwap", function (e) { window.renderMath(e.target); });
+
+    // ⌘K / Ctrl-K focuses the landing-page search box, when present.
+    document.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        var el = document.getElementById("pa-search");
+        if (el) { e.preventDefault(); el.focus(); el.select(); }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{# Wiki lint results (report-only). Expects: slug, lint (deterministic findings),
+   report_html (heuristic markdown), agentic (bool), error. Swapped into #left-panel. #}
+<div class="p-3">
+  <div class="flex items-center gap-2 mb-3">
+    <h2 class="text-sm font-semibold text-slate-700">Wiki health</h2>
+    <button @click="loadPanel('/c/{{ slug }}/wiki/panel')"
+            class="ml-auto text-xs rounded border border-slate-200 bg-white px-2 py-1 hover:bg-slate-50">← Wiki</button>
+  </div>
+  <p class="text-xs text-slate-400 mb-3">A report only — nothing here changes the wiki. Act on findings yourself.</p>
+
+  <!-- deterministic checks (code): links, orphans, index drift -->
+  <h3 class="text-xs font-medium text-slate-500 mb-1">Structure ({{ lint|length }})</h3>
+  {% if not lint %}
+  <p class="text-sm text-slate-500 mb-3">No structural issues. 🎉</p>
+  {% else %}
+  <ul class="space-y-1 mb-3">
+    {% for i in lint %}
+    <li class="text-sm flex items-start gap-2">
+      <span class="shrink-0 text-xs rounded px-1.5 py-0.5
+        {{ 'bg-rose-100 text-rose-700' if i.severity == 'warning' else 'bg-slate-100 text-slate-500' }}">{{ i.type }}</span>
+      <span class="text-slate-700">{{ i.message }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <!-- heuristic checks (agent): contradictions, stale claims, conflict gaps -->
+  <h3 class="text-xs font-medium text-slate-500 mb-1">Content review</h3>
+  {% if error %}
+  <p class="text-sm text-rose-700">{{ error }}</p>
+  {% elif not agentic %}
+  <p class="text-sm text-slate-500">The deep content review needs a CLI agent (Claude Code). Structural checks above still ran.</p>
+  {% elif report_html %}
+  <div class="prose prose-sm max-w-none rounded border border-slate-200 bg-white p-3">{{ report_html | safe }}</div>
+  {% else %}
+  <p class="text-sm text-slate-500">No content issues reported.</p>
+  {% endif %}
+</div>

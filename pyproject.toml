@@ -1,0 +1,27 @@
+[project]
+name = "paper-agent"
+version = "0.1.0"
+description = "Personal research wiki agent over Zotero collections — the wiki reflects the user's thinking, papers are evidence."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "httpx",
+    "python-multipart",
+    "markdown-it-py",
+    "pypdf",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

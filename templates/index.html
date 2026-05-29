@@ -1,0 +1,629 @@
+{% extends "base.html" %}
+{% block title %}Collections — Paper Agent{% endblock %}
+{% block content %}
+{% macro heatcell(n) -%}
+{%- if n <= 0 -%}bg-slate-200{%- elif n == 1 -%}bg-amber-200{%- elif n <= 3 -%}bg-amber-400{%- elif n <= 6 -%}bg-amber-500{%- else -%}bg-amber-600{%- endif -%}
+{%- endmacro %}
+<div x-data='newWizard({{ available|tojson }}, {{ existing_names|tojson }})'>
+
+  <!-- Hero -->
+  {% set b = pa_branding() %}
+  <div class="flex items-start justify-between gap-6">
+    <div class="min-w-0 pt-2">
+      <h1 class="font-serif text-3xl sm:text-[2.6rem] leading-tight tracking-tight text-slate-900">{{ b.workspace_title }}</h1>
+      <p class="mt-2 text-slate-500 max-w-md">{{ b.workspace_subtitle }}</p>
+    </div>
+    <button @click="open()"
+            class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 text-white px-3.5 py-2 text-sm font-medium hover:bg-slate-700 transition">
+      <span class="text-base leading-none">+</span> New collection
+    </button>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+    {% for icon, bg, fg, n, label in [
+        ("📄","bg-indigo-50","text-indigo-500", stats.papers, "Papers"),
+        ("✦","bg-amber-50","text-amber-500", stats.highlights, "Highlights"),
+        ("✎","bg-sky-50","text-sky-500", stats.notes, "Notes"),
+        ("◷","bg-emerald-50","text-emerald-500", stats.unread, "Unread")] %}
+    <div class="flex items-center gap-3 px-5 py-4">
+      <span class="grid place-items-center w-10 h-10 shrink-0 rounded-xl {{ bg }} {{ fg }} text-lg">{{ icon }}</span>
+      <span><span class="block text-xl font-semibold text-slate-900 tabular-nums leading-none">{{ n }}</span>
+        <span class="block text-xs text-slate-500 mt-1">{{ label }}</span></span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Search: fuzzy (Fuse.js) across papers/notes/thoughts/wiki/chat, grouped into tabs -->
+  <div x-data="siteSearch()" class="relative mt-4">
+    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+    <input id="pa-search" x-model="q" autocomplete="off" @focus="ensureLoaded()" @input.debounce.150ms="run()"
+           placeholder="Search papers, notes, thoughts, wiki, chat…"
+           class="w-full rounded-xl border border-slate-200 bg-white pl-11 pr-16 py-3 text-sm shadow-sm focus:ring-1 focus:ring-slate-400 focus:outline-none">
+    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">⌘ K</span>
+    <div x-show="q.trim().length" x-cloak @click.away="q=''"
+         class="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+      <!-- type tabs -->
+      <div class="flex flex-wrap gap-1 border-b border-slate-100 px-2 pt-2 pb-1.5 text-xs">
+        <template x-for="t in tabs" :key="t.key">
+          <button type="button" @click="tab = t.key"
+                  :class="tab === t.key ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'"
+                  class="rounded-full px-2.5 py-0.5"
+                  x-text="`${t.label} ${count(t.key)}`"></button>
+        </template>
+      </div>
+      <div class="max-h-80 overflow-auto">
+        <template x-if="!filtered().length">
+          <div class="px-4 py-3 text-sm text-slate-400" x-text="loaded ? 'No matches.' : 'Loading…'"></div>
+        </template>
+        <template x-for="r in filtered()" :key="r.id">
+          <a :href="r.url" class="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition">
+            <span class="text-slate-300 shrink-0" x-text="icon(r.type)"></span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm text-slate-800 truncate" x-text="r.title"></span>
+              <span class="block text-xs text-slate-400 truncate" x-text="r.sub"></span>
+            </span>
+            <span class="shrink-0 text-[10px] uppercase tracking-wide text-slate-400" x-text="r.type"></span>
+          </a>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 text-sm">
+    Couldn't reach Zotero ({{ error }}). Your local collections still work; you just can't
+    import new ones until Zotero is reachable. Check <a href="/settings" class="underline">Settings</a>.
+  </div>
+  {% endif %}
+
+  <!-- New collection wizard: layer 1 = source, layer 2 = configure (name, tags, preview) -->
+  <div x-show="newOpen" x-cloak @keydown.escape.window="newOpen = false" @click.self="newOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] max-h-[88vh] overflow-auto p-5">
+      <div class="flex items-center gap-2 mb-1">
+        <button type="button" x-show="step !== 'source'" x-cloak @click="back()"
+                class="text-slate-400 hover:text-slate-700 text-sm">←</button>
+        <h2 class="font-semibold">New collection</h2>
+        <button type="button" @click="newOpen = false" class="ml-auto text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+
+      <!-- LAYER 1: choose a source -->
+      <div x-show="step === 'source'">
+        <p class="text-sm text-slate-500 mb-3">Create one locally, or import from a source.</p>
+        <form method="post" action="/collections/new" class="mb-3"
+              @submit="if (nameTaken(localName)) $event.preventDefault()">
+          <div class="flex gap-2">
+            <input name="name" x-model="localName" required placeholder="New empty collection name"
+                   class="flex-1 rounded border px-3 py-2 text-sm"
+                   :class="nameTaken(localName) ? 'border-rose-400' : 'border-slate-300'">
+            <button :disabled="nameTaken(localName) || !localName.trim()"
+                    class="rounded bg-slate-900 text-white px-4 py-2 text-sm hover:bg-slate-700 disabled:opacity-40">Create local</button>
+          </div>
+          <p x-show="nameTaken(localName)" x-cloak class="mt-1 text-xs text-rose-600">A collection named “<span x-text="localName.trim()"></span>” already exists — pick a different name.</p>
+        </form>
+        <div class="space-y-2">
+          <button type="button" @click="step = 'zotero'"
+                  class="flex w-full items-start gap-3 rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50 hover:border-slate-300">
+            <span class="text-xl leading-none">📚</span>
+            <span class="min-w-0"><span class="block font-medium text-slate-800">Import from Zotero{% if available %} <span class="ml-0.5 text-[10px] rounded bg-slate-200 px-1.5 py-0.5 text-slate-600">{{ available|length }}</span>{% endif %}</span>
+              <span class="block text-xs text-slate-500">Import a Zotero collection; Pull brings in new papers later (read-only).</span></span>
+            <span class="ml-auto text-slate-300">→</span>
+          </button>
+          <button type="button" @click="step = 'dir'; if (!dpath) browse('')"
+                  class="flex w-full items-start gap-3 rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50 hover:border-slate-300">
+            <span class="text-xl leading-none">📁</span>
+            <span class="min-w-0"><span class="block font-medium text-slate-800">Directory of PDFs</span>
+              <span class="block text-xs text-slate-500">Import a local folder of PDFs as a new collection.</span></span>
+            <span class="ml-auto text-slate-300">→</span>
+          </button>
+          <div class="flex items-start gap-3 rounded-lg border border-dashed border-slate-200 p-3 opacity-60">
+            <span class="text-xl leading-none">🔗</span>
+            <span class="min-w-0"><span class="block font-medium text-slate-700">Other source <span class="ml-1 text-[10px] rounded bg-slate-200 px-1.5 py-0.5 text-slate-500">coming soon</span></span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYER 2a: Zotero — pick a collection -->
+      <div x-show="step === 'zotero'" x-cloak>
+        {% if available %}
+        <p class="text-sm text-slate-500 mb-2">Pick a Zotero collection to import. <span class="text-slate-400">({{ available|length }})</span></p>
+        <div class="relative mb-2">
+          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">⌕</span>
+          <input x-model="zfilter" placeholder="Filter collections…"
+                 class="w-full rounded-lg border border-slate-300 pl-7 pr-3 py-1.5 text-sm focus:ring-1 focus:ring-slate-400 focus:outline-none">
+        </div>
+        <div class="space-y-1.5 max-h-72 overflow-auto pr-0.5">
+          {% for a in available %}
+          <button type="button" data-name="{{ a.name|lower }}" data-cname="{{ a.name }}" data-slug="{{ a.slug }}"
+                  @click="pickZotero($el.dataset.slug, $el.dataset.cname)"
+                  x-show="!zfilter || $el.dataset.name.includes(zfilter.toLowerCase())"
+                  class="group flex w-full items-center gap-3 rounded-lg border border-slate-200 p-2.5 text-left hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition">
+            <span class="grid place-items-center w-9 h-9 shrink-0 rounded-lg bg-amber-50 text-amber-600 text-lg">📚</span>
+            <span class="min-w-0 flex-1">
+              <span class="block font-medium text-slate-800 truncate">{{ a.name }}</span>
+              <span class="block text-xs text-slate-400">Zotero collection</span>
+            </span>
+            <span class="text-slate-300 group-hover:text-slate-600 group-hover:translate-x-0.5 transition">→</span>
+          </button>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-500">Zotero isn't reachable. Check <a href="/settings" class="underline">Settings</a>.</p>
+        {% endif %}
+      </div>
+
+      <!-- LAYER 3a: Zotero — configure the import -->
+      <div x-show="step === 'zsettings'" x-cloak>
+        <div class="flex items-center gap-2 mb-3 text-sm text-slate-500">
+          <span class="grid place-items-center w-7 h-7 shrink-0 rounded-lg bg-amber-50 text-amber-600">📚</span>
+          <span>Importing <span class="font-medium text-slate-800" x-text="zname"></span> from Zotero</span>
+        </div>
+        <form method="post" action="/collections/import-zotero">
+          <input type="hidden" name="slug" :value="zslug">
+          <input type="hidden" name="tags" :value="JSON.stringify(tags)">
+          <label class="block text-xs text-slate-500 mb-1">Collection name</label>
+          <input name="name" x-model="zname" class="w-full rounded border px-3 py-2 text-sm mb-1"
+                 :class="nameTaken(zname) ? 'border-rose-400' : 'border-slate-300'">
+          <p x-show="nameTaken(zname)" x-cloak class="mb-2 text-xs text-rose-600">That name is already used — pick a different one.</p>
+          <div class="mb-3">
+            <label class="block text-xs text-slate-500 mb-1">Tags <span class="text-slate-400">(optional)</span></label>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <template x-for="(tg, i) in tags" :key="i">
+                <span class="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5" :style="`background:${tg.color}22;color:${tg.color};border:1px solid ${tg.color}55`">
+                  <span x-text="tg.label"></span>
+                  <button type="button" @click="tags.splice(i,1)" class="opacity-60 hover:opacity-100">×</button>
+                </span>
+              </template>
+              <input x-model="tagLabel" maxlength="40" placeholder="+ tag" @keydown.enter.prevent="addTag()"
+                     class="w-24 rounded border border-slate-300 px-2 py-0.5 text-xs">
+              <input type="color" x-model="tagColor" class="w-6 h-6 rounded border border-slate-300 p-0 bg-transparent cursor-pointer">
+              <button type="button" @click="addTag()" class="text-xs rounded bg-slate-200 px-2 py-0.5 hover:bg-slate-300">add</button>
+            </div>
+          </div>
+          <label class="flex items-start gap-2 mb-2 text-xs text-slate-500 cursor-pointer">
+            <input type="checkbox" name="draft_wiki" checked class="mt-0.5 rounded border-slate-300">
+            <span>Draft a starter wiki from the abstracts <span class="text-slate-400">— an AI-generated starting point you edit; not your own synthesis.</span></span>
+          </label>
+          <div class="flex items-center gap-2 mb-2">
+            <label class="text-xs text-slate-500">PDFs:</label>
+            <select name="copy_mode" class="rounded border border-slate-300 px-2 py-1 text-sm">
+              <option value="eager">copy now</option><option value="lazy">copy on open</option>
+            </select>
+            <button class="ml-auto rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
+                    :disabled="!zsel.length || nameTaken(zname)" x-text="`Import ${zsel.length} paper(s)`"></button>
+          </div>
+          <p class="text-xs text-slate-400 mb-1" x-show="zloading">Loading papers…</p>
+          <p class="text-xs text-rose-600 mb-1" x-text="zerr" x-show="zerr"></p>
+          <div class="rounded-lg border border-slate-200 max-h-60 overflow-auto" x-show="zpapers.length">
+            <label class="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100 text-xs text-slate-500 cursor-pointer sticky top-0 bg-white">
+              <input type="checkbox" class="rounded border-slate-300"
+                     :checked="zsel.length === zpapers.length"
+                     :indeterminate.camel="zsel.length > 0 && zsel.length < zpapers.length"
+                     @change="zsel = $event.target.checked ? zpapers.map(p => p.key) : []">
+              <span x-text="zsel.length === zpapers.length ? 'All selected' : `${zsel.length} of ${zpapers.length} selected`"></span>
+            </label>
+            <div class="divide-y divide-slate-100">
+              <template x-for="p in zpapers" :key="p.key">
+                <label class="flex items-start gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50">
+                  <input type="checkbox" name="paper_keys" :value="p.key" class="mt-0.5 rounded border-slate-300"
+                         :checked="zsel.includes(p.key)"
+                         @change="zsel = $event.target.checked ? [...zsel, p.key] : zsel.filter(x => x !== p.key)">
+                  <span><span class="text-slate-800" x-text="p.title"></span>
+                    <span class="text-slate-400 text-xs" x-text="p.authors ? ' · ' + p.authors : ''"></span></span>
+                </label>
+              </template>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- LAYER 2b: Directory explorer -->
+      <div x-show="step === 'dir'" x-cloak>
+        <!-- current path + up -->
+        <div class="flex items-center gap-2 mb-2">
+          <button type="button" @click="if (dparent) browse(dparent)" :disabled="!dparent"
+                  class="rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50 disabled:opacity-40" title="Up one folder">↑</button>
+          <input x-model="dpath" spellcheck="false" @keydown.enter.prevent="browse(dpath)"
+                 placeholder="~" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs font-mono">
+          <button type="button" @click="browse(dpath)" class="rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50">Go</button>
+        </div>
+        <p class="text-xs text-slate-400 mb-1" x-show="dloading">Loading…</p>
+        <p class="text-xs text-rose-600 mb-1" x-text="derr" x-show="derr"></p>
+
+        <!-- folder browser: subfolders then PDFs in this folder -->
+        <div class="rounded-lg border border-slate-200 max-h-56 overflow-auto divide-y divide-slate-100 mb-3">
+          <template x-for="d in ddirs" :key="d">
+            <button type="button" @click="browse(dpath.replace(/\/$/, '') + '/' + d)"
+                    class="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 text-left">
+              <span>📁</span><span class="truncate" x-text="d"></span>
+              <span class="ml-auto text-slate-300">›</span>
+            </button>
+          </template>
+          <template x-if="!dloading && !ddirs.length && !dpdfs.length">
+            <div class="px-3 py-2 text-xs text-slate-400">Empty folder.</div>
+          </template>
+          <label x-show="dpdfs.length" class="flex items-center gap-2 px-3 py-1.5 text-xs text-slate-500 cursor-pointer bg-slate-50 sticky top-0">
+            <input type="checkbox" class="rounded border-slate-300"
+                   :checked="dpdfs.length && dsel.length === dpdfs.length"
+                   :indeterminate.camel="dsel.length > 0 && dsel.length < dpdfs.length"
+                   @change="dsel = $event.target.checked ? [...dpdfs] : []">
+            <span x-text="`${dpdfs.length} PDF(s) here · ` + (dsel.length === dpdfs.length ? 'all selected' : dsel.length + ' selected')"></span>
+          </label>
+          <template x-for="n in dpdfs" :key="n">
+            <label class="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+              <input type="checkbox" class="rounded border-slate-300"
+                     :checked="dsel.includes(n)"
+                     @change="dsel = $event.target.checked ? [...dsel, n] : dsel.filter(x => x !== n)">
+              <span>📄</span><span class="truncate" x-text="n"></span>
+            </label>
+          </template>
+        </div>
+
+        <!-- import this folder -->
+        <template x-if="dpdfs.length">
+          <form method="post" action="/collections/dir-import">
+            <input type="hidden" name="path" :value="dpath">
+            <input type="hidden" name="tags" :value="JSON.stringify(tags)">
+            <template x-for="(n, i) in dsel" :key="i"><input type="hidden" name="files" :value="n"></template>
+            <label class="block text-xs text-slate-500 mb-1">Collection name</label>
+            <input name="name" x-model="dname" class="w-full rounded border px-3 py-2 text-sm mb-1"
+                   :class="nameTaken(dname) ? 'border-rose-400' : 'border-slate-300'">
+            <p x-show="nameTaken(dname)" x-cloak class="mb-2 text-xs text-rose-600">That name is already used — pick a different one.</p>
+            <div class="mb-3">
+              <label class="block text-xs text-slate-500 mb-1">Tags <span class="text-slate-400">(optional)</span></label>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <template x-for="(tg, i) in tags" :key="i">
+                  <span class="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5" :style="`background:${tg.color}22;color:${tg.color};border:1px solid ${tg.color}55`">
+                    <span x-text="tg.label"></span>
+                    <button type="button" @click="tags.splice(i,1)" class="opacity-60 hover:opacity-100">×</button>
+                  </span>
+                </template>
+                <input x-model="tagLabel" maxlength="40" placeholder="+ tag" @keydown.enter.prevent="addTag()"
+                       class="w-24 rounded border border-slate-300 px-2 py-0.5 text-xs">
+                <input type="color" x-model="tagColor" class="w-6 h-6 rounded border border-slate-300 p-0 bg-transparent cursor-pointer">
+                <button type="button" @click="addTag()" class="text-xs rounded bg-slate-200 px-2 py-0.5 hover:bg-slate-300">add</button>
+              </div>
+            </div>
+            <label class="flex items-start gap-2 mb-2 text-xs text-slate-500 cursor-pointer">
+              <input type="checkbox" name="draft_wiki" checked class="mt-0.5 rounded border-slate-300">
+              <span>Draft a starter wiki from the abstracts <span class="text-slate-400">— an AI-generated starting point you edit; not your own synthesis.</span></span>
+            </label>
+            <div class="flex justify-end">
+              <button :disabled="!dsel.length || nameTaken(dname)"
+                      class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
+                      x-text="`Import ${dsel.length} PDF(s)`"></button>
+            </div>
+          </form>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Collection grid -->
+  {% if collections %}
+  <div x-data="collectionCards()" x-init="init()">
+    <!-- Collections heading + sort -->
+    <div class="mt-8 flex items-center justify-between gap-3 text-sm">
+      <h2 class="text-lg font-semibold text-slate-900">Collections</h2>
+      <div class="flex items-center gap-2">
+        <span class="text-slate-500">Sort</span>
+        <select x-model="sortBy" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm">
+          <option value="updated">Last updated</option>
+          <option value="hot">Hottest (7d)</option>
+          <option value="name">Name (A–Z)</option>
+          <option value="count">Papers (most)</option>
+          <option value="manual">Manual (drag)</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="card-grid" class="mt-3 grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))"
+         @dragover.prevent="onDragOver($event)" @drop.prevent="onDrop($event)">
+      {% for c in collections %}
+      <div class="card group relative rounded-xl border border-slate-200 bg-white p-5 shadow-sm
+                  hover:shadow-md hover:border-slate-300 transition flex flex-col"
+           data-slug="{{ c.slug }}" data-name="{{ c.name|lower }}"
+           data-count="{{ c.paper_count }}" data-updated="{{ c.last_activity }}"
+           data-hot="{{ c.activity.hot7 if c.activity else 0 }}"
+           @dragstart="onDragStart($event)" @dragend="onDragEnd($event)">
+        {% if c.importing %}
+        <!-- importing: grayed, not clickable, polls and reloads when parsing finishes -->
+        <div x-data="importCard('{{ c.slug }}')" x-init="init()" class="opacity-80 select-none">
+          <h3 class="font-semibold text-slate-500 leading-snug truncate">{{ c.name }}</h3>
+          <div class="mt-6 mb-2 flex flex-col items-center justify-center gap-2 text-slate-400">
+            <svg class="w-7 h-7 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path>
+            </svg>
+            <span class="text-sm">Parsing… importing papers</span>
+            <span class="text-xs text-slate-300">opens when ready</span>
+          </div>
+        </div>
+        {% else %}
+        <a href="/c/{{ c.slug }}" draggable="false" class="absolute inset-0" aria-label="{{ c.name }}"></a>
+
+        <div class="flex items-start justify-between gap-2">
+          <div class="relative z-10 min-w-0" x-data="cardEdit()" data-slug="{{ c.slug }}" data-cname="{{ c.name }}">
+            <div x-show="!editing" class="flex items-center gap-1 min-w-0">
+              <h3 class="font-semibold text-slate-900 leading-snug group-hover:text-slate-700 truncate" x-text="cname">{{ c.name }}</h3>
+              <button @click.prevent.stop="edit()" class="shrink-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 text-xs" title="Rename">✎</button>
+            </div>
+            <form x-show="editing" x-cloak @submit.prevent="save()" class="flex items-center gap-1">
+              <input x-model="cname" x-ref="ni" @keydown.escape="cancel()" @click.stop
+                     class="rounded border border-slate-300 px-1.5 py-0.5 text-sm w-40">
+              <button class="text-xs rounded bg-slate-900 text-white px-2 py-0.5 hover:bg-slate-700">save</button>
+              <button type="button" @click="cancel()" class="text-xs text-slate-400 hover:text-slate-600">✕</button>
+            </form>
+            <p x-show="err" x-cloak x-text="err" class="text-xs text-rose-600 mt-0.5"></p>
+          </div>
+          <span class="shrink-0 text-xs font-medium text-slate-500 tabular-nums">{{ c.paper_count }}
+            <span class="text-slate-400 font-normal">{{ "paper" if c.paper_count == 1 else "papers" }}</span>
+            {% if c.unread %}<span class="text-sky-600 font-normal">· {{ c.unread }} unread</span>{% endif %}
+          </span>
+        </div>
+
+        <div class="mt-2">
+          {% with slug = c.slug, tags = c.tags %}{% include "_tagbar.html" %}{% endwith %}
+        </div>
+
+        {% if not c.zotero_collection_id %}
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <span class="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 text-xs px-2 py-0.5">● local</span>
+        </div>
+        {% endif %}
+
+        {% if c.activity %}
+        <!-- engagement heatmap: rows = type (💬 chat · ⚡ highlights · ✎ notes · 💡 thoughts),
+             cols = last 28 days, edge-to-edge responsive grid (square cells) -->
+        <div class="mt-3 space-y-1" title="Your engagement over the last 4 weeks">
+          {% for icon, key in [("💬","chat"), ("⚡","highlights"), ("✎","notes"), ("💡","thoughts")] %}
+          <div class="flex items-center gap-1.5">
+            <span class="w-4 shrink-0 text-center text-[11px] leading-none text-slate-400">{{ icon }}</span>
+            <div class="grid flex-1 gap-[2px]" style="grid-template-columns:repeat({{ c.activity[key]|length }},minmax(0,1fr))">
+              {% for n in c.activity[key] %}
+              <span class="h-2.5 rounded-[2px] {{ heatcell(n) }}"></span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if c.recent %}
+        <div class="mt-3 pt-2 border-t border-slate-100">
+          <div class="text-[11px] uppercase tracking-wide text-slate-400">Recently opened</div>
+          <div class="mt-0.5 flex items-center gap-1.5 text-xs">
+            <span class="text-slate-300">📄</span>
+            <span class="truncate text-slate-600">{{ c.recent.title }}</span>
+            {% if c.recent.ago %}<span class="ml-auto shrink-0 text-slate-400">{{ c.recent.ago }}</span>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- footer: drag handle (left) + red delete icon (right) -->
+        <div class="relative z-10 mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+          <span class="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 select-none text-base leading-none" title="Drag to reorder"
+                @mousedown="$el.closest('.card').setAttribute('draggable', 'true')"
+                @mouseup="$el.closest('.card').removeAttribute('draggable')">⠿</span>
+          <div class="flex items-center gap-1">
+            <form method="post" action="/c/{{ c.slug }}/duplicate">
+              <button class="grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100" title="Duplicate this collection" aria-label="Duplicate collection">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+                  <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+                </svg>
+              </button>
+            </form>
+            <form method="post" action="/c/{{ c.slug }}/delete"
+                  onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete “{{ c.name }}” and everything in it (notes, highlights, chat, wiki for this collection)? Papers also in another collection are kept there; your Zotero library is never touched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
+              <button class="grid place-items-center w-7 h-7 rounded text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="Delete this collection locally" aria-label="Delete collection">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+                  <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6m3 5v6m4-6v6"/>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Empty state -->
+  <div class="mt-8 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+    <div class="text-4xl">📚</div>
+    <h2 class="mt-3 font-semibold text-slate-800">No collections yet</h2>
+    <p class="mt-1 text-sm text-slate-500 max-w-md mx-auto">
+      Start one from scratch, or import an existing collection from Zotero to pull its papers in.
+    </p>
+    <div class="mt-4 flex items-center justify-center gap-2">
+      <button @click="open()" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-700">+ New collection</button>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  // New-collection wizard: layer 1 (source) → layer 2 (Zotero/Directory: name, tags, preview).
+  function newWizard(available, existing) {
+    return {
+      newOpen: false, step: "source",
+      available: available || [],
+      existing: (existing || []).map((n) => (n || "").toLowerCase()),
+      localName: "",
+      zslug: "", zname: "", zfilter: "", zpapers: [], zcount: 0, zloading: false, zerr: "", zsel: [],
+      dpath: "", dname: "", ddirs: [], dparent: null, dpdfs: [], dloading: false, derr: "", dsel: [],
+      tags: [], tagLabel: "", tagColor: "#0ea5e9",
+      nameTaken(n) { return this.existing.includes((n || "").trim().toLowerCase()); },
+      open() {                       // always start at the top layer with a clean slate
+        this.step = "source";
+        this.localName = "";
+        this.zslug = ""; this.zname = ""; this.zfilter = ""; this.zpapers = []; this.zsel = []; this.zerr = "";
+        this.dpath = ""; this.ddirs = []; this.dparent = null; this.dpdfs = []; this.dsel = []; this.derr = ""; this.dname = "";
+        this.tags = []; this.tagLabel = "";
+        this.newOpen = true;
+      },
+      back() { this.step = (this.step === "zsettings") ? "zotero" : "source"; },
+      addTag() {
+        const l = (this.tagLabel || "").trim();
+        if (!l) return;
+        this.tags.push({ label: l.slice(0, 40), color: this.tagColor });
+        this.tagLabel = "";
+      },
+      async pickZotero(slug, name) {
+        this.zslug = slug; this.zpapers = []; this.zsel = []; this.zcount = 0; this.zerr = "";
+        if (!slug) return;
+        this.zname = name || slug;
+        this.step = "zsettings";          // advance to the configure layer
+        this.zloading = true;
+        try {
+          const d = await (await fetch("/collections/zotero-preview/" + encodeURIComponent(slug))).json();
+          this.zloading = false;
+          if (d.error) { this.zerr = d.error; return; }
+          this.zname = d.name || this.zname; this.zcount = d.count; this.zpapers = d.papers || [];
+          this.zsel = this.zpapers.map((p) => p.key);   // default: all selected
+        } catch (e) { this.zloading = false; this.zerr = "Failed to load papers."; }
+      },
+      async browse(path) {
+        this.dloading = true; this.derr = "";
+        try {
+          const d = await (await fetch("/collections/dir-browse?path=" + encodeURIComponent(path || ""))).json();
+          this.dloading = false;
+          if (d.error) { this.derr = d.error; return; }
+          this.dpath = d.path; this.dparent = d.parent;
+          this.ddirs = d.dirs || []; this.dpdfs = d.pdfs || [];
+          this.dsel = [...this.dpdfs];                   // default: all PDFs in this folder
+          this.dname = (d.path || "").split("/").filter(Boolean).pop() || this.dname;
+        } catch (e) { this.dloading = false; this.derr = "Couldn't read that folder."; }
+      },
+    };
+  }
+
+  function importCard(slug) {
+    return {
+      init() { this.poll(); },
+      async poll() {
+        try {
+          const d = await (await fetch(`/collections/${slug}/import-status`)).json();
+          if (d.state !== "running") { window.location.reload(); return; }   // done/error/idle
+        } catch (e) { /* keep polling */ }
+        setTimeout(() => this.poll(), 1200);
+      },
+    };
+  }
+
+  function cardEdit() {
+    return {
+      editing: false, err: "", cname: "", _orig: "", slug: "",
+      init() { this.slug = this.$el.dataset.slug; this.cname = this._orig = this.$el.dataset.cname; },
+      edit() { this.editing = true; this.err = ""; this.$nextTick(() => this.$refs.ni && this.$refs.ni.focus()); },
+      cancel() { this.editing = false; this.err = ""; this.cname = this._orig; },
+      async save() {
+        const name = (this.cname || "").trim();
+        if (!name) { this.err = "Name can't be empty."; return; }
+        try {
+          const r = await fetch(`/c/${this.slug}/rename`, {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ name }),
+          });
+          const d = await r.json();
+          if (d.ok) {
+            this.cname = this._orig = d.name; this.editing = false; this.err = "";
+            const card = this.$el.closest(".card"); if (card) card.dataset.name = d.name.toLowerCase();
+          } else { this.err = d.error || "Rename failed."; }
+        } catch (e) { this.err = "Rename failed."; }
+      },
+    };
+  }
+
+  function collectionCards() {
+    return {
+      sortBy: localStorage.getItem("pa.colsort") || "updated",
+      order: JSON.parse(localStorage.getItem("pa.colorder") || "null"),
+      dragSlug: null,
+      init() {
+        this.$watch("sortBy", (v) => { localStorage.setItem("pa.colsort", v); this.applySort(); });
+        this.applySort();   // apply the saved sort to the server-rendered cards
+      },
+      grid() { return document.getElementById("card-grid"); },
+      cards() { return [...this.grid().querySelectorAll(":scope > .card")]; },
+      applySort() {
+        const cards = this.cards();
+        if (this.sortBy === "manual" && this.order) {
+          const idx = (s) => { const i = this.order.indexOf(s); return i === -1 ? 1e9 : i; };
+          cards.sort((a, b) => idx(a.dataset.slug) - idx(b.dataset.slug));
+        } else if (this.sortBy === "name") {
+          cards.sort((a, b) => a.dataset.name.localeCompare(b.dataset.name));
+        } else if (this.sortBy === "count") {
+          cards.sort((a, b) => (+b.dataset.count) - (+a.dataset.count));
+        } else if (this.sortBy === "hot") {
+          cards.sort((a, b) => (+b.dataset.hot) - (+a.dataset.hot));
+        } else {   // "updated" — most recent first
+          cards.sort((a, b) => (b.dataset.updated || "").localeCompare(a.dataset.updated || ""));
+        }
+        const g = this.grid();
+        cards.forEach((c) => g.appendChild(c));
+      },
+      onDragStart(e) {
+        const card = e.target.closest(".card"); if (!card) return;
+        this.dragSlug = card.dataset.slug;
+        e.dataTransfer.effectAllowed = "move";
+        card.classList.add("opacity-40");
+      },
+      onDragEnd(e) {
+        const card = e.target.closest(".card");
+        if (card) { card.classList.remove("opacity-40"); card.removeAttribute("draggable"); }
+      },
+      onDragOver(e) {
+        const over = e.target.closest(".card");
+        if (!over || !this.dragSlug || over.dataset.slug === this.dragSlug) return;
+        const dragged = this.grid().querySelector(`.card[data-slug="${this.dragSlug}"]`);
+        if (!dragged) return;
+        const r = over.getBoundingClientRect();
+        const before = e.clientX < r.left + r.width / 2;   // left half → insert before
+        this.grid().insertBefore(dragged, before ? over : over.nextSibling);
+      },
+      onDrop() {
+        this.order = this.cards().map((c) => c.dataset.slug);
+        localStorage.setItem("pa.colorder", JSON.stringify(this.order));
+        this.sortBy = "manual";   // dragging defines a custom order (persisted via the watcher)
+      },
+    };
+  }
+  // themeWizard() + extractPalette() now live in base.html (global) so they also work
+  // inside the Settings → Appearance panel loaded via HTMX.
+
+  // Everything-search: fuzzy (Fuse.js) over a flat index, results grouped into type tabs.
+  function siteSearch() {
+    return {
+      q: "", tab: "all", items: [], fuse: null, loaded: false, res: [],
+      tabs: [{ key: "all", label: "All" }, { key: "paper", label: "Papers" },
+             { key: "note", label: "Notes" }, { key: "thought", label: "Thoughts" },
+             { key: "wiki", label: "Wiki" }, { key: "chat", label: "Chat" }],
+      async ensureLoaded() {
+        if (this.loaded) return;
+        this.loaded = true;
+        try {
+          this.items = await (await fetch("/search-index")).json();
+          if (window.Fuse) this.fuse = new Fuse(this.items, {
+            keys: [{ name: "title", weight: 3 }, { name: "sub", weight: 1 }, { name: "text", weight: 1 }],
+            threshold: 0.4, ignoreLocation: true, minMatchCharLength: 2,
+          });
+        } catch (e) { this.loaded = false; }
+      },
+      async run() {
+        await this.ensureLoaded();
+        const q = this.q.trim();
+        if (!q) { this.res = []; return; }
+        this.res = this.fuse ? this.fuse.search(q, { limit: 80 }).map((x) => x.item)
+                             : this.items.filter((i) => (i.title + " " + i.text).toLowerCase().includes(q.toLowerCase())).slice(0, 80);
+      },
+      count(k) { return k === "all" ? this.res.length : this.res.filter((r) => r.type === k).length; },
+      filtered() { return (this.tab === "all" ? this.res : this.res.filter((r) => r.type === this.tab)).slice(0, 50); },
+      icon(t) { return { paper: "📄", note: "✎", thought: "💡", wiki: "📖", chat: "💬" }[t] || "•"; },
+    };
+  }
+</script>
+{% endblock %}

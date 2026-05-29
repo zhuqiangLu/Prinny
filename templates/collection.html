@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} — Paper Agent{% endblock %}
+{% block main_width %}max-w-none{% endblock %}
+{% block main_pad %}pt-3 pb-2{% endblock %}
+{% block main_inner %}h-full{% endblock %}
+{% block content %}
+<div x-data='collectionView({{ read_map|tojson }})' class="flex flex-col h-full min-h-0">
+
+  <!-- header: collection name + source actions (icon-only, label on hover) -->
+  <div class="shrink-0">
+    <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← Collections</a>
+    <div class="flex items-center gap-2 mt-1">
+      <h1 class="text-xl font-semibold">{{ name }}</h1>
+
+      {% macro icon_label(icon, label) %}
+        <span class="text-base leading-none">{{ icon }}</span>
+        <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">{{ label }}</span>
+      {% endmacro %}
+      {% set btncls = "group relative grid place-items-center w-8 h-8 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" %}
+
+      {% if source.refreshable %}
+      <button type="button"
+              @click="syncWith = true; htmx.ajax('GET', '/c/{{ slug }}/sync/preview', { target: '#sync-modal-body', swap: 'innerHTML' })"
+              class="{{ btncls }}">{{ icon_label("⬇", "Pull from " ~ source.name) }}
+      </button>
+      {% endif %}
+      <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
+      {% if graveyard_count %}
+      <button type="button" @click="graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })"
+              class="{{ btncls }} relative">{{ icon_label("🪦", "Graveyard (recently removed)") }}
+        <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-slate-500 text-white text-[10px] leading-none">{{ graveyard_count }}</span>
+      </button>
+      {% endif %}
+      {% if col and col.copy_mode == "lazy" %}
+      <form method="post" action="/c/{{ slug }}/download-all"><button type="submit" class="{{ btncls }}">{{ icon_label("⤓", "Download all PDFs") }}</button></form>
+      {% endif %}
+
+      <span class="ml-auto text-xs rounded-full bg-slate-200 px-2 py-1 text-slate-600">{{ papers|length }} papers</span>
+    </div>
+    <div class="mt-1.5">
+      {% with slug = slug, tags = (col.tags if col else []) %}{% include "_tagbar.html" %}{% endwith %}
+    </div>
+  </div>
+
+  <!-- Pull-from-Zotero modal (body loaded via HTMX) -->
+  <div x-show="syncWith" x-cloak @keydown.escape.window="syncWith = false" @click.self="syncWith = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">Pull “{{ name }}” from Zotero</h2>
+        <button type="button" @click="syncWith = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <div id="sync-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Move-to-collection popup -->
+  {% if others %}
+  <div x-show="moveOpen" x-cloak @keydown.escape.window="moveOpen = false" @click.self="moveOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(420px,92vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">Move <span x-text="selected.length"></span> paper(s) to…</h2>
+        <button type="button" @click="moveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3">Choose the destination collection.</p>
+      <div class="space-y-1 max-h-72 overflow-auto">
+        {% for o in others %}
+        <button type="button" @click="movePapers('{{ o.slug }}')"
+                class="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 hover:border-slate-300 text-sm">{{ o.name }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Graveyard: recently removed papers (staged, not yet synced) — restore here -->
+  <div x-show="graveOpen" x-cloak @keydown.escape.window="graveOpen = false" @click.self="graveOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">🪦 Graveyard — “{{ name }}”</h2>
+        <button type="button" @click="graveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3">Papers you removed (newest first). <b>Restore</b> brings one back. <b>Permanently delete</b> moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it; <b>Purge</b> forgets it for good.</p>
+      <div id="graveyard-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Export / sync destination chooser -->
+  <div x-show="syncOpen" x-cloak @keydown.escape.window="syncOpen = false" @click.self="syncOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(460px,92vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">Export “{{ name }}”</h2>
+        <button type="button" @click="syncOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">Send a one-shot copy of this collection’s papers somewhere new. (To bring in new papers from Zotero, use ⇅ Pull.)</p>
+      <div class="space-y-2" x-data="{ open: '', bib: '', loadingBib: false,
+                async loadBib(){ this.loadingBib = true; try { const d = await (await fetch('/c/{{ slug }}/export/bibtex')).json(); this.bib = d.bibtex || ''; } finally { this.loadingBib = false; } } }">
+
+        <!-- 1) Directory of PDFs (no bibtex) -->
+        <div class="rounded-lg border border-slate-200 hover:border-slate-300">
+          <button type="button" @click="open = (open === 'dir' ? '' : 'dir')"
+                  class="flex w-full items-start gap-3 p-3 text-left hover:bg-slate-50 rounded-lg">
+            <span class="text-xl leading-none">📁</span>
+            <span class="min-w-0">
+              <span class="block font-medium text-slate-800">Directory of PDFs</span>
+              <span class="block text-xs text-slate-500">Copy every paper’s PDF into a local folder.</span>
+            </span>
+            <span class="ml-auto text-slate-400" x-text="open === 'dir' ? '▴' : '▾'"></span>
+          </button>
+          <form x-show="open === 'dir'" x-cloak class="px-3 pb-3 space-y-2"
+                hx-post="/c/{{ slug }}/export/dir" hx-target="#export-result" hx-swap="innerHTML">
+            <label class="block text-xs text-slate-500">Destination folder</label>
+            <input name="path" type="text" value="{{ export_dir_default }}" spellcheck="false"
+                   class="w-full rounded border border-slate-300 px-2 py-1 text-xs font-mono">
+            <div class="flex justify-end">
+              <button type="submit" class="rounded bg-slate-900 text-white text-xs px-3 py-1 hover:bg-slate-700">Copy PDFs</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 3) BibTeX as copyable text (no file) -->
+        <div class="rounded-lg border border-slate-200 hover:border-slate-300">
+          <button type="button" @click="open = (open === 'bib' ? '' : 'bib'); if (open === 'bib' && !bib) loadBib()"
+                  class="flex w-full items-start gap-3 p-3 text-left hover:bg-slate-50 rounded-lg">
+            <span class="text-xl leading-none">📋</span>
+            <span class="min-w-0">
+              <span class="block font-medium text-slate-800">BibTeX</span>
+              <span class="block text-xs text-slate-500">Render BibTeX as text to copy — no file written.</span>
+            </span>
+            <span class="ml-auto text-slate-400" x-text="open === 'bib' ? '▴' : '▾'"></span>
+          </button>
+          <div x-show="open === 'bib'" x-cloak class="px-3 pb-3 space-y-2">
+            <textarea readonly rows="8" x-ref="bibText" :value="loadingBib ? 'Generating…' : bib"
+                      class="w-full rounded border border-slate-300 px-2 py-1 text-xs font-mono"></textarea>
+            <div class="flex justify-end">
+              <button type="button" @click="$refs.bibText.select(); document.execCommand('copy');"
+                      class="rounded border border-slate-300 text-xs px-3 py-1 hover:bg-slate-50">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="export-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- split: paper list | divider | right pane (Chat / Thoughts) -->
+  <div class="flex flex-1 min-h-0 mt-3" x-ref="split">
+    <!-- left column: tabbed Papers | Wiki (+ Triage), with an inline panel -->
+    <div class="min-w-0 flex-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <!-- left tab bar -->
+      <div class="shrink-0 flex items-center gap-1 border-b border-slate-200 px-2 py-1.5 text-sm">
+        <button @click="switchLeft('papers')" :class="leftTabCls('papers')">Papers</button>
+        <button @click="switchLeft('wiki')" :class="leftTabCls('wiki')">Wiki
+          <span x-show="proposedCount" x-text="proposedCount"
+                class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5"></span>
+          <span x-show="triageCount + debtCount" x-text="triageCount + debtCount"
+                class="ml-0.5 rounded-full bg-sky-200 text-sky-900 text-xs px-1.5"
+                :title="triageCount + ' triage · ' + debtCount + ' open questions'"></span>
+        </button>
+        {# Triage + Debt tabs dropped — surfaced inline on the Wiki panel instead. #}
+        <div class="ml-auto flex items-center gap-1">
+          {% if papers %}
+          <button x-show="leftView === 'papers'" x-cloak @click="toggleTools()"
+                  class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:bg-slate-50"
+                  :title="toolsOpen ? 'Hide selection &amp; sort' : 'Show selection &amp; sort'">
+            <span class="text-base leading-none" x-text="toolsOpen ? '▴' : '▾'"></span>
+          </button>
+          {% endif %}
+          {% if dup_count %}
+          <button x-show="leftView === 'papers'" x-cloak
+                  @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
+                  class="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800 hover:bg-amber-100"
+                  title="Resolve same-title duplicate papers">⧉ Duplicates
+            <span class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5">{{ dup_count }}</span>
+          </button>
+          {% endif %}
+          <button @click="addOpen = !addOpen"
+                  class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:bg-slate-50"
+                  title="Add a paper by arXiv id/URL">⊕ Add</button>
+        </div>
+      </div>
+
+      <!-- Duplicate review modal (body loaded via HTMX) -->
+      <div x-show="dupOpen" x-cloak @keydown.escape.window="dupOpen = false" @click.self="dupOpen = false"
+           class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+        <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] p-5">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Resolve duplicates</h2>
+            <button type="button" @click="dupOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+          </div>
+          <p class="text-sm text-slate-500 mb-3">Same-title papers in this collection. Choose the copy to keep — the others are removed or merged into it.</p>
+          <div id="dup-body"><span class="text-sm text-slate-400">Loading…</span></div>
+        </div>
+      </div>
+      <!-- Add-paper wizard (paste URLs → parse → pick → add + download) -->
+      <div x-show="addOpen" x-cloak @keydown.escape.window="addOpen = false" @click.self="addOpen = false"
+           class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+        <div class="bg-white rounded-lg shadow-xl w-[min(640px,95vw)] p-5"
+             x-data="addWizard('{{ slug }}')">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="font-semibold">Add papers</h2>
+            <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+          </div>
+          <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids) — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
+          <textarea x-model="raw" rows="3" spellcheck="false" x-ref="urls"
+                    placeholder="https://arxiv.org/abs/2409.14485&#10;https://openreview.net/forum?id=lh3Aa1u7kU, 2401.12345"
+                    class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"></textarea>
+          <div class="mt-2 flex items-center gap-2">
+            <button type="button" @click="parse()" :disabled="parsing || !raw.trim()"
+                    class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40">
+              <span x-show="!parsing">Parse</span><span x-show="parsing" x-cloak>Parsing…</span>
+            </button>
+            <span x-show="err" x-cloak x-text="err" class="text-xs text-rose-600"></span>
+          </div>
+
+          <template x-if="entries.length">
+            <div class="mt-3">
+              <label class="flex items-center gap-2 text-sm text-slate-600 mb-2 cursor-pointer">
+                <input type="checkbox" class="rounded border-slate-300"
+                       :checked="sel.length && sel.length === selectable().length"
+                       :indeterminate.camel="sel.length > 0 && sel.length < selectable().length"
+                       @change="sel = $event.target.checked ? selectable() : []">
+                <span x-text="sel.length ? `${sel.length} selected` : 'Select all'"></span>
+              </label>
+              <div class="rounded-lg border border-slate-200 max-h-72 overflow-auto divide-y divide-slate-100">
+                <template x-for="(e, i) in entries" :key="i">
+                  <label class="flex items-start gap-2 px-3 py-2 text-sm"
+                         :class="(e.ok && !e.dup) ? 'cursor-pointer hover:bg-slate-50' : 'opacity-60'">
+                    <input type="checkbox" :value="i" x-model.number="sel" :disabled="!e.ok || e.dup"
+                           class="mt-0.5 rounded border-slate-300">
+                    <span class="min-w-0">
+                      <span class="text-slate-800" x-text="e.ok ? e.title : e.input"></span>
+                      <template x-if="e.ok">
+                        <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : '')"></span>
+                      </template>
+                      <template x-if="e.dup"><span class="ml-1 text-xs text-amber-600">already in collection</span></template>
+                      <template x-if="e.removed === 'graveyard'"><span class="ml-1 text-xs text-sky-600">in graveyard — adding restores it</span></template>
+                      <template x-if="e.removed === 'deleted'"><span class="ml-1 text-xs text-sky-600">permanently deleted — adding restores it</span></template>
+                      <template x-if="!e.ok"><span class="ml-1 text-xs text-rose-600" x-text="e.error"></span></template>
+                    </span>
+                  </label>
+                </template>
+              </div>
+              <form method="post" action="/c/{{ slug }}/papers/add" class="mt-3 flex justify-end" @submit="addOpen = false">
+                <input type="hidden" name="entries" :value="JSON.stringify(sel.map(i => entries[i]))">
+                <button :disabled="!sel.length"
+                        class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
+                        x-text="`Add ${sel.length} paper(s)`"></button>
+              </form>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- content area (scrolls) -->
+      <div class="flex-1 min-h-0 overflow-auto">
+      <!-- PAPERS view -->
+      <div x-show="leftView === 'papers'">
+      <!-- selection + bulk-action bar (collapsed by default; the ▾ toggle by Add reveals it) -->
+      {% if papers %}
+      <div x-show="toolsOpen" x-cloak
+           class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/95 backdrop-blur px-3 py-1.5 text-sm">
+          <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
+            <input type="checkbox" class="rounded border-slate-300 cursor-pointer"
+                   :checked="allSelected()" @change="toggleAll($event)"
+                   :indeterminate.camel="selected.length > 0 && !allSelected()">
+            <span x-text="selected.length ? `${selected.length} selected` : 'Select all'"></span>
+          </label>
+          <template x-if="selected.length">
+          <div class="flex flex-wrap items-center gap-2">
+          <button @click="selected = []" class="text-slate-500 hover:text-slate-800">Clear</button>
+          <span class="mx-1 text-slate-300">|</span>
+          <div class="flex items-center gap-1">
+            <span class="text-slate-500">Mark</span>
+            <button @click="markRead(true)" class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">read</button>
+            <button @click="markRead(false)" class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">unread</button>
+          </div>
+          <button @click="removePapers()"
+                  class="rounded border border-rose-200 bg-white px-2 py-1 text-rose-600 hover:bg-rose-50"
+                  title="Remove from the collection now; deleted from the source on the next Sync">🗑 Remove</button>
+          {% if others %}
+          <button @click="moveOpen = true"
+                  class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">Move to…</button>
+          {% endif %}
+          </div>
+          </template>
+          <div class="ml-auto flex items-center gap-1 text-xs text-slate-500">
+            <span>Sort</span>
+            <select x-model="sortBy" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs bg-white">
+              <option value="title">Title A–Z</option>
+              <option value="-title">Title Z–A</option>
+              <option value="-added">Added (newest)</option>
+              <option value="added">Added (oldest)</option>
+              <option value="-year">Year (newest)</option>
+              <option value="year">Year (oldest)</option>
+              <option value="authors">Authors A–Z</option>
+            </select>
+          </div>
+        </div>
+      {% endif %}
+      {% if not papers %}
+      <p class="p-4 text-slate-500">No papers in this collection.</p>
+      {% else %}
+      <ul id="paper-list" class="divide-y divide-slate-200">
+        {% for p in papers %}{% include "_paper_row.html" %}{% endfor %}
+      </ul>
+      {% endif %}
+      </div><!-- /PAPERS view -->
+
+      <!-- WIKI / TRIAGE / PROPOSED panel (loaded via HTMX) -->
+      <div x-show="leftView !== 'papers'" x-cloak id="left-panel">
+        <span class="block p-3 text-sm text-slate-400">Loading…</span>
+      </div>
+      </div><!-- /content area -->
+    </div><!-- /left column -->
+
+    <!-- draggable divider with a centered hide handle -->
+    <div x-show="paneOpen" @mousedown.prevent="startDrag($event)"
+         class="relative w-1.5 mx-1.5 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
+      <button type="button" @mousedown.stop @click="paneOpen=false"
+              class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer"
+              title="Hide panel">›</button>
+    </div>
+
+    <!-- right pane: Chat / Thoughts -->
+    <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
+         class="shrink-0 flex flex-col min-h-0 rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <div class="flex items-center border-b border-slate-200 text-sm shrink-0">
+        <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
+        <button @click="tab='thoughts'" :class="tabCls('thoughts')">Thoughts</button>
+      </div>
+      <div class="flex-1 min-h-0">
+        <div x-show="tab==='chat'" class="h-full">{% include "_chat.html" %}</div>
+        <div x-show="tab==='thoughts'" x-cloak class="h-full overflow-auto p-4">
+          <div id="thoughts-tab-body"><span class="text-sm text-slate-400">Loading…</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- collapsed rail -->
+    <button x-show="!paneOpen" x-cloak @click="paneOpen=true"
+            class="shrink-0 ml-1.5 w-9 rounded border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center"
+            title="Show panel">⟨</button>
+  </div>
+</div>
+
+<script>
+  function addWizard(slug) {
+    return {
+      slug, raw: "", parsing: false, entries: [], sel: [], err: "",
+      selectable() { return this.entries.map((e, i) => (e.ok && !e.dup) ? i : -1).filter(i => i >= 0); },
+      async parse() {
+        this.parsing = true; this.err = ""; this.entries = []; this.sel = [];
+        try {
+          const r = await fetch(`/c/${this.slug}/papers/parse`, {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ urls: this.raw }),
+          });
+          const d = await r.json();
+          this.entries = d.entries || [];
+          if (!this.entries.length) this.err = "Nothing to parse.";
+        } catch (e) { this.err = "Parse failed."; }
+        this.parsing = false;
+      },
+    };
+  }
+
+  function collectionView(readMap) {
+    return {
+      tab: localStorage.getItem("cc.tab") || "chat",
+      paneOpen: localStorage.getItem("cc.open") !== "0",
+      paneW: parseInt(localStorage.getItem("cc.w") || "420", 10),
+      thoughtsLoaded: false,
+      read: readMap || {},          // {paperId: bool} — reactive read state (no reload)
+      selected: [],
+      allIds: {{ papers|map(attribute='id')|list|tojson }}.map(String),
+      leftView: (function(){ const v = localStorage.getItem("cc.left") || "papers";
+                              return (v === "triage" || v === "debt") ? "wiki" : v; })(),
+      addOpen: false,
+      syncOpen: false,
+      syncWith: false,
+      moveOpen: false,
+      graveOpen: false,
+      dupOpen: false,
+      toolsOpen: false,
+      sortBy: localStorage.getItem("cc.sort") || "title",
+      proposedCount: {{ proposed_count|default(0) }},
+      triageCount: {{ triage_count|default(0) }},
+      debtCount: {{ debt_count|default(0) }},
+      init() {
+        this.$watch("tab", (v) => { localStorage.setItem("cc.tab", v); if (v === "thoughts") this.loadThoughts(); });
+        this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));
+        this.$watch("paneW", (v) => localStorage.setItem("cc.w", v));
+        this.$watch("sortBy", (v) => { localStorage.setItem("cc.sort", v); this.sortPapers(); });
+        if (this.tab === "thoughts") this.loadThoughts();
+        if (this.leftView !== "papers") this.openLeft(this.leftView);
+        this.sortPapers();   // apply the persisted sort to the server-rendered list
+      },
+      sortPapers() {
+        const ul = document.getElementById("paper-list");
+        if (!ul) return;
+        const desc = this.sortBy.startsWith("-");
+        const key = desc ? this.sortBy.slice(1) : this.sortBy;   // dataset key
+        const items = [...ul.querySelectorAll(":scope > li")];
+        items.sort((a, b) => {
+          let av = a.dataset[key] || "", bv = b.dataset[key] || "";
+          if (key === "year") { av = parseInt(av) || 0; bv = parseInt(bv) || 0; }
+          else { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+          const c = av < bv ? -1 : av > bv ? 1 : 0;
+          return desc ? -c : c;
+        });
+        items.forEach((li) => ul.appendChild(li));   // re-order (moves nodes, keeps state)
+      },
+      leftTabCls(t) {
+        return "rounded px-2.5 py-1 " + (this.leftView === t
+          ? "bg-slate-900 text-white"
+          : "text-slate-600 hover:bg-slate-100");
+      },
+      openLeft(v) {
+        // Triage + Debt tabs were folded into the Wiki panel.
+        if (v === "triage" || v === "debt") v = "wiki";
+        const url = v === "wiki" ? "/c/{{ slug }}/wiki/panel" : null;
+        if (url) this.loadPanel(url);
+      },
+      switchLeft(v) {
+        this.leftView = v;
+        localStorage.setItem("cc.left", v);
+        if (v !== "papers") this.openLeft(v);
+      },
+      loadPanel(url) {
+        window.htmx && htmx.ajax("GET", url, { target: "#left-panel", swap: "innerHTML" });
+      },
+      loadThoughts() {
+        if (this.thoughtsLoaded) return;
+        this.thoughtsLoaded = true;
+        window.htmx && htmx.ajax("GET", "/c/{{ slug }}/thoughts/panel", { target: "#thoughts-tab-body", swap: "innerHTML" });
+      },
+      tabCls(t) {
+        return "px-3 py-2 border-b-2 " + (this.tab === t
+          ? "border-slate-800 text-slate-900 font-medium"
+          : "border-transparent text-slate-500 hover:text-slate-800");
+      },
+      toggleTools() { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.selected = []; },
+      allSelected() { return this.allIds.length > 0 && this.selected.length === this.allIds.length; },
+      toggleAll(e) { this.selected = e.target.checked ? [...this.allIds] : []; },
+      toggleOne(id) {                                   // row click in selection mode
+        const i = this.selected.indexOf(id);
+        if (i < 0) this.selected.push(id); else this.selected.splice(i, 1);
+      },
+      async markRead(read) {
+        if (!this.selected.length) return;
+        const body = new URLSearchParams();
+        if (read) body.append("read", "true");
+        this.selected.forEach((id) => body.append("paper_ids", id));
+        await fetch("/c/{{ slug }}/papers/mark-read", {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
+        });
+        this.selected.forEach((id) => { this.read[id] = read; });   // in-place; no reload
+      },
+      async removePapers() {
+        if (!this.selected.length) return;
+        if (!await window.paConfirm(`Remove ${this.selected.length} paper(s) from this collection?\n\n• They disappear from the collection now and their cached PDFs are dropped.\n• The removal is staged — it's applied to the source on your next Sync, which DELETES the item from Zotero (affects every collection it's in).\n• Until you Sync, nothing changes in Zotero.`, { danger: true })) return;
+        const body = new URLSearchParams();
+        this.selected.forEach((id) => body.append("paper_ids", id));
+        await fetch("/c/{{ slug }}/papers/remove", {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
+        });
+        window.location.reload();
+      },
+      async movePapers(target) {
+        if (!this.selected.length || !target) return;
+        const body = new URLSearchParams();
+        body.append("target", target);
+        this.selected.forEach((id) => body.append("paper_ids", id));
+        await fetch("/c/{{ slug }}/papers/move", {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
+        });
+        window.location.href = "/c/" + target;
+      },
+      startDrag(e) {
+        const split = this.$refs.split.getBoundingClientRect();
+        // Shield: a full-window overlay so preview iframes don't swallow mousemove
+        // mid-drag (which made the resize lag behind / snap to the cursor).
+        const shield = document.createElement("div");
+        shield.style.cssText = "position:fixed;inset:0;z-index:9999;cursor:col-resize;";
+        document.body.appendChild(shield);
+        const move = (ev) => {
+          let w = split.right - ev.clientX;
+          w = Math.max(300, Math.min(w, split.width - 320));
+          this.paneW = Math.round(w);
+        };
+        const up = () => {
+          document.removeEventListener("mousemove", move);
+          document.removeEventListener("mouseup", up);
+          shield.remove();
+          document.body.style.userSelect = "";
+        };
+        document.body.style.userSelect = "none";
+        document.addEventListener("mousemove", move);
+        document.addEventListener("mouseup", up);
+      },
+    };
+  }
+</script>
+{% endblock %}

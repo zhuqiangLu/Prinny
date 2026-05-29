@@ -1,0 +1,129 @@
+{# Sub-agents UI (tabs + scope/skills/add-tool), reused by the /agents page AND the
+   Settings → Agents category. Uses `agentTab` (not `cat`) so it nests cleanly inside the
+   Settings form's own x-data. Overlays use z-[60] to sit above the Settings modal.
+   Expects: agents (list), all_tools (catalog). #}
+<div x-data="{ agentTab: '{{ agents[0].key if agents else '' }}' }">
+  <p class="text-sm text-slate-500 mb-4">
+    Each is a scoped Claude Code / Codex run: a job, editable <b>skills</b>, and an MCP tool
+    allowlist you can scope — <b>read tools</b> are toggleable, <b>write tools</b> are locked in code.
+    Click a skill to edit it.
+  </p>
+
+  <!-- agent tabs -->
+  <div class="flex flex-wrap gap-1 border-b border-slate-200 mb-4">
+    {% for a in agents %}
+    <button type="button" @click="agentTab = '{{ a.key }}'"
+            :class="agentTab === '{{ a.key }}' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'"
+            class="px-3 py-1.5 -mb-px border-b-2 text-sm">{{ a.name }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- agent panels -->
+  {% for a in agents %}
+  <div x-show="agentTab === '{{ a.key }}'" x-cloak>
+    <p class="text-[15px] font-medium text-slate-800 mb-3">{{ a.job }}</p>
+
+    <!-- Scope card -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm mb-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Scope</span>
+        <span class="text-[10px] font-medium rounded-full bg-slate-100 text-slate-500 px-2 py-0.5">read toggleable · write locked</span>
+        {% if a.tools_customized %}
+        <button type="button" class="ml-auto text-[11px] text-slate-500 hover:text-slate-800 underline"
+                onclick="window.paConfirm('Reset {{ a.name }}’s tools to the defaults?').then(o=>{ if(o) fetch('/agents/{{ a.key }}/tools/reset',{method:'POST'}).then(()=>location.reload()); })">Reset tools</button>
+        {% endif %}
+      </div>
+      <div class="flex items-start gap-2 text-sm text-slate-600">
+        <span class="shrink-0">🔒</span><span>{{ a.perms }}</span>
+      </div>
+      <div class="mt-3">
+        <div class="text-xs text-slate-400 mb-1.5">MCP tools <span class="text-slate-300">— check = this agent may use it</span></div>
+        {% if a.tools %}
+        <div class="space-y-1">
+          {% for t in a.tools %}
+          <label class="flex items-center gap-2 text-sm rounded px-1 py-1 {{ 'opacity-90' if t.write else 'hover:bg-slate-50 cursor-pointer' }}" title="{{ t.desc }}">
+            <input type="checkbox" {{ 'checked' if t.enabled }} {{ 'disabled' if t.write }}
+                   class="rounded border-slate-300 {{ 'accent-rose-600' if t.write }}"
+                   onchange="fetch('/agents/{{ a.key }}/tool', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({tool:'{{ t.name }}', enabled:this.checked})})">
+            <code class="text-xs {{ 'text-rose-700' if t.write else 'text-slate-700' }}">{{ t.name }}</code>
+            {% if t.write %}<span class="text-[10px] rounded-full bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 shrink-0">🔒 write</span>{% endif %}
+            <span class="text-xs text-slate-400 truncate">{{ t.desc }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}<span class="text-xs text-slate-400">No tools — one-shot completion.</span>{% endif %}
+
+        <!-- + Add tool: grant a READ tool beyond the defaults (write tools shown but locked) -->
+        <div x-data="{ addOpen: false }" class="mt-2">
+          <button type="button" @click="addOpen = true"
+                  class="text-xs rounded border border-dashed border-slate-300 px-2 py-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700">+ Add tool</button>
+
+          <div x-show="addOpen" x-cloak @keydown.escape.window="addOpen = false" @click.self="addOpen = false"
+               class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+            <div class="bg-white rounded-lg shadow-xl w-[min(580px,94vw)] max-h-[82vh] overflow-auto p-5">
+              <div class="flex items-center justify-between mb-2">
+                <h2 class="font-semibold text-sm">Add a tool to <span class="text-slate-500">{{ a.name }}</span></h2>
+                <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+              </div>
+              <div class="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-2 mb-3">
+                ⚠ Granting a tool widens what this agent can do. <b>Write tools are locked</b> and can't be added —
+                only the agent's own code-defined write tools ever run (the lethal-trifecta boundary).
+              </div>
+              <div class="divide-y divide-slate-100">
+                {% for t in all_tools %}
+                <div x-data="{ o: false }" class="py-2 text-sm">
+                  <div class="flex items-center gap-2">
+                    <code class="text-xs shrink-0 {{ 'text-rose-700' if t.write else 'text-slate-700' }}">{{ t.name }}</code>
+                    <button type="button" @click="o = !o" title="What it does"
+                            :class="o ? 'bg-slate-200 text-slate-700' : 'text-slate-400 hover:bg-slate-100'"
+                            class="shrink-0 grid place-items-center w-4 h-4 rounded-full border border-slate-300 text-[10px]">?</button>
+                    <span class="flex-1"></span>
+                    {% if t.write %}
+                    <span class="shrink-0 text-[10px] rounded-full bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5">🔒 write — locked</span>
+                    {% elif t.name in a.enabled %}
+                    <span class="shrink-0 text-[10px] text-emerald-600">✓ added</span>
+                    {% else %}
+                    <button type="button"
+                            onclick="fetch('/agents/{{ a.key }}/tool', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({tool:'{{ t.name }}', enabled:'true'})}).then(()=>location.reload())"
+                            class="shrink-0 text-xs rounded bg-slate-900 text-white px-2 py-0.5 hover:bg-slate-700">+ Add</button>
+                    {% endif %}
+                  </div>
+                  <div x-show="o" x-cloak class="mt-1 pl-1 text-xs text-slate-500">{{ t.desc }}</div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skills card (editable) -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Skills</span>
+        <span class="text-[10px] font-medium rounded-full bg-slate-100 text-slate-500 px-2 py-0.5">editable · click to edit</span>
+        {% if a.skills_customized %}
+        <button type="button" class="ml-auto text-[11px] text-slate-500 hover:text-slate-800 underline"
+                onclick="window.paConfirm('Reset {{ a.name }}’s skills to the shipped defaults? Your edits are discarded.', {danger:true}).then(o=>{ if(o) fetch('/agents/{{ a.key }}/skills/reset',{method:'POST'}).then(()=>location.reload()); })">Reset skills</button>
+        {% endif %}
+      </div>
+      <div class="divide-y divide-slate-100">
+        {% for s in a.skills %}
+        <button type="button"
+                @click="skillTitle = '{{ s.name }}'; skillOpen = true; htmx.ajax('GET', '/agents/skill/{{ s.name }}/edit', { target: '#skill-modal-body', swap: 'innerHTML' })"
+                class="group flex w-full items-center gap-2 px-1 py-2 text-left rounded hover:bg-slate-50">
+          <code class="text-xs font-semibold text-slate-700 shrink-0">{{ s.name }}</code>
+          {% if s.customized %}<span class="text-[10px] rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5 shrink-0">customized</span>{% endif %}
+          <span class="text-xs text-slate-500 truncate">{{ s.description }}</span>
+          <span class="ml-auto text-slate-300 group-hover:text-slate-500 shrink-0">✎</span>
+        </button>
+        {% endfor %}
+        {% if not a.skills %}<div class="px-1 py-2 text-xs text-slate-400">No skills.</div>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {# The skill-editor modal lives at body level in base.html (skillOpen/skillTitle) so its
+     <form> is never nested inside the Settings <form>. Skill buttons above target it. #}
+</div>

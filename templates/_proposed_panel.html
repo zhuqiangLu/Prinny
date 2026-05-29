@@ -1,0 +1,71 @@
+{# Proposed-edits review queue, inline in #left-panel. Accept/Reject hx-post and
+   re-render this panel; "← Wiki" returns to the wiki panel. #}
+<div class="p-3">
+  <div class="flex items-center gap-2 mb-2">
+    <button @click="loadPanel('/c/{{ slug }}/wiki/panel')"
+            class="text-sm text-slate-500 hover:text-slate-900">← Wiki</button>
+    <h2 class="text-sm font-semibold text-slate-700">Proposed edits</h2>
+  </div>
+
+  {% if lint %}
+  <div class="mb-3 rounded border border-slate-200 bg-white p-3">
+    <h3 class="text-xs font-medium text-slate-700 mb-1">Wiki health <span class="text-slate-400">({{ lint|length }})</span></h3>
+    <ul class="space-y-1 text-sm">
+      {% for i in lint %}
+      <li class="flex gap-2">
+        <span class="shrink-0 text-xs rounded px-1.5 py-0.5 {% if i.severity == 'warning' %}bg-amber-100 text-amber-800{% else %}bg-slate-100 text-slate-500{% endif %}">{{ i.type }}</span>
+        <span class="text-slate-700">{{ i.message }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if not proposals %}
+  <p class="text-sm text-slate-500">No proposed edits. Generate from the Wiki tab (or draft from chat).
+    If you just generated and see nothing, every proposed claim may have lacked
+    provenance and been filtered out — that's the guardrail working.</p>
+  {% else %}
+  <div class="space-y-4">
+    {% for p in proposals %}
+    <div class="rounded border border-slate-200 bg-white" x-data="{edit:false}">
+      <div class="border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <span class="font-medium text-sm">{{ p.page_path }}</span>
+          <span class="text-xs text-slate-400 ml-1">{{ p.mode }} · {{ p.created_at }}</span>
+        </div>
+        <div class="flex gap-1.5 shrink-0 text-sm">
+          <button type="button" @click="edit=!edit" class="text-slate-600 hover:text-slate-900" x-text="edit?'cancel':'edit'"></button>
+          <form hx-post="/c/{{ slug }}/proposed/{{ p.id }}/reject" hx-target="#left-panel" hx-swap="innerHTML">
+            <button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Reject</button>
+          </form>
+          <form hx-post="/c/{{ slug }}/proposed/{{ p.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML">
+            <button class="rounded bg-slate-900 px-2 py-0.5 text-white hover:bg-slate-700">Accept</button>
+          </form>
+        </div>
+      </div>
+      <div class="p-3">
+        <p class="text-xs font-medium text-slate-500 mb-1">Claims &amp; provenance</p>
+        <ul class="space-y-1 text-sm mb-3">
+          {% for c in p.claims %}
+          <li>
+            {% if c.claim_type == "synthesis" %}<span class="text-[10px] rounded bg-indigo-100 text-indigo-700 px-1">synthesis</span>{% elif c.claim_type == "attributed" %}<span class="text-[10px] rounded bg-slate-200 text-slate-600 px-1">attributed</span>{% endif %}
+            {{ c.text }}
+            <span class="text-xs text-emerald-700">supported by: {{ ((c.papers or []) + (c.notes or []) + (c.thoughts or [])) | join(", ") }}{% for h in (c.highlights or []) %}, hl:{{ h }}{% endfor %}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        <pre class="overflow-auto rounded bg-slate-900 text-slate-100 text-xs p-3"><code>{% for line in p.diff.splitlines() %}<span class="{% if line.startswith('+') and not line.startswith('+++') %}text-emerald-400{% elif line.startswith('-') and not line.startswith('---') %}text-rose-400{% elif line.startswith('@@') %}text-sky-400{% endif %}">{{ line }}</span>
+{% endfor %}</code></pre>
+        <div x-show="edit" x-cloak class="mt-3">
+          <form hx-post="/c/{{ slug }}/proposed/{{ p.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML">
+            <textarea name="edited_content" rows="12" class="w-full rounded border border-slate-300 px-3 py-2 font-mono text-xs">{{ p.new_content }}</textarea>
+            <button class="mt-2 rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Accept edited</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
