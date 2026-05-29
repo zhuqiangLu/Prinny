@@ -459,6 +459,143 @@
         if (el) { e.preventDefault(); el.focus(); el.select(); }
       }
     });
+
+    // ---- Wiki-draft progress overlay -----------------------------------------
+    // Always-deepen at init runs an LLM pass over every cached PDF and takes
+    // ~60-120s. The inline busy banner inside the panel was too easy to miss,
+    // so we cover the page with this overlay during the request. The percentage
+    // is a TIME-BASED ESTIMATE (no real progress events from the LLM call) that
+    // asymptotes at 95% — when the response actually arrives we jump to 100%
+    // and hide. Triggered for any HTMX POST to /wiki/draft via global events,
+    // so the same overlay works for both the Regenerate and the first-time
+    // "Draft starter wiki" buttons.
+    (function () {
+      var overlay, progressEl, percentEl;
+      var CIRC = 282.74;          // 2π·45, our progress arc circumference
+      var ESTIMATE_DEFAULT = 60;  // seconds; matches the empirical median run
+      var startTime = null, timer = null;
+
+      function ready() {
+        overlay   = document.getElementById("wiki-draft-overlay");
+        progressEl = document.getElementById("wiki-draft-overlay-progress");
+        percentEl  = document.getElementById("wiki-draft-overlay-percent");
+      }
+
+      function setPercent(p) {
+        if (!percentEl) return;
+        p = Math.max(0, Math.min(100, p));
+        percentEl.textContent = Math.round(p) + "%";
+        if (progressEl) progressEl.style.strokeDashoffset = (CIRC * (1 - p / 100)).toFixed(2);
+      }
+
+      function show(estSec) {
+        if (!overlay) return;
+        var est = Math.max(10, estSec || ESTIMATE_DEFAULT);
+        startTime = Date.now();
+        setPercent(0);
+        overlay.classList.remove("hidden");
+        document.body.style.overflow = "hidden"; // freeze background scroll
+        if (timer) clearInterval(timer);
+        // Tick every 400ms; asymptote at 95% over `est` seconds so we don't claim
+        // 100% before the response actually lands. Curve: 95·(1 − e^(−2·elapsed/est))
+        timer = setInterval(function () {
+          var elapsed = (Date.now() - startTime) / 1000;
+          setPercent(95 * (1 - Math.exp(-2 * elapsed / est)));
+        }, 400);
+      }
+
+      function hide() {
+        if (!overlay) return;
+        setPercent(100);
+        if (timer) { clearInterval(timer); timer = null; }
+        // Short delay so the user sees the 100% land before the modal vanishes.
+        setTimeout(function () {
+          overlay.classList.add("hidden");
+          document.body.style.overflow = "";
+        }, 250);
+      }
+
+      function pathFromEvent(e) {
+        // htmx 1.9 puts the request path on requestConfig.path; fall back to the
+        // triggering element's hx-post attribute for older / shimmed versions.
+        if (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) {
+          return e.detail.requestConfig.path;
+        }
+        if (e.detail && e.detail.elt) {
+          var el = e.detail.elt;
+          var form = el.tagName === "FORM" ? el : (el.closest && el.closest("form"));
+          return (form && form.getAttribute("hx-post")) || el.getAttribute("hx-post") || "";
+        }
+        return "";
+      }
+
+      function isDraft(e) {
+        var p = pathFromEvent(e);
+        return p && /\/wiki\/draft$/.test(p);
+      }
+
+      window.addEventListener("load", ready);
+      document.body.addEventListener("htmx:beforeRequest", function (e) {
+        if (!isDraft(e)) return;
+        ready();
+        var form = e.detail && e.detail.elt;
+        var est = form && form.getAttribute && form.getAttribute("data-estimated-seconds");
+        show(est ? parseInt(est, 10) : ESTIMATE_DEFAULT);
+      });
+      // Both success and error paths must hide the overlay; afterRequest fires for both,
+      // but we listen to responseError too in case the request never completed normally.
+      document.body.addEventListener("htmx:afterRequest",  function (e) { if (isDraft(e)) hide(); });
+      document.body.addEventListener("htmx:responseError", function (e) { if (isDraft(e)) hide(); });
+      document.body.addEventListener("htmx:sendError",     function (e) { if (isDraft(e)) hide(); });
+    })();
   </script>
+
+  {# Wiki-draft cover (hidden by default; shown by the script above on any POST
+     to /wiki/draft). Lives at the body root so it sits above every panel/modal
+     and survives the HTMX swap that destroys the inline form. #}
+  <div id="wiki-draft-overlay"
+       class="hidden fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm
+              flex items-center justify-center px-4"
+       role="dialog" aria-modal="true" aria-labelledby="wiki-draft-overlay-title">
+    <div class="bg-white rounded-2xl shadow-2xl p-8 w-80 max-w-full text-center">
+      <div class="relative inline-block w-32 h-32">
+        {# Static gray track + an indeterminate purple arc that rotates continuously.
+           The percentage in the center is the time-based estimate. #}
+        <svg class="w-32 h-32 absolute inset-0" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" stroke="#e2e8f0" stroke-width="6" fill="none" />
+        </svg>
+        <svg class="w-32 h-32 absolute inset-0 wiki-draft-ring-spin"
+             viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" stroke="#7c3aed" stroke-width="6" fill="none"
+                  stroke-dasharray="85 283" stroke-linecap="round" />
+        </svg>
+        {# Determinate progress ring on top of the spinning arc, also rotated -90°
+           so the fill grows from 12 o'clock. Reveals the estimate as it climbs. #}
+        <svg class="w-32 h-32 absolute inset-0" viewBox="0 0 100 100"
+             style="transform: rotate(-90deg);" aria-hidden="true">
+          <circle id="wiki-draft-overlay-progress" cx="50" cy="50" r="45"
+                  stroke="#1e293b" stroke-width="2" fill="none"
+                  stroke-dasharray="282.74" stroke-dashoffset="282.74"
+                  stroke-linecap="round"
+                  style="transition: stroke-dashoffset 500ms linear; opacity: 0.35;" />
+        </svg>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <span id="wiki-draft-overlay-percent"
+                class="text-3xl font-semibold text-slate-900 tabular-nums">0%</span>
+        </div>
+      </div>
+      <div id="wiki-draft-overlay-title"
+           class="mt-5 text-base font-semibold text-slate-900">Drafting starter wiki</div>
+      <p class="mt-1.5 text-xs text-slate-500 leading-relaxed">
+        Reading every cached PDF and running one LLM pass — usually about a minute.
+        Please keep this tab open; the wiki will reload when it's ready.
+      </p>
+    </div>
+  </div>
+
+  <style>
+    @keyframes wiki-draft-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .wiki-draft-ring-spin { animation: wiki-draft-spin 1.4s linear infinite; transform-origin: 50% 50%; }
+  </style>
 </body>
 </html>

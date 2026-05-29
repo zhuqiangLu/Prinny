@@ -33,8 +33,13 @@
         <span class="text-violet-500">({{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts; the rest are abstract-only.)</span>
         {% endif %}
       </span>
+      {# data-estimated-seconds tunes the overlay's percent curve (see base.html).
+         Empirical: ~30s + ~1.5s/paper covers most collections. The overlay's curve
+         asymptotes at 95% over this duration, so a too-low estimate just leaves
+         the percent at ~95 until the real response lands — no overflow. #}
       <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
-            hx-disabled-elt="find button" hx-indicator="#wiki-draft-form" class="ml-auto">
+            hx-disabled-elt="find button" hx-indicator="#wiki-draft-form" class="ml-auto"
+            data-estimated-seconds="{{ 30 + ((overview.meta.paper_count or 20) * 1.5)|int }}">
         <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
                 title="Regenerate from abstracts + cached PDFs (~1 min; one LLM pass)">↻ Regenerate</button>
       </form>
