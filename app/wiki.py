@@ -1340,12 +1340,98 @@ def _ref_map(slug: str) -> dict:
     return out
 
 
-def load_overview(slug: str) -> dict | None:
+# --- attention reweighting (Phase C, 2026-05-29) ---------------------------
+# Cheap deterministic re-rank of the starter wiki's paper cards from the user's
+# real attention signals: highlights and notes. No LLM. Updates on every render.
+# The blueprint's "evolve" half — the wiki responds to where the user actually
+# looks, without ever rewriting agent-drafted content.
+_ATTENTION_NOTE_WEIGHT = 5    # a non-empty note is worth ~5 highlights of attention
+_ATTENTION_HOT_FLOOR = 2      # ignore tiny scores when picking the 🔥 threshold
+
+
+def attention_scores(slug: str) -> dict[int, int]:
+    """Per-paper attention score for the cards. Highlights weighted 1, non-empty notes
+    (any of summary / thoughts / key_quotes) weighted ``_ATTENTION_NOTE_WEIGHT``. Returns
+    ``{paper_id: score}`` for papers with any signal — papers with no signal are absent."""
+    scores: dict[int, int] = defaultdict(int)
+    con = connect()
+    try:
+        for r in con.execute(
+            "SELECT paper_id, COUNT(*) n FROM annotations "
+            "WHERE collection_slug=? AND kind='highlight' GROUP BY paper_id",
+            (slug,),
+        ):
+            scores[r["paper_id"]] += r["n"]
+        for r in con.execute(
+            "SELECT paper_id FROM paper_notes WHERE collection_slug=? AND ("
+            "  COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>'')",
+            (slug,),
+        ):
+            scores[r["paper_id"]] += _ATTENTION_NOTE_WEIGHT
+    finally:
+        con.close()
+    return dict(scores)
+
+
+def attention_changed_since(slug: str, since: str | None) -> set[int]:
+    """Paper ids whose highlights/notes were created or updated after ``since``. Used to
+    flag cards "new since last view" on the wiki page. ``since`` None → empty (no recency
+    baseline → never claim anything is new, never lie about freshness)."""
+    if not since:
+        return set()
+    out: set[int] = set()
+    con = connect()
+    try:
+        for r in con.execute(
+            "SELECT DISTINCT paper_id FROM annotations "
+            "WHERE collection_slug=? AND kind='highlight' AND (created_at>? OR updated_at>?)",
+            (slug, since, since),
+        ):
+            out.add(r["paper_id"])
+        for r in con.execute(
+            "SELECT paper_id FROM paper_notes WHERE collection_slug=? AND updated_at>? AND ("
+            "  COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>'')",
+            (slug, since),
+        ):
+            out.add(r["paper_id"])
+    finally:
+        con.close()
+    return out
+
+
+def read_and_bump_viewed(slug: str) -> str | None:
+    """Read the OLD ``collections.last_wiki_viewed_at`` and bump it to now atomically.
+    Returns the old value so the caller can pass it to ``load_overview(attention_since=...)``
+    for "new since last view" badges. The bump happens here (not in ``load_overview``) so a
+    cheap re-render (e.g. after ↻ Regenerate POST) doesn't silently reset the badge state —
+    only an actual page-view GET should bump."""
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT last_wiki_viewed_at FROM collections WHERE slug=?", (slug,)
+        ).fetchone()
+        old = row["last_wiki_viewed_at"] if row and "last_wiki_viewed_at" in row.keys() else None
+        con.execute(
+            "UPDATE collections SET last_wiki_viewed_at = CURRENT_TIMESTAMP WHERE slug = ?",
+            (slug,),
+        )
+        con.commit()
+        return old
+    finally:
+        con.close()
+
+
+def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     """Read overview.json and resolve every ref to a paper object for the interactive render.
     Unresolvable refs (paper since removed) are dropped. None if no overview exists.
 
     Tolerates old-shape overviews (top-level ``intro``, ``gaps``, singular ``reading_path``)
-    so a regenerate isn't required after the 2026-05-29 schema bump — they migrate on read."""
+    so a regenerate isn't required after the 2026-05-29 schema bump — they migrate on read.
+
+    Phase C reweighting: paper cards are annotated with attention_score, is_hot (top-tier
+    score floor), and is_new (highlights/notes after ``attention_since``). Cards are
+    stable-sorted by ``-attention_score`` so attended papers float to the top; with all
+    zeros the editorial order is preserved."""
     path = _overview_path(slug)
     if not path.exists():
         return None
@@ -1385,6 +1471,13 @@ def load_overview(slug: str) -> dict | None:
                      for x in (raw_op or []) if x.get("title")]
 
     # Paper cards -------------------------------------------------------------------
+    # Phase C: pull attention signals once (cheap SQL aggregates, no LLM) and decorate
+    # each card. is_hot picks the median nonzero score (floored at _ATTENTION_HOT_FLOOR)
+    # so the 🔥 badge surfaces "actively attended" cards without spamming low-noise ones.
+    scores = attention_scores(slug)
+    nonzero = sorted(v for v in scores.values() if v > 0)
+    hot_threshold = max(_ATTENTION_HOT_FLOOR, nonzero[len(nonzero) // 2]) if nonzero else None
+    changed = attention_changed_since(slug, attention_since)
     paper_cards = []
     for pc in data.get("paper_cards", []):
         paper = rmap.get(pc.get("paper"))
@@ -1396,6 +1489,8 @@ def load_overview(slug: str) -> dict | None:
             if cp:
                 connected.append({"paper": cp, "relation": c.get("relation", ""),
                                   "why": c.get("why", "")})
+        pid = paper["id"]
+        score = scores.get(pid, 0)
         paper_cards.append({
             "paper": paper,
             "status": pc.get("status", ""),
@@ -1411,7 +1506,12 @@ def load_overview(slug: str) -> dict | None:
             "evidence": pc.get("evidence", ""),
             "limitation": pc.get("limitation", ""),
             "abstract_only": bool(pc.get("abstract_only")),
+            "attention_score": score,
+            "is_hot": hot_threshold is not None and score >= hot_threshold,
+            "is_new": pid in changed,
         })
+    # Stable re-rank: high-score cards float; with zeros everywhere, editorial order holds.
+    paper_cards.sort(key=lambda c: -c["attention_score"])
 
     # Reading paths (migrate singular reading_path → one "Orientation" path) -------
     reading_paths = []

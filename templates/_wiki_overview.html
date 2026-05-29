@@ -108,6 +108,12 @@
             <div class="flex flex-wrap items-baseline gap-1.5">
               <a href="/c/{{ slug }}/p/{{ c.paper.id }}" @click.stop
                  class="font-semibold text-slate-900 hover:underline leading-snug">{{ c.paper.title }}</a>
+              {# Phase C: attention badges. is_hot = active reading; is_new = touched
+                 since the user last opened the wiki page. Both deterministic, no LLM. #}
+              {% if c.is_hot %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-orange-100 text-orange-700"
+                title="{{ c.attention_score }} attention points (highlights + notes) — your active focus">🔥 attention</span>{% endif %}
+              {% if c.is_new %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-sky-100 text-sky-700"
+                title="You added a highlight or note here since you last opened the wiki">✨ new</span>{% endif %}
               {% if c.status %}<span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-slate-100 text-slate-600">{{ c.status }}</span>{% endif %}
               {% if c.difficulty %}<span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ {'easy':'bg-emerald-100 text-emerald-700','medium':'bg-amber-100 text-amber-700','hard':'bg-rose-100 text-rose-700'}[c.difficulty] }}">{{ c.difficulty }}</span>{% endif %}
               {{ mdchip(c.abstract_only) }}

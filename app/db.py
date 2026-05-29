@@ -280,6 +280,12 @@ def _migrate(con: sqlite3.Connection) -> None:
         # The linked Zotero collection's own name, captured at import so Pull resolves it by
         # name even after the local collection is renamed (the slug is a stable local id).
         con.execute("ALTER TABLE collections ADD COLUMN zotero_name TEXT")
+    if "last_wiki_viewed_at" not in ccols:
+        # When the user last opened the wiki page for this collection. Powers the
+        # "new since last view" badge in the cheap-reweighting layer (Phase C, 2026-05-29).
+        # Read-then-bump on GET only, so a re-render (e.g. after ↻ Regenerate POST) doesn't
+        # reset the badge state. NULL = never viewed -> no badges, no fake recency.
+        con.execute("ALTER TABLE collections ADD COLUMN last_wiki_viewed_at TIMESTAMP")
     # Typed-capture stamps on notes (AGENTIC_PLAN P1). Defaults make existing notes
     # resolve to (human, heuristic) with no backfill: 'auto' => kind by heuristic.
     ncols = {r[1] for r in con.execute("PRAGMA table_info(paper_notes)")}

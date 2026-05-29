@@ -1478,14 +1478,19 @@ def _wiki_pages(slug: str) -> list[str]:
     return pages
 
 
-def _wiki_panel(request: Request, slug: str, gaps=None) -> HTMLResponse:
+def _wiki_panel(request: Request, slug: str, gaps=None,
+                attention_since: str | None = None) -> HTMLResponse:
+    """Render the inline wiki panel. ``attention_since`` is the user's PREVIOUS
+    last_wiki_viewed_at (the GET handler bumps it via wiki.read_and_bump_viewed and
+    passes the old value here). POST handlers pass None to suppress the "new since
+    last view" badges so a re-render after ↻ Regenerate doesn't reset badge state."""
     index_md = wiki._read(wiki._wikidir(slug) / "index.md")
     from . import debt as debt_mod, triage as triage_mod
     return templates.TemplateResponse(
         request, "_wiki_panel.html",
         {"slug": slug, "pages": _wiki_pages(slug),
          "index_html": render_md(index_md, slug) if index_md else "",
-         "overview": wiki.load_overview(slug),
+         "overview": wiki.load_overview(slug, attention_since=attention_since),
          "pending": len(wiki.list_proposed(slug)), "gaps": gaps,
          "open_questions": debt_mod.list_debt(slug),
          "recommended_papers": triage_mod.list_triage(slug, status="pending")},
@@ -1583,6 +1588,10 @@ def wiki_index(request: Request, slug: str) -> HTMLResponse:
     col = _require_collection(slug)
     index_md = wiki._read(wiki._wikidir(slug) / "index.md")
     from . import debt as debt_mod, triage as triage_mod
+    # Phase C: bump last_wiki_viewed_at and remember the OLD value for "new" badges
+    # in the overview's paper cards. We don't need it on wiki.html itself (no cards
+    # there) but the embedded overview panel is rendered via _wiki_panel separately.
+    wiki.read_and_bump_viewed(slug)
     return templates.TemplateResponse(
         request, "wiki.html",
         {"slug": slug, "name": col["name"], "pages": _wiki_pages(slug),
@@ -1598,14 +1607,16 @@ def wiki_index(request: Request, slug: str) -> HTMLResponse:
 @app.get("/c/{slug}/wiki/panel", response_class=HTMLResponse)
 def wiki_panel(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)
-    return _wiki_panel(request, slug)
+    # GET → bump-and-pass-old so the embedded paper cards get "new since last view" badges.
+    return _wiki_panel(request, slug, attention_since=wiki.read_and_bump_viewed(slug))
 
 
 @app.post("/c/{slug}/wiki/draft", response_class=HTMLResponse)
 def wiki_draft_seed(request: Request, slug: str) -> HTMLResponse:
     """Generate the curiosity-driven starter wiki from abstracts + cached PDF excerpts
     (always-deepen at init, user decision 2026-05-29). Writes directly — see the
-    CLAUDE.md amendment. Re-renders the panel."""
+    CLAUDE.md amendment. Re-renders the panel without bumping last-viewed so the
+    user's badge state survives this re-render."""
     _require_collection(slug)
     wiki.generate_overview(slug, force=True)
     return _wiki_panel(request, slug)

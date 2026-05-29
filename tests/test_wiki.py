@@ -388,6 +388,102 @@ def test_reading_path_min_papers_gate(tmp_path, monkeypatch):
     assert [rp["name"] for rp in loaded["reading_paths"]] == ["Orientation"]
 
 
+def _seed_three_papers_with_cards(tmp_path, monkeypatch):
+    """Shared fixture for the attention-reweighting tests: 3 papers, an overview whose
+    cards are deliberately in 'editorial' order (P1, P2, P3) so any re-rank is visible."""
+    import app.library as library
+    import app.pdf_store as pdf_store
+    db = tmp_path / "app.sqlite"
+    init_db(db)
+    con = connect(db)
+    con.execute("INSERT INTO collections(slug,name) VALUES('vlms','VLMs')")
+    for i in (1, 2, 3):
+        con.execute("INSERT INTO papers(id,title,abstract,arxiv_id,origin) "
+                    f"VALUES({i}, 'P{i}', 'abs{i}', '2401.0000{i}', 'app-created')")
+        con.execute(f"INSERT INTO collection_papers(collection_slug,paper_id) VALUES('vlms', {i})")
+    con.commit(); con.close()
+    monkeypatch.setattr(wiki, "connect", lambda: connect(db))
+    monkeypatch.setattr(wiki, "COLLECTIONS_DIR", tmp_path / "collections")
+    monkeypatch.setattr(library, "connect", lambda: connect(db))
+    monkeypatch.setattr(pdf_store, "load_config", lambda: {"pdf_store_path": str(tmp_path / "store")})
+    monkeypatch.setattr("app.llm.complete", lambda m, model=None: json.dumps({
+        "paper_cards": [{"paper": f"2401.0000{i}", "idea": f"i{i}"} for i in (1, 2, 3)],
+    }))
+    wiki.generate_overview("vlms")
+    return db
+
+
+def test_attention_scores_counts_highlights_and_notes(tmp_path, monkeypatch):
+    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+    con = connect(db)
+    # P1: 3 highlights -> 3
+    for _ in range(3):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, position_json) "
+                    "VALUES (1, 'vlms', 'highlight', 1, '{}')")
+    # P2: 1 highlight + a note with thoughts -> 1 + _ATTENTION_NOTE_WEIGHT (5) = 6
+    con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, position_json) "
+                "VALUES (2, 'vlms', 'highlight', 1, '{}')")
+    con.execute("INSERT INTO paper_notes(paper_id, collection_slug, thoughts, status) "
+                "VALUES (2, 'vlms', 'my take', 'noted')")
+    # P3: nothing -> 0 (absent from the map)
+    con.commit(); con.close()
+    scores = wiki.attention_scores("vlms")
+    assert scores == {1: 3, 2: 6}     # P3 absent: no signal, no fake zero
+    # An empty note (no fields populated) shouldn't count.
+    con = connect(db); con.execute("DELETE FROM paper_notes WHERE paper_id=2")
+    con.execute("INSERT INTO paper_notes(paper_id, collection_slug, status) VALUES (2, 'vlms', 'unread')")
+    con.commit(); con.close()
+    assert wiki.attention_scores("vlms") == {1: 3, 2: 1}    # back to 1 (just the highlight)
+
+
+def test_paper_cards_reranked_by_attention(tmp_path, monkeypatch):
+    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+    con = connect(db)
+    # P3 gets the biggest signal -> should float to the top despite being last editorially.
+    for _ in range(10):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, position_json) "
+                    "VALUES (3, 'vlms', 'highlight', 1, '{}')")
+    con.execute("INSERT INTO paper_notes(paper_id, collection_slug, thoughts, status) "
+                "VALUES (1, 'vlms', 't', 'noted')")    # P1 gets 5
+    con.commit(); con.close()
+    loaded = wiki.load_overview("vlms")
+    order = [c["paper"]["id"] for c in loaded["paper_cards"]]
+    assert order == [3, 1, 2]                     # by score: 10, 5, 0
+    # With no signal at all, editorial order holds (the stable-sort property).
+    con = connect(db); con.execute("DELETE FROM annotations"); con.execute("DELETE FROM paper_notes")
+    con.commit(); con.close()
+    loaded2 = wiki.load_overview("vlms")
+    assert [c["paper"]["id"] for c in loaded2["paper_cards"]] == [1, 2, 3]
+
+
+def test_is_hot_and_is_new_badges(tmp_path, monkeypatch):
+    import time
+    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+    # Establish a "last viewed" baseline BEFORE adding the new signal.
+    baseline = wiki.read_and_bump_viewed("vlms")
+    # The very first call has no prior value -> returns None.
+    assert baseline is None
+    # Read the just-bumped value so we have a stable "since" timestamp for the test.
+    con = connect(db)
+    since = con.execute("SELECT last_wiki_viewed_at FROM collections WHERE slug='vlms'").fetchone()[0]
+    con.close()
+    time.sleep(1.1)    # CURRENT_TIMESTAMP is second-resolution; cross a tick before the new signal
+    # New attention AFTER the baseline -> should show up as is_new.
+    con = connect(db)
+    for _ in range(4):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, position_json) "
+                    "VALUES (2, 'vlms', 'highlight', 1, '{}')")
+    con.commit(); con.close()
+    loaded = wiki.load_overview("vlms", attention_since=since)
+    by_id = {c["paper"]["id"]: c for c in loaded["paper_cards"]}
+    assert by_id[2]["is_new"] is True                      # had new signal post-baseline
+    assert by_id[1]["is_new"] is False and by_id[3]["is_new"] is False
+    assert by_id[2]["is_hot"] is True                      # 4 ≥ floor of 2 & is the only nonzero
+    # Without a `since`, no card is ever marked new (no fake recency claims).
+    loaded2 = wiki.load_overview("vlms")
+    assert all(c["is_new"] is False for c in loaded2["paper_cards"])
+
+
 def test_generate_overview_no_abstracts_returns_false(tmp_path, monkeypatch):
     wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")
     con = connect(tmp_path / "app.sqlite")
