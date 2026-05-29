@@ -511,15 +511,17 @@ def test_stage_callback_errors_dont_abort_generation(tmp_path, monkeypatch):
     assert (wdir / "overview.json").exists()
 
 
-def test_stage_message_renders_for_each_stage():
-    """_stage_message returns the right voice line for each known stage; reading_pdfs
-    composes the 'N of M' subline from job extras."""
+def test_stage_message_single_action_line():
+    """_stage_message returns a single human-voice action line per stage and an
+    empty subline (kept in the shape for JSON-contract stability). Counts are
+    folded into the action itself."""
     assert wiki._stage_message({"stage": "gathering"})["action"].startswith("I'm collecting")
     rp = wiki._stage_message({"stage": "reading_pdfs", "pdfs_done": 3, "pdfs_total": 12})
-    assert rp["action"].startswith("I'm reading")
-    assert "3 of 12" in rp["subline"]
+    assert rp["action"] == "I'm reading the PDFs (3/12)."
+    assert rp["subline"] == ""           # always empty in the new shape
     dr = wiki._stage_message({"stage": "drafting", "paper_count": 12, "pdfs_read": 8})
-    assert "12 paper" in dr["subline"] and "8 with PDF" in dr["subline"]
+    assert dr["action"] == "I'm drafting the wiki."
+    assert dr["subline"] == ""
     assert wiki._stage_message({"stage": "done"})["action"] == "Done."
     # Unknown stage falls back to gathering voice rather than crashing.
     assert wiki._stage_message({"stage": "wat"})["action"].startswith("I'm collecting")
@@ -533,10 +535,27 @@ def test_stage_progress_monotone_and_capped():
     p_pdf_10 = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 10, "pdfs_total": 10})
     p_draft  = wiki._stage_progress({"stage": "drafting"})
     p_valid  = wiki._stage_progress({"stage": "validating"})
-    assert p_gather < p_pdf_0 < p_pdf_5 < p_pdf_10 < p_draft < p_valid < 100
+    # gathering < reading_pdfs band < drafting (no start time → low band) ≤ validating < 100
+    assert p_gather < p_pdf_0 < p_pdf_5 < p_pdf_10 <= p_draft < p_valid < 100
     # Done flips to 100 regardless of stage payload.
     assert wiki._stage_progress({"stage": "drafting", "status": "done"}) == 100
     assert wiki._stage_progress({"stage": "validating", "status": "failed"}) == 100
+
+
+def test_drafting_progress_climbs_over_time():
+    """In the drafting stage, the bar climbs asymptotically from ~30 toward 95 as
+    drafting_started_at recedes into the past. Fixes the 'stuck at 60% then leaps
+    to 100%' UX. Never crosses 95 — the honest cap before status flips to done."""
+    import time
+    now = time.time()
+    p_just_started = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 0.1})
+    p_mid          = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 35})
+    p_late         = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 120})
+    p_runaway      = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 9999})
+    assert 28 <= p_just_started <= 32     # near LOW (30)
+    assert p_mid > p_just_started + 20    # has climbed substantially by t≈τ
+    assert p_late > p_mid                 # still climbing
+    assert p_runaway == 95                 # asymptote cap holds forever
 
 
 def test_start_draft_async_publishes_state_and_completes(tmp_path, monkeypatch):

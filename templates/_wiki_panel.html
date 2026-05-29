@@ -203,6 +203,9 @@
         </div>
       </div>
       <div id="wiki-draft-cover-action" class="wiki-draft-cover-action">{{ draft_initial_action }}</div>
+      {# Subline div kept in DOM (empty) so the polling JS can write into it
+         without a null check, and so the JSON contract (action + subline) stays
+         stable. Hidden via CSS unless populated. #}
       <div id="wiki-draft-cover-subline" class="wiki-draft-cover-subline">{{ draft_initial_subline }}</div>
       <div class="wiki-draft-cover-foot">
         Working in the background — you can browse other tabs and come back.
@@ -283,8 +286,9 @@
       font-size: 0.78rem;
       color: #64748b;
       line-height: 1.45;
-      min-height: 1.2em;
     }
+    /* Collapse to zero height when empty so we don't leave an awkward gap. */
+    .wiki-draft-cover-subline:empty { display: none; }
     .wiki-draft-cover-foot {
       margin-top: 0.75rem;
       font-size: 0.7rem;

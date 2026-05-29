@@ -1307,21 +1307,17 @@ import threading
 _DRAFT_JOBS: dict[str, dict] = {}
 _DRAFT_LOCK = threading.Lock()
 
-# Per-stage human-voice messages the UI shows. Kept here (not in JS) so the agent's
-# voice is server-controlled and easy to localize / edit later.
+# Per-stage human-voice messages. Single-line "current action" only — no subline
+# (user 2026-05-30: "just show the current action"). Where a count is useful, it's
+# folded into the action itself ("I'm reading the PDFs (3/12).") so the user gets
+# one consistent line to read.
 _STAGE_MESSAGES = {
-    "gathering":    {"action": "I'm collecting your papers' abstracts.",
-                     "subline": ""},
-    "reading_pdfs": {"action": "I'm reading the PDFs.",
-                     "subline": ""},  # filled in with "{done} of {total}" at render
-    "drafting":     {"action": "I'm drafting the wiki.",
-                     "subline": "This is the long part — the LLM is reading everything and writing the map. Usually under a minute."},
-    "validating":   {"action": "I'm checking the refs and saving.",
-                     "subline": ""},
-    "done":         {"action": "Done.",
-                     "subline": ""},
-    "failed":       {"action": "Something went wrong.",
-                     "subline": "Try Regenerate again, or check the server log."},
+    "gathering":    "I'm collecting your papers' abstracts.",
+    "reading_pdfs": "I'm reading the PDFs.",   # gets "(done/total)" appended below
+    "drafting":     "I'm drafting the wiki.",
+    "validating":   "I'm checking the refs and saving.",
+    "done":         "Done.",
+    "failed":       "Something went wrong. Try Regenerate again.",
 }
 
 
@@ -1349,27 +1345,37 @@ def clear_draft_job(slug: str) -> None:
 
 
 def _stage_message(job: dict) -> dict:
-    """Compose the human-voice action + subline for the UI from the job's current
-    stage and extras. Pure function so it's testable and the template can call it."""
+    """Pure function: compose the single-line action text for the UI from the job
+    state. ``subline`` is kept in the return shape (always empty) so the JSON
+    contract doesn't change for clients that still read it. Counts are folded into
+    the action itself so the user only has one line to read."""
     stage = job.get("stage", "gathering")
-    msg = dict(_STAGE_MESSAGES.get(stage, _STAGE_MESSAGES["gathering"]))
+    action = _STAGE_MESSAGES.get(stage, _STAGE_MESSAGES["gathering"])
     if stage == "reading_pdfs":
         done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0)
         if total:
-            msg["subline"] = f"{done} of {total}"
-    elif stage == "drafting":
-        pc, pr = job.get("paper_count"), job.get("pdfs_read")
-        if pc is not None and pr is not None:
-            msg["subline"] = (f"Working with {pc} paper(s), {pr} with PDF excerpts. "
-                              + msg["subline"])
-    return msg
+            action = f"I'm reading the PDFs ({done}/{total})."
+    return {"action": action, "subline": ""}
+
+
+# Time-based asymptote inside the drafting stage. The LLM call gives no inner
+# progress events, so without this the bar sits at a fixed value (was 60) for the
+# 60-90s the call takes, then leaps. With this, progress climbs smoothly inside
+# the 30→95 band:
+#   p(t) = LOW + (HIGH - LOW) · (1 − e^(−t / TAU))
+# Caps at HIGH (=95) until status flips to done — the same honesty rule used
+# before: never claim 100% before the response actually arrives.
+_DRAFTING_LOW = 30      # progress where reading_pdfs left off
+_DRAFTING_HIGH = 95     # asymptote ceiling
+_DRAFTING_TAU = 35.0    # seconds; at t≈35s the curve has reached ~63% of the band
 
 
 def _stage_progress(job: dict) -> int:
-    """A coarse 0-100 progress estimate from the stage. Reading-pdfs has a real
-    fraction; drafting/validating fall back to fixed milestones (the LLM call gives
-    no events). Capped at 95 until status='done' lands on 100 — same honesty rule as
-    the old time-based bar: never claim 100% before the response actually arrives."""
+    """Coarse 0-100 progress estimate from the job state. Reading-pdfs has a real
+    fraction (done/total). Drafting uses a time-based asymptote so the bar keeps
+    moving while the LLM runs. Caps at 95 until status='done' lands on 100."""
+    import math
+    import time as _time
     stage = job.get("stage", "gathering")
     if job.get("status") in ("done", "failed"):
         return 100
@@ -1377,12 +1383,16 @@ def _stage_progress(job: dict) -> int:
         return 3
     if stage == "reading_pdfs":
         done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0) or 1
-        # PDF reading is the first 30% of the bar
-        return min(30, 5 + int(25 * done / total))
+        return min(_DRAFTING_LOW, 5 + int(25 * done / total))
     if stage == "drafting":
-        return 60   # mid-drafting — we have no inner progress
+        dts = job.get("drafting_started_at")
+        if dts:
+            elapsed = max(0.0, _time.time() - dts)
+            p = _DRAFTING_LOW + (_DRAFTING_HIGH - _DRAFTING_LOW) * (1 - math.exp(-elapsed / _DRAFTING_TAU))
+            return min(_DRAFTING_HIGH, int(p))
+        return _DRAFTING_LOW  # drafting just started; pre-asymptote starting point
     if stage == "validating":
-        return 95
+        return _DRAFTING_HIGH
     return 0
 
 
@@ -1395,10 +1405,18 @@ def start_draft_async(slug: str, force: bool = True) -> bool:
         return False
     _set_job(slug, status="running", stage="gathering", started_at=_now(),
              pdfs_done=0, pdfs_total=0, paper_count=None, pdfs_read=None,
-             error=None, finished_at=None)
+             drafting_started_at=None, error=None, finished_at=None)
 
     def cb(name: str, **extra):
-        _set_job(slug, stage=name, **extra)
+        # Stamp drafting_started_at on first entry to drafting so the time-based
+        # progress curve has a reference point (see _stage_progress).
+        update = {"stage": name, **extra}
+        if name == "drafting":
+            import time as _time
+            existing = _DRAFT_JOBS.get(slug, {})
+            if not existing.get("drafting_started_at"):
+                update["drafting_started_at"] = _time.time()
+        _set_job(slug, **update)
 
     def runner():
         try:
