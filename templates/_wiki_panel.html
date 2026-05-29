@@ -11,8 +11,10 @@
     </button>
   </div>
 
-  {# --- interactive starter overview (the problem map) --- #}
-  {% if overview and overview.problems %}
+  {# --- interactive starter overview (curiosity-driven blueprint) --- #}
+  {% if overview and (overview.paper_cards or overview.problems or overview.methods
+                     or overview.open_problems or overview.benchmarks
+                     or overview.reading_paths or overview.field_overview.one_paragraph) %}
     {% include "_wiki_overview.html" %}
   {% elif not pages %}
   <div class="rounded border border-slate-200 bg-white p-3">

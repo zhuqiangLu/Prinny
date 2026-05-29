@@ -1,46 +1,84 @@
-{# Structured starter wiki (Phase-5 sections from the abstracts). Expects:
-   slug, overview (from wiki.load_overview): {intro, problems[], methods[], gaps[],
-   benchmarks[], synthesis[], reading_path[], meta}. A paper object is {id, title,
-   has_pdf}; clicking opens the reader at /c/<slug>/p/<id>. #}
-{% set first_tab = 'problems' if overview.problems
+{# Curiosity-driven starter wiki (rebuilt 2026-05-29 per the cognitive-science
+   blueprint). Expects:
+     slug, overview (from wiki.load_overview): {
+       field_overview: {one_sentence, one_paragraph, core_tension, why_matters,
+                        what_changed_recently, what_newcomer_should_notice},
+       problems[], methods[], open_problems[], benchmarks[],
+       paper_cards[], reading_paths[], meta
+     }
+   Paper objects are {id, title, has_pdf}; clicking opens /c/<slug>/p/<id>. #}
+{% set fo = overview.field_overview or {} %}
+{% set first_tab = 'cards' if overview.paper_cards
+                   else 'problems' if overview.problems
                    else 'methods' if overview.methods
-                   else 'gaps' if overview.gaps
+                   else 'paths' if overview.reading_paths
+                   else 'open' if overview.open_problems
                    else 'benchmarks' if overview.benchmarks
-                   else 'synthesis' if overview.synthesis
-                   else 'problems' %}
-<div x-data="{ tab: '{{ first_tab }}', open: {} }" class="space-y-3">
-  <div class="flex items-center gap-2 rounded bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
+                   else 'cards' %}
+<div x-data="{ tab: '{{ first_tab }}', open: {} }" class="space-y-4">
+
+  {# Provenance banner — collection-level only. Per-card chips inside each section
+     carry the "machine-drafted" signal so it stays visible after scrolling. #}
+  <div class="flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
     <span>✦</span>
-    <span>AI-drafted starter wiki from the abstracts — a guide to spark reading, <b>not</b> your own synthesis. Open any paper to dig in.</span>
-    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto flex gap-1">
-      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Regenerate from abstracts">↻ Regenerate</button>
-      <button name="deep" value="true" class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Regenerate using abstracts + each cached PDF's first ~2k chars (richer, more tokens)">↻ Deepen (PDFs)</button>
-      <span class="htmx-indicator text-violet-400">…</span>
+    <span>AI-drafted starter wiki — a guide to spark reading, <b>not</b> your own synthesis.
+      {% if overview.meta and overview.meta.pdfs_read is defined %}
+      <span class="text-violet-500">({{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts; the rest are abstract-only.)</span>
+      {% endif %}
+    </span>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
+              title="Regenerate from abstracts + cached PDFs (always-deepen at init)">↻ Regenerate</button>
+      <span class="htmx-indicator text-violet-400 ml-1">…</span>
     </form>
   </div>
 
-  {% if overview.intro %}
-  <p class="text-sm text-slate-700 leading-relaxed">{{ overview.intro }}</p>
-  {% endif %}
-
-  {% if overview.reading_path %}
-  <div class="rounded-lg border border-slate-200 bg-white p-3">
-    <div class="text-xs font-medium text-slate-500 mb-1.5">Start here — a fast orientation path</div>
-    <div class="flex flex-wrap items-center gap-1.5 text-sm">
-      {% for p in overview.reading_path %}
-      <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 hover:bg-slate-200">{{ loop.index }}. {{ p.title|truncate(48) }}</a>
-      {% if not loop.last %}<span class="text-slate-300">→</span>{% endif %}
-      {% endfor %}
+  {# --- Field overview (the hook) --- #}
+  {% if fo.one_sentence or fo.one_paragraph or fo.core_tension %}
+  <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-2.5">
+    {% if fo.one_sentence %}
+    <p class="text-lg font-medium text-slate-900 leading-snug">{{ fo.one_sentence }}</p>
+    {% endif %}
+    {% if fo.one_paragraph %}
+    <p class="text-sm text-slate-700 leading-relaxed">{{ fo.one_paragraph }}</p>
+    {% endif %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+      {% if fo.core_tension %}
+      <div class="rounded bg-amber-50 border border-amber-100 px-2.5 py-1.5 text-sm">
+        <span class="text-xs font-medium text-amber-700">⚠ Core tension:</span>
+        <span class="text-amber-900">{{ fo.core_tension }}</span>
+      </div>
+      {% endif %}
+      {% if fo.why_matters %}
+      <div class="rounded bg-sky-50 border border-sky-100 px-2.5 py-1.5 text-sm">
+        <span class="text-xs font-medium text-sky-700">↗ Why it matters:</span>
+        <span class="text-sky-900">{{ fo.why_matters }}</span>
+      </div>
+      {% endif %}
+      {% if fo.what_changed_recently %}
+      <div class="rounded bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 text-sm">
+        <span class="text-xs font-medium text-emerald-700">↻ What changed:</span>
+        <span class="text-emerald-900">{{ fo.what_changed_recently }}</span>
+      </div>
+      {% endif %}
+      {% if fo.what_newcomer_should_notice %}
+      <div class="rounded bg-violet-50 border border-violet-100 px-2.5 py-1.5 text-sm">
+        <span class="text-xs font-medium text-violet-700">👁 What to notice:</span>
+        <span class="text-violet-900">{{ fo.what_newcomer_should_notice }}</span>
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endif %}
 
-  {# --- section tabs (only show non-empty sections) --- #}
-  {% set tabs = [('problems', '🧩 Problems', overview.problems|length),
-                 ('methods', '🔧 Methods', overview.methods|length),
-                 ('gaps', '🕳 Gaps', overview.gaps|length),
-                 ('benchmarks', '📐 Benchmarks', overview.benchmarks|length),
-                 ('synthesis', '✦ Synthesis', overview.synthesis|length)] %}
+  {# --- Tabs (only show non-empty) --- #}
+  {% set tabs = [('cards',      '📇 Paper cards',  overview.paper_cards|length),
+                 ('paths',      '🗺 Reading paths', overview.reading_paths|length),
+                 ('problems',   '🧩 Problems',     overview.problems|length),
+                 ('methods',    '🔧 Methods',      overview.methods|length),
+                 ('open',       '🕳 Open problems', overview.open_problems|length),
+                 ('benchmarks', '📐 Benchmarks',   overview.benchmarks|length)] %}
   <div class="flex flex-wrap gap-1 border-b border-slate-200">
     {% for key, label, n in tabs %}{% if n %}
     <button type="button" @click="tab = '{{ key }}'"
@@ -49,16 +87,117 @@
     {% endif %}{% endfor %}
   </div>
 
-  {# --- Problems --- #}
+  {# Card chip macro — the per-card "machine-drafted" signal (per the blueprint's
+     signaling principle: provenance stays visible at the artifact, not the page). #}
+  {% macro mdchip(abstract_only=false) %}
+    <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-amber-100 text-amber-700' if abstract_only else 'bg-violet-100 text-violet-700' }}"
+          title="{{ 'Drafted from abstract only — mechanism/evidence/limitation not visible' if abstract_only else 'Drafted from abstract + PDF excerpt' }}">
+      ✦ {{ 'abstract' if abstract_only else 'abstract+PDF' }}
+    </span>
+  {% endmacro %}
+
+  {# --- Paper cards (the spine of the page) --- #}
+  <div x-show="tab === 'cards'" x-cloak class="space-y-2">
+    {% for c in overview.paper_cards %}
+    <div class="rounded-lg border-l-4 {{ 'border-amber-300' if c.abstract_only else 'border-violet-300' }} border-y border-r border-slate-200 bg-white overflow-hidden">
+      <button type="button" @click="open[`c{{ loop.index0 }}`] = !open[`c{{ loop.index0 }}`]"
+              class="w-full text-left px-3 py-2.5 hover:bg-slate-50">
+        <div class="flex items-start gap-2">
+          <span class="text-base leading-tight mt-0.5">📇</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-baseline gap-1.5">
+              <a href="/c/{{ slug }}/p/{{ c.paper.id }}" @click.stop
+                 class="font-semibold text-slate-900 hover:underline leading-snug">{{ c.paper.title }}</a>
+              {% if c.status %}<span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-slate-100 text-slate-600">{{ c.status }}</span>{% endif %}
+              {% if c.difficulty %}<span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ {'easy':'bg-emerald-100 text-emerald-700','medium':'bg-amber-100 text-amber-700','hard':'bg-rose-100 text-rose-700'}[c.difficulty] }}">{{ c.difficulty }}</span>{% endif %}
+              {{ mdchip(c.abstract_only) }}
+            </div>
+            {% if c.problem %}<div class="text-sm text-slate-600 mt-1"><span class="text-xs text-slate-400">Problem:</span> {{ c.problem }}</div>{% endif %}
+            {% if c.idea %}<div class="text-sm text-slate-700 mt-0.5 italic"><span class="text-xs text-slate-400 not-italic">Idea:</span> {{ c.idea }}</div>{% endif %}
+          </div>
+          <span class="text-slate-300 mt-1" x-text="open[`c{{ loop.index0 }}`] ? '▴' : '▾'"></span>
+        </div>
+      </button>
+      <div x-show="open[`c{{ loop.index0 }}`]" x-cloak class="px-3 pb-3 pl-9 space-y-2 text-sm border-t border-slate-100 pt-2.5">
+        {% if c.method_family %}<div><span class="text-xs text-slate-400">Method family:</span> <span class="text-slate-700">{{ c.method_family }}</span></div>{% endif %}
+        {% if c.contribution %}<div><span class="text-xs text-slate-400">Contribution:</span> <span class="text-slate-700">{{ c.contribution }}</span></div>{% endif %}
+        {% if c.why_read %}<div class="rounded bg-sky-50 border border-sky-100 px-2.5 py-1.5"><span class="text-xs font-medium text-sky-700">▸ Why read:</span> <span class="text-sky-900">{{ c.why_read }}</span></div>{% endif %}
+        {% if c.mechanism %}<div><span class="text-xs text-slate-400">Mechanism:</span> <span class="text-slate-700">{{ c.mechanism }}</span></div>{% endif %}
+        {% if c.evidence %}<div><span class="text-xs text-slate-400">Evidence:</span> <span class="text-slate-700">{{ c.evidence }}</span></div>{% endif %}
+        {% if c.limitation %}<div class="rounded bg-rose-50 border border-rose-100 px-2.5 py-1.5"><span class="text-xs font-medium text-rose-700">⚠ Limitation:</span> <span class="text-rose-900">{{ c.limitation }}</span></div>{% endif %}
+        {% if c.prerequisites %}
+        <div>
+          <span class="text-xs text-slate-400">Read first:</span>
+          {% for p in c.prerequisites %}
+          <a href="/c/{{ slug }}/p/{{ p.id }}" class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200">{{ p.title|truncate(40) }}</a>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if c.connected_papers %}
+        <div>
+          <div class="text-xs text-slate-400 mb-1">Connected to</div>
+          <ul class="space-y-0.5 pl-2">
+            {% for cn in c.connected_papers %}
+            <li class="text-xs">
+              <span class="text-slate-500 italic">{{ cn.relation or 'related' }} →</span>
+              <a href="/c/{{ slug }}/p/{{ cn.paper.id }}" class="text-slate-700 hover:underline">{{ cn.paper.title|truncate(60) }}</a>
+              {% if cn.why %}<span class="text-slate-500"> — {{ cn.why }}</span>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% if c.abstract_only %}
+        <p class="text-[11px] text-amber-700 italic border-t border-amber-100 pt-1">
+          Abstract-only card — mechanism / evidence / limitation aren't shown because no PDF was supplied to the agent. Cache the PDF and ↻ Regenerate to deepen.
+        </p>
+        {% endif %}
+        <a href="/c/{{ slug }}/p/{{ c.paper.id }}" class="inline-block text-xs text-slate-900 underline">📖 Open paper →</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# --- Reading paths --- #}
+  <div x-show="tab === 'paths'" x-cloak class="space-y-3">
+    {% for path in overview.reading_paths %}
+    <div class="rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-white p-3.5">
+      <div class="flex items-baseline gap-2 mb-1">
+        <h3 class="text-base font-semibold text-slate-900">🗺 {{ path.name }}</h3>
+        {{ mdchip() }}
+      </div>
+      {% if path.for_who %}<div class="text-xs text-slate-500 mb-1"><span class="font-medium">For:</span> {{ path.for_who }}</div>{% endif %}
+      {% if path.goal %}<div class="text-sm text-slate-700 mb-2">{{ path.goal }}</div>{% endif %}
+      <ol class="space-y-2">
+        {% for step in path.ordered_papers %}
+        <li class="flex items-start gap-2.5">
+          <span class="flex-none mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-medium">{{ loop.index }}</span>
+          <div class="min-w-0 flex-1">
+            <a href="/c/{{ slug }}/p/{{ step.paper.id }}" class="font-medium text-slate-900 hover:underline">{{ step.paper.title }}</a>
+            {% if step.why_now %}<div class="text-xs text-slate-500 mt-0.5"><span class="font-medium">Why now:</span> {{ step.why_now }}</div>{% endif %}
+            {% if step.focus_on %}<div class="text-xs text-emerald-700 mt-0.5"><span class="font-medium">Focus on:</span> {{ step.focus_on }}</div>{% endif %}
+            {% if step.skip %}<div class="text-xs text-slate-400 mt-0.5"><span class="font-medium">Skip:</span> {{ step.skip }}</div>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# --- Problems (kept from prior layout, now with mdchip) --- #}
   <div x-show="tab === 'problems'" x-cloak class="space-y-2">
     {% for prob in overview.problems %}
-    <div class="rounded-lg border border-slate-200 bg-white overflow-hidden">
+    <div class="rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-white overflow-hidden">
       <button type="button" @click="open[`p{{ loop.index0 }}`] = !open[`p{{ loop.index0 }}`]"
               class="w-full text-left px-3 py-2.5 hover:bg-slate-50">
         <div class="flex items-start gap-2">
           <span class="text-base leading-tight">🧩</span>
           <div class="min-w-0 flex-1">
-            <div class="font-semibold text-slate-900 leading-snug">{{ prob.title }}</div>
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <div class="font-semibold text-slate-900 leading-snug">{{ prob.title }}</div>
+              {{ mdchip() }}
+            </div>
             {% if prob.why %}<div class="text-sm text-slate-500 mt-0.5">{{ prob.why }}</div>{% endif %}
           </div>
           <span class="text-slate-300 mt-1" x-text="open[`p{{ loop.index0 }}`] ? '▴' : '▾'"></span>
@@ -108,14 +247,17 @@
   </div>
 
   {# --- Methods (and Benchmarks: same shape) --- #}
-  {% macro method_card(items, icon, label_for_papers) %}
+  {% macro grouped_card(items, icon, label_for_papers) %}
     <div class="space-y-2">
       {% for m in items %}
-      <div class="rounded-lg border border-slate-200 bg-white p-3">
+      <div class="rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-white p-3">
         <div class="flex items-start gap-2">
           <span class="text-base leading-tight">{{ icon }}</span>
           <div class="min-w-0 flex-1">
-            <div class="font-semibold text-slate-900 leading-snug">{{ m.title }}</div>
+            <div class="flex items-baseline gap-2 flex-wrap">
+              <div class="font-semibold text-slate-900 leading-snug">{{ m.title }}</div>
+              {{ mdchip() }}
+            </div>
             {% if m.key_idea %}<div class="text-sm text-slate-600 italic mt-0.5">{{ m.key_idea }}</div>{% endif %}
             {% if m.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ m.body }}</p>{% endif %}
             {% if m.papers %}
@@ -133,17 +275,20 @@
     </div>
   {% endmacro %}
 
-  <div x-show="tab === 'methods'" x-cloak>{{ method_card(overview.methods, '🔧', 'used in:') }}</div>
-  <div x-show="tab === 'benchmarks'" x-cloak>{{ method_card(overview.benchmarks, '📐', 'used by:') }}</div>
+  <div x-show="tab === 'methods'" x-cloak>{{ grouped_card(overview.methods, '🔧', 'used in:') }}</div>
+  <div x-show="tab === 'benchmarks'" x-cloak>{{ grouped_card(overview.benchmarks, '📐', 'used by:') }}</div>
 
-  {# --- Gaps --- #}
-  <div x-show="tab === 'gaps'" x-cloak class="space-y-2">
-    {% for g in overview.gaps %}
-    <div class="rounded-lg border border-rose-100 bg-rose-50/40 p-3">
+  {# --- Open problems (renamed from Gaps) --- #}
+  <div x-show="tab === 'open'" x-cloak class="space-y-2">
+    {% for g in overview.open_problems %}
+    <div class="rounded-lg border-l-4 border-rose-300 border-y border-r border-slate-200 bg-rose-50/40 p-3">
       <div class="flex items-start gap-2">
         <span class="text-base leading-tight">🕳</span>
         <div class="min-w-0 flex-1">
-          <div class="font-semibold text-slate-900 leading-snug">{{ g.title }}</div>
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <div class="font-semibold text-slate-900 leading-snug">{{ g.title }}</div>
+            {{ mdchip() }}
+          </div>
           {% if g.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ g.body }}</p>{% endif %}
           {% if g.papers %}
           <div class="mt-2 flex flex-wrap gap-1">
@@ -153,21 +298,6 @@
             {% endfor %}
           </div>
           {% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-
-  {# --- Synthesis --- #}
-  <div x-show="tab === 'synthesis'" x-cloak class="space-y-2">
-    {% for s in overview.synthesis %}
-    <div class="rounded-lg border border-slate-200 bg-white p-3">
-      <div class="flex items-start gap-2">
-        <span class="text-base leading-tight">✦</span>
-        <div class="min-w-0 flex-1">
-          <div class="font-semibold text-slate-900 leading-snug">{{ s.title }}</div>
-          {% if s.body %}<p class="text-sm text-slate-700 mt-1.5 leading-relaxed">{{ s.body }}</p>{% endif %}
         </div>
       </div>
     </div>
