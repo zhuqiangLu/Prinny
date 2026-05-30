@@ -184,18 +184,14 @@ def _overview_path(slug: str) -> Path:
 
 _LANDSCAPE_MAX_ITEMS = 6           # cap per column to force real clustering
 _THESIS_CALLOUTS = ("core_tension", "key_intuition", "central_question")
-# Phase B (2026-05-31): concept space + editorial recommended reading
+# Phase B (2026-05-31): concept space
 _CONCEPTS_MAX = 12               # how many concepts the field-model skill may keep
 _CONCEPTS_MIN_NAME_LEN = 3        # drop garbage names ("ab"); same rule as landscape items
 _CONCEPT_SYNONYMS_MAX = 6         # cap synonyms per concept (keeps the regex set sane)
-_RECOMMENDED_MAX = 5              # cap on recommended_reading; default rendered = 3
 # Threshold on a single concept's attention score before the Focus section
 # renders. Below this we don't even hint at user-mind inference (the user's
 # "premature inference is anchoring" concern from the blueprint).
 _FOCUS_CONCEPT_FLOOR = 3
-# Position labels for the recommended-reading list (assigned by index at render
-# time, not by the LLM — keeps the vocabulary consistent across collections).
-_REC_POSITIONS = ("Start here", "Next", "Then", "Then", "Then")
 
 # Phase C (2026-05-31): beliefs — agent-drafted candidates the user accepts
 # to promote. Strict scope: a belief MUST cite ≥1 supporting paper in the
@@ -233,10 +229,6 @@ def _landscape_json_path(slug: str) -> Path:
 
 def _concepts_path(slug: str) -> Path:
     return _sections_dir(slug) / "concepts.json"
-
-
-def _recommended_path(slug: str) -> Path:
-    return _sections_dir(slug) / "recommended.json"
 
 
 # Phase C: beliefs tree.
@@ -281,13 +273,8 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
 
     Concepts (Phase B): a list of named research concepts the agent extracted
     as worth tracking. Each carries 1-_CONCEPT_SYNONYMS_MAX synonyms used by
-    the deterministic attention scorer. Concept count capped at _CONCEPTS_MAX;
-    short/empty names dropped; duplicate slugs deduped.
-
-    Recommended reading (Phase B): 1-_RECOMMENDED_MAX papers the agent
-    suggests as a starting reading path. Refs not in ``valid_refs`` are
-    dropped; ``why_now`` text trimmed; positional labels assigned at render
-    time (not by the LLM) for consistency."""
+    the deterministic attention scorer + a `papers` membership list. Concept
+    count capped at _CONCEPTS_MAX; short/empty names dropped; slugs deduped."""
     def text(s):
         return (s or "").strip() if isinstance(s, str) else ""
     valid_refs = valid_refs or set()
@@ -389,22 +376,7 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
         if len(concepts) >= _CONCEPTS_MAX:
             break
 
-    # --- recommended reading (Phase B) --------------------------------------
-    recommended: list[dict] = []
-    seen_recs: set[str] = set()
-    for r in (data.get("recommended_reading") or []):
-        if not isinstance(r, dict):
-            continue
-        ref = r.get("paper")
-        if ref not in valid_refs or ref in seen_recs:
-            continue
-        seen_recs.add(ref)
-        recommended.append({"paper": ref, "why_now": text(r.get("why_now"))})
-        if len(recommended) >= _RECOMMENDED_MAX:
-            break
-
-    return {"thesis": thesis, "landscape": landscape,
-            "concepts": concepts, "recommended": recommended}
+    return {"thesis": thesis, "landscape": landscape, "concepts": concepts}
 
 
 # Per-paper char caps for the digest. Papers with PDFs get the bigger excerpt slot;
@@ -777,19 +749,56 @@ def dismiss_belief(slug: str, candidate_id: str) -> bool:
     return True
 
 
-def _write_recommended_file(slug: str, recommended: list[dict]) -> None:
-    """Write wiki/sections/recommended.json — the agent's editorial reading
-    path (3-5 papers in order). JSON for the same reason as concepts: it's
-    structured data the renderer composes into a Section 4 card.
+def _add_seed(slug: str) -> str:
+    """Free-text 'what this collection is about' for the add-paper recommender:
+    the thesis paragraph + concept names + open questions + problem statements."""
+    parts = []
+    try:
+        _, tb = frontmatter.parse(_thesis_path(slug).read_text(encoding="utf-8"))
+        parts.append(tb.split("##", 1)[0].strip())
+    except OSError:
+        pass
+    if _concepts_path(slug).is_file():
+        try:
+            cs = json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or []
+            if cs:
+                parts.append("Concepts: " + ", ".join(c.get("name", "") for c in cs))
+        except (ValueError, OSError):
+            pass
+    ls = _load_landscape(slug)
+    if ls.get("open_questions"):
+        parts.append("Open questions: " + "; ".join(ls["open_questions"]))
+    if ls.get("problems"):
+        parts.append("Problems: " + "; ".join(p["text"] for p in ls["problems"]))
+    return "\n".join(p for p in parts if p).strip()
 
-    Key is `picks` (not `items`) because Jinja resolves `obj.items` as
-    `dict.items()`, not the key — a footgun we've hit twice already."""
-    payload = {
-        "picks": recommended,
-        "_meta": {"generated_by": "agent", "generator": "field-model",
-                  "generated_at": _now()},
-    }
-    _recommended_path(slug).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+def suggest_papers_to_add(slug: str) -> dict:
+    """On-demand arXiv discovery seeded by the field model (concepts + gaps).
+    New candidates (not already in the collection, not already pending) are
+    enqueued into triage as 'pending'. Network action — gated behind an explicit
+    button. Returns ``{added, error}``."""
+    from . import discover, library, triage
+    seed = _add_seed(slug)
+    if not seed:
+        return {"added": 0, "error": "Draft the Field Model first — there's no focus to search from."}
+    have_titles = {(p.get("title") or "").lower() for p in library.list_papers(slug)}
+    have_arxiv = {p.get("arxiv_id") for p in library.list_papers(slug) if p.get("arxiv_id")}
+    pending_arxiv = {c.get("arxiv_id") for c in triage.list_triage(slug, "pending") if c.get("arxiv_id")}
+    try:
+        cands = discover.find_related_papers(seed, exclude_titles=have_titles)
+    except Exception as exc:  # noqa: BLE001
+        return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
+    added = 0
+    for c in cands:
+        aid = c.get("arxiv_id")
+        if not aid or aid in have_arxiv or aid in pending_arxiv:
+            continue
+        if triage.add_from_arxiv(slug, aid, c.get("title", ""), c.get("note", "")):
+            pending_arxiv.add(aid)
+            added += 1
+    _append_log(slug, f"suggested {added} paper(s) to add (arXiv discovery)", seed)
+    return {"added": added, "error": None}
 
 
 def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
@@ -852,26 +861,22 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
         return False
 
     # --- Write the section files atomically ----------------------------------
-    # Four files in Phase B: thesis.md, landscape.md, concepts.json,
-    # recommended.json. pages_total reflects all four for the progress UI.
-    stage("writing", pages_done=0, pages_total=4)
+    # Three files: thesis.md, landscape.md (+ landscape.json), concepts.json.
+    stage("writing", pages_done=0, pages_total=3)
     _wipe_sections_tree(slug)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
     meta_extra = {"paper_count": len(included_refs),
                   "pdfs_read": len(pdf_refs),
                   "pdfs_missing": len(included_refs) - len(pdf_refs)}
     _write_thesis_page(slug, field["thesis"], meta_extra)
-    stage("writing", pages_done=1, pages_total=4)
+    stage("writing", pages_done=1, pages_total=3)
     _write_landscape_page(slug, field["landscape"], meta_extra)
-    stage("writing", pages_done=2, pages_total=4)
+    stage("writing", pages_done=2, pages_total=3)
     _write_concepts_file(slug, field["concepts"])
-    stage("writing", pages_done=3, pages_total=4)
-    _write_recommended_file(slug, field["recommended"])
-    stage("writing", pages_done=4, pages_total=4)
+    stage("writing", pages_done=3, pages_total=3)
     _append_log(slug, f"generated field model "
                        f"({len(pdf_refs)}/{len(included_refs)} PDFs, "
-                       f"{len(field['concepts'])} concepts, "
-                       f"{len(field['recommended'])} recommended)", digest)
+                       f"{len(field['concepts'])} concepts)", digest)
     return True
 
 
@@ -1378,37 +1383,14 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     except (ValueError, OSError):
         focus = None
 
-    # Recommended reading: always render when the file has items. Resolve each
-    # ref to a paper object so the template can link straight to /c/<slug>/p/<id>,
-    # and decorate with hot/new chips driven by per-paper attention.
-    recommended = None
+    # Recommended papers to ADD (was: reading order). Pending arXiv candidates
+    # surfaced by the discovery seed (suggest_papers_to_add → triage). Accept
+    # imports into the collection; Dismiss rejects. Sourced live from triage.
+    from . import triage as _triage
     try:
-        if _recommended_path(slug).is_file():
-            rec_payload = json.loads(_recommended_path(slug).read_text(encoding="utf-8"))
-            raw_picks = rec_payload.get("picks") or []
-            paper_by_id = {p["id"]: p for p in papers}
-            # Resolve refs via _ref_map(slug) so any of {zotero_key,arxiv_id,
-            # openreview_id, str(id)} works.
-            rmap = _ref_map(slug)
-            picks_out = []
-            for i, r in enumerate(raw_picks):
-                ref = r.get("paper")
-                pinfo = rmap.get(ref) if ref else None
-                if not pinfo:
-                    continue
-                pid = pinfo["id"]
-                paper_full = paper_by_id.get(pid)
-                if not paper_full:
-                    continue
-                picks_out.append({
-                    "paper": paper_full,
-                    "why_now": (r.get("why_now") or "").strip(),
-                    "position_label": _REC_POSITIONS[min(i, len(_REC_POSITIONS) - 1)],
-                })
-            if picks_out:
-                recommended = {"picks": picks_out}
-    except (ValueError, OSError):
-        recommended = None
+        add_candidates = _triage.list_triage(slug, status="pending")
+    except Exception:  # noqa: BLE001
+        add_candidates = []
 
     # --- Phase C: beliefs (tray + accepted) --------------------------------
     # Resolve supporting_papers refs to live paper objects (with attention
@@ -1445,7 +1427,7 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     connections = connection_view(slug)
 
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
-            "papers": papers, "focus": focus, "recommended": recommended,
+            "papers": papers, "focus": focus, "add_candidates": add_candidates,
             "belief_candidates": belief_candidates, "beliefs": beliefs,
             "can_suggest_beliefs": can_suggest_beliefs(slug),
             "connections": connections,

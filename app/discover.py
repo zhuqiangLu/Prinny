@@ -226,6 +226,54 @@ def find_gaps(slug: str) -> list[dict]:
     return out
 
 
+def find_related_papers(seed: str, exclude_titles: set[str] | None = None) -> list[dict]:
+    """Recommend arXiv papers to ADD to a collection, seeded by a free-text
+    description of what the collection is about (the cognitive-model field
+    model — thesis + concepts + open questions). Two LLM steps: build an arXiv
+    query from the seed, then pick the most relevant results with a one-line
+    'why add it' note. Results already in the collection (by title) are dropped.
+
+    Returns ``[{arxiv_id, title, summary, authors, note}]``. Network action
+    (arXiv) — callers gate it behind an explicit user click."""
+    seed = (seed or "").strip()
+    if not seed:
+        return []
+    exclude = {t.lower() for t in (exclude_titles or set())}
+    try:
+        query_resp = llm.complete([
+            {"role": "system", "content": "Output only a short arXiv search query string."},
+            {"role": "user", "content": f"COLLECTION FOCUS:\n{seed}\n\n"
+             "Give a concise arXiv search query (keywords) for recent papers a "
+             "researcher building this collection would want to read or cite next."},
+        ]).strip().strip('"')
+    except Exception:  # noqa: BLE001
+        return []
+    query = f"all:{query_resp}" if ":" not in query_resp else query_resp
+    results = [r for r in _arxiv_search(query) if r["title"].lower() not in exclude]
+    if not results:
+        return []
+    listing = "\n".join(f"{i}. [{r['arxiv_id']}] {r['title']}: {r['summary'][:300]}"
+                        for i, r in enumerate(results))
+    try:
+        pick = llm.complete([
+            {"role": "system", "content": "You output only valid JSON."},
+            {"role": "user", "content": (
+                f"COLLECTION FOCUS:\n{seed}\n\nCANDIDATES:\n{listing}\n\n"
+                'Which candidates best extend or fill gaps in this collection? '
+                'Respond JSON: {"picks": [{"index": 0, "note": "why add it"}]}')},
+        ])
+        import json
+        data = json.loads(pick[pick.find("{"): pick.rfind("}") + 1])
+    except (ValueError, Exception):  # noqa: BLE001
+        return []
+    out = []
+    for p in data.get("picks", []):
+        idx = p.get("index")
+        if isinstance(idx, int) and 0 <= idx < len(results):
+            out.append({**results[idx], "note": p.get("note", "")})
+    return out
+
+
 # --- stale papers ----------------------------------------------------------
 def _appearance_count(slug: str, key: str) -> int:
     base = COLLECTIONS_DIR / slug

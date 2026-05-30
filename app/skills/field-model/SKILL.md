@@ -48,12 +48,6 @@ You see every paper in the collection (abstracts + cached PDF excerpts). Your jo
       "blurb": "ONE sentence: what this concept is about in this collection.",
       "papers": ["refs of the papers in this collection that this concept covers — assign EVERY paper to at least one concept so the evidence map has no orphans"]
     }
-  ],
-  "recommended_reading": [
-    {
-      "paper": "exact ref as supplied in the digest",
-      "why_now": "ONE sentence: why this paper, why this slot in the reading order."
-    }
   ]
 }
 ```
@@ -63,7 +57,6 @@ You see every paper in the collection (abstracts + cached PDF excerpts). Your jo
 - **Concepts** should cover the collection's actual content — names a reader might
   highlight. Don't repeat the landscape labels verbatim; concepts and problems live in
   parallel (the scorer counts highlights/notes that match concept synonyms).
-- **Recommended reading** is editorial. Pick the 3 papers a smart reader should open in
-  order. NOT a comprehensive list — the user already sees every paper in a separate
-  Papers section.
+- **Problems / methods** each carry `papers` (the refs they cover) — these become nodes
+  in the knowledge graph, so assign papers accurately.
 - Empty strings are fine for callouts you can't honestly write. **Do not pad.**

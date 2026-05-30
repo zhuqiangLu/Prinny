@@ -194,40 +194,52 @@
   {% endif %}
 
   {# =================================================================
-     Section 3 — Recommended Reading (Stage 0: editorial, from abstracts).
-     Always renders when recommended.json has items — no attention needed, so
-     it lives with the Field Model rather than the gated belief layer.
-     Positional labels (Start here / Next / Then) assigned by index in
-     load_overview; attention chips (🔥/✨) are a Stage-2 bonus when present.
+     Section 3 — Recommended to add (arXiv discovery → triage → collection).
+     A paper-recommendation system: the agent searches arXiv (seeded by the
+     field model's concepts + open questions) for papers NOT yet in the
+     collection. On-demand (network); Accept imports into the collection,
+     Dismiss rejects. Always available once a Field Model exists.
      ================================================================= #}
-  {% if overview.recommended %}
   <section class="rounded-xl border border-slate-200 bg-white p-5">
     <div class="flex items-baseline gap-2 mb-3">
       {{ section_badge(3) }}
-      <h2 class="text-lg font-semibold text-slate-900">Recommended Reading</h2>
-      <span class="ml-auto text-xs text-slate-400 cursor-help"
-            title="Editorial picks from the agent. Order is intentional: start at #1.">Why these? ⓘ</span>
+      <h2 class="text-lg font-semibold text-slate-900">Recommended to add</h2>
+      <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML"
+            hx-disabled-elt="find button" class="ml-auto">
+        <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
+                title="Search arXiv (seeded by this collection's concepts + open questions) for papers worth adding. Network call; results land below for you to accept or dismiss.">
+          ✦ Suggest papers <span class="htmx-indicator text-violet-400">…</span>
+        </button>
+      </form>
     </div>
-    <ol class="space-y-3">
-      {% for r in overview.recommended.picks %}
-      <li class="flex items-start gap-3">
-        <span class="flex-none mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-baseline gap-2 flex-wrap">
-            <a href="/c/{{ slug }}/p/{{ r.paper.id }}" class="text-sm font-medium text-slate-900 hover:underline">{{ r.paper.title }}</a>
-            {% if r.paper.is_hot %}<span class="text-[10px] rounded px-1 bg-orange-100 text-orange-700"
-              title="{{ r.paper.attention_score }} attention point(s)">🔥</span>{% endif %}
-            {% if r.paper.is_new %}<span class="text-[10px] rounded px-1 bg-sky-100 text-sky-700"
-              title="New activity since you last opened the wiki">✨</span>{% endif %}
-            <span class="ml-auto text-[10px] rounded px-2 py-0.5 bg-violet-100 text-violet-700">{{ r.position_label }}</span>
-          </div>
-          {% if r.why_now %}<p class="mt-0.5 text-xs text-slate-500 leading-snug">{{ r.why_now }}</p>{% endif %}
+
+    {% if not overview.add_candidates %}
+    <p class="text-sm text-slate-500">No pending recommendations. Click <b>✦ Suggest papers</b> — the agent searches arXiv for papers that extend this collection. Accept to add one; Dismiss to drop it.</p>
+    {% else %}
+    <ul class="space-y-2">
+      {% for c in overview.add_candidates %}
+      <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title|default('(untitled)') }}</p>
+          {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener"
+            class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }}</a>{% endif %}
+        </div>
+        {% if c.llm_relevance_note %}<p class="mt-1 text-xs text-slate-500 leading-snug">{{ c.llm_relevance_note }}</p>{% endif %}
+        <div class="mt-2 flex items-center gap-1.5">
+          <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML"
+                hx-disabled-elt="find button">
+            <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add to collection</button>
+          </form>
+          <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML"
+                hx-disabled-elt="find button">
+            <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
+          </form>
         </div>
       </li>
       {% endfor %}
-    </ol>
+    </ul>
+    {% endif %}
   </section>
-  {% endif %}
 
   {# =================================================================
      Section 4 — Your Current Understanding (Stage 3, Phase C)

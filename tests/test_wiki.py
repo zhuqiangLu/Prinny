@@ -50,7 +50,7 @@ _FIELD_MODEL_JSON = {
         "open_questions": ["What actually needs to be preserved for reasoning?",
                             "Are reasoning traces compressible?"],
     },
-    # Phase B: concepts + recommended_reading
+    # Phase B: concepts (with paper membership)
     "concepts": [
         {"name": "Reasoning Preservation", "synonyms": ["reasoning preservation",
             "preserving reasoning", "reasoning-state"], "blurb": "Keep the KV cache that matters.",
@@ -61,12 +61,6 @@ _FIELD_MODEL_JSON = {
          "blurb": "Train a student cache from a teacher cache."},
         {"name": "ab", "synonyms": []},                # too short — dropped
         {"name": "Reasoning Preservation", "synonyms": []},  # duplicate slug — dropped
-    ],
-    "recommended_reading": [
-        {"paper": "2401.00001", "why_now": "Clearest framing of the trade-off."},
-        {"paper": "2401.00002", "why_now": "Compare alternative approach."},
-        {"paper": "2401.00003", "why_now": "Extends with empirical evals."},
-        {"paper": "NOPE",       "why_now": "Hallucinated — should be dropped."},
     ],
 }
 
@@ -304,9 +298,9 @@ def test_load_overview_returns_none_when_no_wiki(tmp_path, monkeypatch):
 
 # --- Phase B: concepts + Focus + Recommended Reading ------------------------
 
-def test_validate_field_model_keeps_valid_concepts_and_recommendations():
+def test_validate_field_model_keeps_valid_concepts():
     """Validator keeps non-duplicate, named concepts (drops 'ab' and the dup
-    slug) and only recommended_reading entries whose ref is in valid_refs."""
+    slug); concept paper-membership is filtered to real refs."""
     out = wiki._validate_field_model(_FIELD_MODEL_JSON,
                                       valid_refs={"2401.00001", "2401.00002", "2401.00003"})
     slugs = [c["slug"] for c in out["concepts"]]
@@ -319,26 +313,24 @@ def test_validate_field_model_keeps_valid_concepts_and_recommendations():
     # Each concept's synonyms include the canonical (lowercased) name.
     rp = next(c for c in out["concepts"] if c["slug"] == "reasoning-preservation")
     assert "reasoning preservation" in rp["synonyms"]
-    # Recommended: NOPE dropped; the three valid refs kept in order.
-    refs = [r["paper"] for r in out["recommended"]]
-    assert refs == ["2401.00001", "2401.00002", "2401.00003"]
+    # Concept membership filtered to valid refs (NOPE dropped).
+    assert rp["papers"] == ["2401.00002"]
+    # The old reading-order 'recommended' is gone from the validator output.
+    assert "recommended" not in out
 
 
 def test_generate_overview_writes_concepts_and_recommended_files(tmp_path, monkeypatch):
-    """generate_overview also writes wiki/sections/concepts.json and
-    recommended.json. Each has an _meta block + structured payload."""
+    """generate_overview writes wiki/sections/concepts.json (no more
+    recommended.json — the reading-order feature was removed)."""
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     assert wiki.generate_overview("vlms") is True
     sdir = tmp_path / "collections" / "vlms" / "wiki" / "sections"
     assert (sdir / "concepts.json").is_file()
-    assert (sdir / "recommended.json").is_file()
+    assert not (sdir / "recommended.json").exists()
     cdata = json.loads((sdir / "concepts.json").read_text())
     assert cdata["_meta"]["generated_by"] == "agent"
     assert {c["slug"] for c in cdata["concepts"]} >= {"reasoning-preservation",
                                                        "semantic-anchors", "kv-distillation"}
-    rdata = json.loads((sdir / "recommended.json").read_text())
-    assert rdata["_meta"]["generated_by"] == "agent"
-    assert [r["paper"] for r in rdata["picks"]] == ["2401.00001", "2401.00002", "2401.00003"]
 
 
 def test_attention_per_concept_scores_highlights_and_notes(tmp_path, monkeypatch):
@@ -401,23 +393,36 @@ def test_load_overview_focus_renders_above_threshold_only(tmp_path, monkeypatch)
     assert loaded["focus"]["highlights"] == wiki._FOCUS_CONCEPT_FLOOR
 
 
-def test_load_overview_recommended_resolves_paper_refs_and_assigns_labels(tmp_path, monkeypatch):
-    """The recommended section resolves each ref to a paper object, attaches
-    the live attention chips, and assigns positional labels (Start here /
-    Next / Then) by index — not from the LLM."""
+def test_suggest_papers_to_add_enqueues_arxiv_candidates(tmp_path, monkeypatch):
+    """suggest_papers_to_add seeds discovery from the field model, enqueues new
+    arXiv candidates into triage, and dedupes against papers already present /
+    already pending. Surfaced in load_overview as add_candidates."""
+    import app.discover as discover, app.triage as triage
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    monkeypatch.setattr(triage, "connect", lambda: connect(tmp_path / "app.sqlite"))
     wiki.generate_overview("vlms")
+    # Stub the network discovery: two candidates, one a dupe title of an existing paper.
+    monkeypatch.setattr(discover, "find_related_papers",
+                        lambda seed, exclude_titles=None: [
+                            {"arxiv_id": "2501.11111", "title": "Brand New Paper",
+                             "summary": "x", "note": "fills the eval gap"},
+                            {"arxiv_id": "2501.22222", "title": "Another New One",
+                             "summary": "y", "note": "extends method Z"},
+                        ])
+    res = wiki.suggest_papers_to_add("vlms")
+    assert res["added"] == 2 and res["error"] is None
     loaded = wiki.load_overview("vlms")
-    assert loaded["recommended"] is not None
-    picks = loaded["recommended"]["picks"]
-    assert len(picks) == 3
-    assert picks[0]["position_label"] == "Start here"
-    assert picks[1]["position_label"] == "Next"
-    assert picks[2]["position_label"] == "Then"
-    # Each pick carries a resolved paper object (id from the DB).
-    assert {pk["paper"]["id"] for pk in picks} == {1, 2, 3}
-    # why_now text preserved.
-    assert picks[0]["why_now"].startswith("Clearest framing")
+    titles = {c["title"] for c in loaded["add_candidates"]}
+    assert {"Brand New Paper", "Another New One"} <= titles
+    # A second run with the same candidates adds nothing (already pending).
+    assert wiki.suggest_papers_to_add("vlms")["added"] == 0
+
+
+def test_suggest_papers_to_add_needs_a_field_model(tmp_path, monkeypatch):
+    """No thesis/concepts → no seed → refuse with a clear error, no network."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())   # no generate_overview
+    res = wiki.suggest_papers_to_add("vlms")
+    assert res["added"] == 0 and res["error"]
 
 
 # --- Phase C: beliefs (candidates tray + accepted) --------------------------

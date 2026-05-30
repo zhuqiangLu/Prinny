@@ -1569,6 +1569,36 @@ def wiki_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+# --- Recommended-papers-to-add (arXiv discovery → triage → collection) --------
+
+@app.post("/c/{slug}/wiki/recommend-add", response_class=HTMLResponse)
+def wiki_recommend_add(request: Request, slug: str) -> HTMLResponse:
+    """Run arXiv discovery seeded by the field model and enqueue new candidates
+    into triage (synchronous network action). Re-renders the panel."""
+    _require_collection(slug)
+    try:
+        wiki.suggest_papers_to_add(slug)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.wiki").exception("suggest_papers_to_add failed")
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/add/{tid}/accept", response_class=HTMLResponse)
+def wiki_add_accept(request: Request, slug: str, tid: int) -> HTMLResponse:
+    """Accept a recommended paper → import it into the collection (via triage)."""
+    _require_collection(slug)
+    triage_mod.accept(slug, tid)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/add/{tid}/dismiss", response_class=HTMLResponse)
+def wiki_add_dismiss(request: Request, slug: str, tid: int) -> HTMLResponse:
+    """Dismiss a recommended paper (reject the triage candidate)."""
+    _require_collection(slug)
+    triage_mod.reject(slug, tid)
+    return _wiki_panel(request, slug)
+
+
 @app.post("/c/{slug}/wiki/gaps", response_class=HTMLResponse)
 def wiki_gaps(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)
