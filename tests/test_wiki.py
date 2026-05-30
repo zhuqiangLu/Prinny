@@ -208,6 +208,32 @@ def test_load_overview_papers_carry_concept_tags(tmp_path, monkeypatch):
     assert all("tags" in p for p in loaded["papers"])
 
 
+def test_build_collection_graph_has_concept_and_method_nodes(tmp_path, monkeypatch):
+    """After a draft, the knowledge graph carries concept + method nodes wired to
+    their papers (problems have no membership in this fixture → no problem nodes)."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    g = wiki.build_collection_graph("vlms")
+    kinds = {n["kind"] for n in g["nodes"].values()}
+    assert "paper" in kinds and "concept" in kinds and "method" in kinds
+    # The Semantic-anchor method (papers=[2401.00001]) is wired to paper id 1.
+    method_nodes = [nid for nid, n in g["nodes"].items() if n["kind"] == "method"]
+    assert any("paper:1" in g["adj"].get(m, {}) for m in method_nodes)
+
+
+def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
+    """connection_view returns render-ready themes/orphans/co-occurrences, or
+    None when the graph is too sparse to say anything."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    cv = wiki.connection_view("vlms")
+    # The fixture wires concepts + methods to shared papers, so SOMETHING surfaces.
+    assert cv is not None
+    assert set(cv) == {"themes", "orphans", "co_occurrences"}
+    # Orphans carry a resolvable paper id + label for linking.
+    assert all("id" in o and "label" in o for o in cv["orphans"])
+
+
 def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):
     """load_overview reads wiki/sections/* and returns {thesis, landscape,
     papers, meta}. Thesis callouts round-trip through markdown; landscape lists

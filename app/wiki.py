@@ -1441,8 +1441,108 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     belief_candidates = [_decorate_belief(b) for b in list_belief_candidates(slug)]
     beliefs = [_decorate_belief(b) for b in list_accepted_beliefs(slug)]
 
+    # --- Knowledge-graph connections & themes (structural; no LLM) ----------
+    connections = connection_view(slug)
+
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
             "papers": papers, "focus": focus, "recommended": recommended,
             "belief_candidates": belief_candidates, "beliefs": beliefs,
             "can_suggest_beliefs": can_suggest_beliefs(slug),
+            "connections": connections,
             "meta": meta_out}
+
+
+# --- knowledge graph: assembly + render view (2026-05-31) ---------------------
+
+def build_collection_graph(slug: str) -> dict:
+    """Assemble the structural knowledge graph for a collection: nodes are
+    papers + concepts + problems + methods + accepted beliefs; edges are the
+    memberships we already compute (concept/problem/method/belief ↔ papers) plus
+    belief→concept links. Returns the ``app.graph`` graph dict. No LLM, no
+    embeddings — purely structural over data already on disk."""
+    from . import graph as _graph, library
+
+    rmap = _ref_map(slug)
+    resolve = lambda refs: sorted({rmap[r]["id"] for r in (refs or []) if r in rmap})
+
+    papers_min = [{"id": p["id"], "title": p.get("title", "")}
+                  for p in library.list_papers(slug)]
+
+    entities: list[dict] = []
+
+    # Concepts: union of LLM membership + synonym match, via papers_to_concepts
+    # (inverted from paper→concepts to concept→paper_ids).
+    concept_list, concept_name = [], {}
+    if _concepts_path(slug).is_file():
+        try:
+            concept_list = (json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+                            .get("concepts") or [])
+        except (ValueError, OSError):
+            concept_list = []
+    concept_papers: dict[str, set[int]] = defaultdict(set)
+    for pid, tags in papers_to_concepts(slug, concept_list).items():
+        for t in tags:
+            concept_papers[t["slug"]].add(pid)
+    for c in concept_list:
+        concept_name[c["slug"]] = c.get("name", c["slug"])
+        pids = set(concept_papers.get(c["slug"], set())) | set(resolve(c.get("papers")))
+        if pids:
+            entities.append({"key": f"concept:{c['slug']}", "kind": "concept",
+                             "label": c.get("name", c["slug"]), "paper_ids": pids})
+
+    # Problems + methods from the structured landscape.
+    landscape = _load_landscape(slug)
+    for kind in ("problem", "method"):
+        for item in landscape.get(kind + "s") or []:
+            if not isinstance(item, dict):
+                continue
+            pids = resolve(item.get("papers"))
+            if not pids:
+                continue   # an unanchored problem/method is not a graph node
+            key = f"{kind}:" + (_SLUG_RE.sub('-', item['text'].lower()).strip('-')[:60] or kind)
+            entities.append({"key": key, "kind": kind, "label": item["text"], "paper_ids": pids})
+
+    # Accepted beliefs → papers (supporting) + concept links (related). Belief
+    # dicts from list_accepted_beliefs key on "id" (not "slug").
+    for b in list_accepted_beliefs(slug):
+        bkey = b.get("id") or _SLUG_RE.sub("-", (b.get("title") or "belief").lower()).strip("-")
+        pids = resolve(b.get("supporting_papers"))
+        links = [f"concept:{s}" for s in (b.get("related_concepts") or [])
+                 if s in concept_name]
+        if pids or links:
+            entities.append({"key": f"belief:{bkey}", "kind": "belief",
+                             "label": b.get("title", bkey),
+                             "paper_ids": pids, "links": links})
+
+    return _graph.build_graph(papers_min, entities)
+
+
+def connection_view(slug: str) -> dict | None:
+    """Render-ready knowledge-graph view: themes (clusters of ≥2 entities, with
+    their paper count), orphan papers (tied to nothing), and strong concept/
+    problem/method co-occurrences. Returns None when the graph is too sparse to
+    say anything (no theme, no orphan, no co-occurrence) — no empty section."""
+    from . import graph as _graph
+    g = build_collection_graph(slug)
+    nodes = g["nodes"]
+    if not nodes:
+        return None
+    label = lambda nid: nodes[nid]["label"] if nid in nodes else nid
+    kind = lambda nid: nodes[nid]["kind"] if nid in nodes else ""
+
+    themes = []
+    for members in _graph.clusters(g):
+        ents = [{"label": label(m), "kind": kind(m)} for m in members if kind(m) != "paper"]
+        n_papers = sum(1 for m in members if kind(m) == "paper")
+        if len(ents) >= 2:   # a theme is a cluster of related ENTITIES, not just papers
+            themes.append({"entities": ents, "n_papers": n_papers})
+
+    ins = _graph.insights(g)
+    orphans = [{"id": int(nid.split(":", 1)[1]), "label": label(nid)}
+               for nid in ins["orphans"]]
+    co = [{"a": label(a), "b": label(b), "shared": n}
+          for a, b, n in ins["co_occurrences"][:6]]
+
+    if not themes and not orphans and not co:
+        return None
+    return {"themes": themes, "orphans": orphans, "co_occurrences": co}

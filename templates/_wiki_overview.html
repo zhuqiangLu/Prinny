@@ -352,12 +352,78 @@
   {% endif %}
 
   {# =================================================================
-     Section 5 — Papers (Evidence)  (Stage 0)
+     Section 5 — Connections & themes (Research Model: structural graph).
+     Deterministic, no-LLM read of the knowledge graph — themes (clusters of
+     co-occurring concepts/methods/problems), orphan papers (evidence tied to
+     nothing yet), and strong co-occurrences. Renders only when the graph has
+     something to say.
+     ================================================================= #}
+  {% if overview.connections %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-baseline gap-2 mb-3">
+      {{ section_badge(5) }}
+      <h2 class="text-lg font-semibold text-slate-900">Connections &amp; themes</h2>
+      <span class="ml-auto text-xs text-slate-400 cursor-help"
+            title="Structural map of the collection — which concepts/methods/problems cluster, and which papers aren't connected yet. Derived from shared papers; no LLM.">How? ⓘ</span>
+    </div>
+
+    {% if overview.connections.themes %}
+    <div class="mb-3">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Themes — concepts that travel together</div>
+      <div class="flex flex-wrap gap-2">
+        {% for th in overview.connections.themes %}
+        <div class="flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+          <div class="flex flex-wrap gap-1 mb-1.5">
+            {% for e in th.entities %}
+            <span class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-violet-200 text-violet-800">{{ e.label }}</span>
+            {% endfor %}
+          </div>
+          <div class="text-[10px] text-slate-500">{{ th.n_papers }} paper{{ 's' if th.n_papers != 1 }} in this cluster</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if overview.connections.co_occurrences %}
+    <div class="mb-3">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Strong co-occurrences</div>
+      <ul class="space-y-1 text-sm text-slate-700">
+        {% for c in overview.connections.co_occurrences %}
+        <li class="flex items-center gap-1.5">
+          <span class="text-slate-800">{{ c.a }}</span>
+          <span class="text-slate-400">↔</span>
+          <span class="text-slate-800">{{ c.b }}</span>
+          <span class="text-[10px] text-slate-400">({{ c.shared }} shared papers)</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if overview.connections.orphans %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+      <div class="text-xs font-medium text-amber-900 mb-1.5">
+        {{ overview.connections.orphans|length }} paper{{ 's' if overview.connections.orphans|length != 1 }} not yet connected to any concept, method, or problem
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        {% for o in overview.connections.orphans %}
+        <a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100">{{ o.label|truncate(40) }}</a>
+        {% endfor %}
+      </div>
+      <p class="mt-1.5 text-[10px] text-amber-700">Tip: ↻ Regenerate after reading to let the agent map these into the field model.</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# =================================================================
+     Section 6 — Papers (Evidence)  (Stage 0)
      ================================================================= #}
   {% if overview.papers %}
   <section class="rounded-xl border border-slate-200 bg-white p-5">
     <div class="flex items-baseline gap-2 mb-3">
-      {{ section_badge(5) }}
+      {{ section_badge(6) }}
       <h2 class="text-lg font-semibold text-slate-900">Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
     </div>

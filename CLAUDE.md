@@ -97,6 +97,25 @@ If a feature you're about to build lets the LLM produce wiki content without the
 > Research Questions (Stage 4) and the post-draft grilling (intent capture) remain
 > deferred to later phases.
 >
+> **Knowledge graph (2026-05-31, Research-Model layer).** A purely structural graph
+> over the wiki's entities — `app/graph.py` (pure, embedding-free) + assembly in
+> `wiki.build_collection_graph` / render view in `wiki.connection_view`.
+>   - Nodes: papers, concepts, problems, methods, accepted beliefs. (Problems/methods
+>     were promoted to paper-anchored nodes — landscape.json carries their `papers`.)
+>   - Edges: memberships we already compute (concept/problem/method/belief ↔ papers,
+>     via LLM assignment ∪ synonym match) + belief→concept links. No paper↔paper
+>     "builds-on/critiques" edges (those aren't in abstracts — the hallucination
+>     magnet; nashsu doesn't compute them either, and neither do we).
+>   - Relatedness adapts nashsu's structural 4-signal score (source overlap / direct
+>     link / Adamic-Adar shared neighbors / type-affinity multiplier). No embeddings.
+>   - Surfaced in **Section 5 "Connections & themes"**: label-propagation themes
+>     (clusters of ≥2 co-occurring entities), strong co-occurrences, and orphan papers
+>     (evidence tied to no concept/method/problem yet — a "go map these" nudge).
+>     Section gates off when the graph is too sparse to say anything. No LLM in the
+>     render loop; recomputed live like the rest of the cognitive model. (Section
+>     order is now 1 Thesis · 2 Landscape · 3 Recommended · 4 Understanding ·
+>     5 Connections · 6 Papers.)
+>
 > Migration: legacy `wiki/starter/index.md` OR `wiki/overview.json` on disk → `load_overview`
 > returns `{needs_migration: True}` so the panel renders a one-time "schema changed —
 > regenerate?" banner. No silent conversion.
@@ -117,7 +136,7 @@ If a feature you're about to build lets the LLM produce wiki content without the
 
 - **Zotero**: source of truth for papers, collections, PDF paths. Read via local SQLite at `~/Zotero/zotero.sqlite` (read-only — Zotero must not be running) or via the local HTTP API on port 23119 if available. Prefer the HTTP API when Zotero is open; fall back to SQLite when closed. Detect which is usable at startup.
 - **zotero-arxiv-daily-local**: existing component (in this repo) that adds candidate papers to Zotero collections. You do not modify it. You read what it writes.
-- **llm_wiki** (https://github.com/nashsu/llm_wiki): a reference implementation whose **conventions** we adopt but whose **code** we do not use. Specifically adopt: directory layout, YAML frontmatter with `sources: []`, `[[wikilink]]` syntax, the two-step (analyze → generate) LLM pattern, the Review-queue pattern for human-in-the-loop. Do not adopt: the Tauri app, the knowledge graph, the Chrome extension.
+- **llm_wiki** (https://github.com/nashsu/llm_wiki): a reference implementation whose **conventions** we adopt but whose **code** we do not use. Specifically adopt: directory layout, YAML frontmatter with `sources: []`, `[[wikilink]]` syntax, the two-step (analyze → generate) LLM pattern, the Review-queue pattern for human-in-the-loop. Do not adopt: the Tauri app, the Chrome extension. **Knowledge graph (amended 2026-05-31):** we now DO adopt llm_wiki's *structural* graph relevance model — its 4-signal scoring (source overlap / direct link / shared-neighbor Adamic-Adar / type affinity) is purely structural and needs no embeddings, so it satisfies our "no vector store / no embeddings" rule. Reimplemented from scratch in `app/graph.py` (we still don't use their TypeScript/Sigma/React code). See the cognitive-model amendment below.
 
 ## Tech stack (locked)
 
