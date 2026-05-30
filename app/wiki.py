@@ -224,6 +224,13 @@ def _landscape_path(slug: str) -> Path:
     return _sections_dir(slug) / "landscape.md"
 
 
+def _landscape_json_path(slug: str) -> Path:
+    """Structured landscape (problems/methods carry paper membership for the
+    graph). Source of truth when present; landscape.md is the human-readable
+    render + the fallback for pre-2026-05-31 collections that predate it."""
+    return _sections_dir(slug) / "landscape.json"
+
+
 def _concepts_path(slug: str) -> Path:
     return _sections_dir(slug) / "concepts.json"
 
@@ -291,7 +298,9 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
         thesis[k] = text(th.get(k))
 
     ls = data.get("landscape") if isinstance(data.get("landscape"), dict) else {}
-    def items(key: str) -> list[str]:
+
+    def str_items(key: str) -> list[str]:
+        """debates / open_questions: plain short strings (not paper-anchored)."""
         raw = ls.get(key) or []
         if not isinstance(raw, list):
             return []
@@ -306,11 +315,39 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
                 break
         return out
 
+    def node_items(key: str) -> list[dict]:
+        """problems / methods: paper-anchored nodes. The agent may send a plain
+        string (legacy) or an object {name|text, papers}; normalize to
+        {text, papers} with papers filtered to real refs. These become graph
+        nodes (concept-style membership)."""
+        raw = ls.get(key) or []
+        if not isinstance(raw, list):
+            return []
+        out, seen = [], set()
+        for x in raw:
+            if isinstance(x, dict):
+                s = text(x.get("text") or x.get("name"))
+                papers = [r for r in (x.get("papers") or []) if r in valid_refs]
+            else:
+                s, papers = text(x), []
+            if len(s) < 3 or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            # dedupe papers, preserve order
+            seen_p, pp = set(), []
+            for r in papers:
+                if r not in seen_p:
+                    seen_p.add(r); pp.append(r)
+            out.append({"text": s, "papers": pp})
+            if len(out) >= _LANDSCAPE_MAX_ITEMS:
+                break
+        return out
+
     landscape = {
-        "problems":       items("problems"),
-        "methods":        items("methods"),
-        "debates":        items("debates"),
-        "open_questions": items("open_questions"),
+        "problems":       node_items("problems"),
+        "methods":        node_items("methods"),
+        "debates":        str_items("debates"),
+        "open_questions": str_items("open_questions"),
     }
 
     # --- concepts (Phase B) -------------------------------------------------
@@ -454,13 +491,21 @@ def _write_landscape_page(slug: str, landscape: dict, meta_extra: dict) -> None:
             continue
         body_parts.append(f"## {title}")
         for it in items:
-            body_parts.append(f"- {it}")
+            # problems/methods are {text, papers}; debates/open_questions are str.
+            body_parts.append(f"- {it['text'] if isinstance(it, dict) else it}")
         body_parts.append("")
     meta = {"type": "landscape", "title": f"Research Landscape: {slug}",
             "generated_by": "agent", "generator": "field-model",
             "generated_at": _now(), **meta_extra}
     _landscape_path(slug).write_text(frontmatter.dump(meta, "\n".join(body_parts)),
                                       encoding="utf-8")
+    # Structured source of truth — carries the problem/method → paper edges the
+    # graph engine needs (the .md above loses them).
+    _landscape_json_path(slug).write_text(
+        json.dumps({"landscape": landscape,
+                    "_meta": {"generated_by": "agent", "generator": "field-model",
+                              "generated_at": _now()}}, indent=2),
+        encoding="utf-8")
 
 
 def _write_concepts_file(slug: str, concepts: list[dict]) -> None:
@@ -1177,8 +1222,10 @@ def _parse_thesis_body(body: str) -> dict:
 
 
 def _parse_landscape_body(body: str) -> dict:
-    """Reverse of _write_landscape_page. Each H2 section becomes a list of
-    bullet items. Empty/unrecognized sections produce empty lists."""
+    """Reverse of _write_landscape_page, for collections that predate
+    landscape.json (the .md is the only source). Problems/methods come back as
+    paper-anchored nodes with EMPTY papers (the .md lost the edges — a regenerate
+    repopulates them); debates/open_questions are plain strings."""
     titles = {"Problems": "problems", "Methods": "methods",
               "Debates": "debates", "Open Questions": "open_questions"}
     out = {v: [] for v in titles.values()}
@@ -1189,8 +1236,36 @@ def _parse_landscape_body(body: str) -> dict:
         for line in m.group("body").splitlines():
             s = line.strip()
             if s.startswith("- "):
-                out[key].append(s[2:].strip())
+                txt = s[2:].strip()
+                if key in ("problems", "methods"):
+                    out[key].append({"text": txt, "papers": []})
+                else:
+                    out[key].append(txt)
     return out
+
+
+def _load_landscape(slug: str) -> dict:
+    """Read the structured landscape: prefer landscape.json (carries paper edges),
+    fall back to parsing landscape.md for pre-2026-05-31 collections."""
+    jp = _landscape_json_path(slug)
+    if jp.is_file():
+        try:
+            data = json.loads(jp.read_text(encoding="utf-8"))
+            ls = data.get("landscape") or {}
+            # Defensive: ensure the expected keys + shapes exist.
+            return {
+                "problems": ls.get("problems") or [],
+                "methods": ls.get("methods") or [],
+                "debates": ls.get("debates") or [],
+                "open_questions": ls.get("open_questions") or [],
+            }
+        except (ValueError, OSError):
+            pass
+    try:
+        _, body = frontmatter.parse(_landscape_path(slug).read_text(encoding="utf-8"))
+    except OSError:
+        return {"problems": [], "methods": [], "debates": [], "open_questions": []}
+    return _parse_landscape_body(body)
 
 
 def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
@@ -1210,16 +1285,15 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
                     "papers": [], "meta": {}}
         return None
 
-    # --- Read the two section files ------------------------------------------
+    # --- Read the section files ----------------------------------------------
     try:
         thesis_meta, thesis_body = frontmatter.parse(
             _thesis_path(slug).read_text(encoding="utf-8"))
-        landscape_meta, landscape_body = frontmatter.parse(
-            _landscape_path(slug).read_text(encoding="utf-8"))
     except OSError:
         return None
     thesis = _parse_thesis_body(thesis_body)
-    landscape = _parse_landscape_body(landscape_body)
+    # Landscape: structured (landscape.json) when present, else parse the .md.
+    landscape = _load_landscape(slug)
 
     # --- Concept space (drives Focus, belief tags, and the Papers evidence map) --
     concept_list: list[dict] = []

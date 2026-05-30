@@ -133,7 +133,7 @@
         </div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.problems %}
-          <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span>{{ item }}</span></li>
+          <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span>{{ item.text }}</span></li>
           {% endfor %}
         </ul>
         <div class="mt-2 pt-1.5 border-t border-rose-100 text-[10px] text-rose-700">
@@ -149,7 +149,7 @@
         </div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.methods %}
-          <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span>{{ item }}</span></li>
+          <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span>{{ item.text }}</span></li>
           {% endfor %}
         </ul>
         <div class="mt-2 pt-1.5 border-t border-sky-100 text-[10px] text-sky-700">

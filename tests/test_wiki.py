@@ -37,8 +37,14 @@ _FIELD_MODEL_JSON = {
             "Eviction policy choice",          # 7th — dropped
             "ab",                              # too short — dropped
         ],
-        "methods": ["Semantic-anchor approaches", "Diversity-aware compression",
-                    "Thought-adaptive pruning"],
+        # Methods as paper-anchored objects (new shape) — exercises the
+        # problem/method → paper membership the graph engine consumes. NOPE is
+        # filtered by the validator.
+        "methods": [
+            {"text": "Semantic-anchor approaches", "papers": ["2401.00001", "NOPE"]},
+            {"text": "Diversity-aware compression", "papers": ["2401.00002"]},
+            "Thought-adaptive pruning",          # legacy string form still accepted
+        ],
         "debates": ["Is importance pruning sufficient?",
                     "Is reasoning information localized?"],
         "open_questions": ["What actually needs to be preserved for reasoning?",
@@ -114,12 +120,15 @@ def test_generate_overview_writes_field_model_files(tmp_path, monkeypatch):
 def test_validate_field_model_caps_long_lists_and_drops_short_items():
     """The validator clamps landscape columns to _LANDSCAPE_MAX_ITEMS and drops
     items shorter than 3 chars (e.g., the 'ab' planted in the fixture)."""
-    out = wiki._validate_field_model(_FIELD_MODEL_JSON)
+    out = wiki._validate_field_model(_FIELD_MODEL_JSON,
+                                      valid_refs={"2401.00001", "2401.00002", "2401.00003"})
     assert len(out["landscape"]["problems"]) == wiki._LANDSCAPE_MAX_ITEMS
     # 'ab' (length 2) was dropped; the 7th honest item also fell off the end.
-    assert "ab" not in out["landscape"]["problems"]
-    # Methods came in under the cap — survives intact.
+    assert "ab" not in [p["text"] for p in out["landscape"]["problems"]]
+    # Methods came in under the cap — survives intact, as {text, papers} nodes.
     assert len(out["landscape"]["methods"]) == 3
+    sem = next(m for m in out["landscape"]["methods"] if m["text"] == "Semantic-anchor approaches")
+    assert sem["papers"] == ["2401.00001"]      # NOPE filtered to valid refs only
 
 
 def test_validate_field_model_empty_input_returns_empty_shape():
@@ -213,9 +222,16 @@ def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):
     assert loaded["thesis"]["core_tension"].startswith("Reduce memory")
     assert loaded["thesis"]["key_intuition"].startswith("Important reasoning")
     assert loaded["thesis"]["central_question"].startswith("Can we keep")
-    # Landscape lists round-trip.
-    assert "KV cache memory explosion" in loaded["landscape"]["problems"]
-    assert "Semantic-anchor approaches" in loaded["landscape"]["methods"]
+    # Landscape round-trips. Problems/methods are paper-anchored nodes
+    # ({text, papers}); debates/open_questions stay plain strings.
+    prob_texts = [p["text"] for p in loaded["landscape"]["problems"]]
+    assert "KV cache memory explosion" in prob_texts
+    method_texts = [m["text"] for m in loaded["landscape"]["methods"]]
+    assert "Semantic-anchor approaches" in method_texts
+    assert all(isinstance(d, str) for d in loaded["landscape"]["debates"])
+    # Paper membership survives generate→landscape.json→load (NOPE filtered).
+    sem = next(m for m in loaded["landscape"]["methods"] if m["text"] == "Semantic-anchor approaches")
+    assert sem["papers"] == ["2401.00001"]
     # Papers come from the DB (3 fixture papers).
     assert {p["id"] for p in loaded["papers"]} == {1, 2, 3}
     # Each paper carries the attention decoration shape (all zero in this test).
