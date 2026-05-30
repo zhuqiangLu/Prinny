@@ -34,10 +34,27 @@ If a feature you're about to build lets the LLM produce wiki content without the
 > (`generated_by: agent` frontmatter). **Non-destructive** of legacy wikis: the prior
 > `wiki/starter/*` tree (llm_wiki-pattern top picks) and `wiki/<phase-5-section>/*`
 > (notes-based wiki under problems/methods/gaps/benchmarks/synthesis) are no longer read —
-> they stay on disk for safety but contribute nothing to the rendered wiki. The agent will
-> not author user-claim sections (Focus / Beliefs / Research Questions) in this phase;
-> those layers arrive in Phase B / C with their own gating rules (Focus = deterministic from
-> attention; Beliefs = agent-drafted candidates in a tray that the user accepts to promote).
+> they stay on disk for safety but contribute nothing to the rendered wiki.
+>
+> **Phase B (2026-05-31)** extends the same `field-model` skill (still one LLM call) to also
+> produce two structured artifacts: `wiki/sections/concepts.json` (5–12 named research concepts
+> with synonym lists for the deterministic attention scorer) and `wiki/sections/recommended.json`
+> (3–5 editorial reading-path picks with `why_now` rationales; positional labels Start here /
+> Next / Then assigned by index at render time, not by the LLM). These power two new sections:
+>
+>   - **Your Current Focus** (Section 1 sidebar, Stage 2) — top concepts ranked by deterministic
+>     attention. Threshold-gated: doesn't render at all until at least one concept score crosses
+>     `_FOCUS_CONCEPT_FLOOR=3`. The blueprint's "premature inference is anchoring" concern is
+>     enforced in code: no inference is shown until there's enough signal to be honest about it.
+>     Pure SQL scoring — no LLM in the per-render loop. Counts highlights (×1) and notes (×5)
+>     whose text matches any concept synonym via case-insensitive word-boundary regex.
+>   - **Recommended Reading** (Section 4) — the agent's editorial 3-pick reading path, always
+>     rendered when populated. Each pick gets attention chips (🔥 hot / ✨ new) at render time
+>     from the same per-paper scorer as the Papers section.
+>
+> Beliefs / Research Questions (Stages 3/4) and the post-draft grilling (intent capture) remain
+> deferred to later phases with their own gating rules (Beliefs = agent-drafted candidates in a
+> tray that the user accepts to promote; intent = user-stated focus from a short grill).
 >
 > Migration: legacy `wiki/starter/index.md` OR `wiki/overview.json` on disk → `load_overview`
 > returns `{needs_migration: True}` so the panel renders a one-time "schema changed —

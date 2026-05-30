@@ -255,6 +255,23 @@ _FIELD_MODEL_JSON = {
         "open_questions": ["What actually needs to be preserved for reasoning?",
                             "Are reasoning traces compressible?"],
     },
+    # Phase B: concepts + recommended_reading
+    "concepts": [
+        {"name": "Reasoning Preservation", "synonyms": ["reasoning preservation",
+            "preserving reasoning", "reasoning-state"], "blurb": "Keep the KV cache that matters."},
+        {"name": "Semantic Anchors", "synonyms": ["semantic anchor", "anchor token"],
+         "blurb": "Tokens that carry the meaningful structure."},
+        {"name": "KV Distillation", "synonyms": ["kv distillation", "distill kv cache"],
+         "blurb": "Train a student cache from a teacher cache."},
+        {"name": "ab", "synonyms": []},                # too short — dropped
+        {"name": "Reasoning Preservation", "synonyms": []},  # duplicate slug — dropped
+    ],
+    "recommended_reading": [
+        {"paper": "2401.00001", "why_now": "Clearest framing of the trade-off."},
+        {"paper": "2401.00002", "why_now": "Compare alternative approach."},
+        {"paper": "2401.00003", "why_now": "Extends with empirical evals."},
+        {"paper": "NOPE",       "why_now": "Hallucinated — should be dropped."},
+    ],
 }
 
 
@@ -394,6 +411,124 @@ def test_load_overview_returns_none_when_no_wiki(tmp_path, monkeypatch):
     'No wiki yet' card with the Draft button)."""
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     assert wiki.load_overview("vlms") is None
+
+
+# --- Phase B: concepts + Focus + Recommended Reading ------------------------
+
+def test_validate_field_model_keeps_valid_concepts_and_recommendations():
+    """Validator keeps non-duplicate, named concepts (drops 'ab' and the dup
+    slug) and only recommended_reading entries whose ref is in valid_refs."""
+    out = wiki._validate_field_model(_FIELD_MODEL_JSON,
+                                      valid_refs={"2401.00001", "2401.00002", "2401.00003"})
+    slugs = [c["slug"] for c in out["concepts"]]
+    assert "reasoning-preservation" in slugs
+    assert "semantic-anchors" in slugs
+    assert "kv-distillation" in slugs
+    # 'ab' was too short; duplicate 'Reasoning Preservation' was dedup'd.
+    assert "ab" not in slugs
+    assert slugs.count("reasoning-preservation") == 1
+    # Each concept's synonyms include the canonical (lowercased) name.
+    rp = next(c for c in out["concepts"] if c["slug"] == "reasoning-preservation")
+    assert "reasoning preservation" in rp["synonyms"]
+    # Recommended: NOPE dropped; the three valid refs kept in order.
+    refs = [r["paper"] for r in out["recommended"]]
+    assert refs == ["2401.00001", "2401.00002", "2401.00003"]
+
+
+def test_generate_overview_writes_concepts_and_recommended_files(tmp_path, monkeypatch):
+    """generate_overview also writes wiki/sections/concepts.json and
+    recommended.json. Each has an _meta block + structured payload."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.generate_overview("vlms") is True
+    sdir = tmp_path / "collections" / "vlms" / "wiki" / "sections"
+    assert (sdir / "concepts.json").is_file()
+    assert (sdir / "recommended.json").is_file()
+    cdata = json.loads((sdir / "concepts.json").read_text())
+    assert cdata["_meta"]["generated_by"] == "agent"
+    assert {c["slug"] for c in cdata["concepts"]} >= {"reasoning-preservation",
+                                                       "semantic-anchors", "kv-distillation"}
+    rdata = json.loads((sdir / "recommended.json").read_text())
+    assert rdata["_meta"]["generated_by"] == "agent"
+    assert [r["paper"] for r in rdata["picks"]] == ["2401.00001", "2401.00002", "2401.00003"]
+
+
+def test_attention_per_concept_scores_highlights_and_notes(tmp_path, monkeypatch):
+    """The concept scorer counts highlights matching any synonym (×1) and
+    notes matching any synonym (×_ATTENTION_NOTE_WEIGHT). Concepts with no
+    matches are absent from the result (no fake zeros)."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    concepts = [
+        {"name": "Reasoning Preservation", "slug": "reasoning-preservation",
+         "synonyms": ["reasoning preservation", "preserving reasoning"]},
+        {"name": "KV Distillation", "slug": "kv-distillation",
+         "synonyms": ["kv distillation", "distill kv cache"]},
+        {"name": "Quantum Mechanics", "slug": "quantum-mechanics",
+         "synonyms": ["quantum mechanics"]},  # nobody mentions this
+    ]
+    con = connect(db)
+    # 3 highlights mentioning "reasoning preservation" or its synonyms
+    for txt in ("We focus on reasoning preservation in long-context.",
+                 "Preserving reasoning across compression is the goal.",
+                 "Reasoning preservation matters for tool use."):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                    "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', ?)",
+                    (txt,))
+    # 1 note mentioning "KV distillation"
+    con.execute("INSERT INTO paper_notes(paper_id, collection_slug, thoughts, status) "
+                "VALUES (2, 'vlms', 'I want to revisit KV distillation later.', 'noted')")
+    con.commit(); con.close()
+    scores = wiki.attention_per_concept("vlms", concepts)
+    assert scores.get("reasoning-preservation") == 3
+    assert scores.get("kv-distillation") == wiki._ATTENTION_NOTE_WEIGHT   # 5
+    assert "quantum-mechanics" not in scores                              # no signal
+
+
+def test_load_overview_focus_renders_above_threshold_only(tmp_path, monkeypatch):
+    """The Focus section renders only when at least one concept has a score
+    >= _FOCUS_CONCEPT_FLOOR. Below threshold → focus is None (the template
+    shows Section 1 full-width, no sidebar)."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    # No attention yet → focus is None.
+    loaded = wiki.load_overview("vlms")
+    assert loaded["focus"] is None
+    # Add just below threshold (_FOCUS_CONCEPT_FLOOR-1 highlights for one concept) → still None.
+    con = connect(db)
+    for _ in range(wiki._FOCUS_CONCEPT_FLOOR - 1):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                    "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', "
+                    "'reasoning preservation matters')")
+    con.commit(); con.close()
+    assert wiki.load_overview("vlms")["focus"] is None
+    # One more highlight → crosses threshold → focus renders.
+    con = connect(db)
+    con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', "
+                "'reasoning preservation again')")
+    con.commit(); con.close()
+    loaded = wiki.load_overview("vlms")
+    assert loaded["focus"] is not None
+    assert loaded["focus"]["concepts"][0]["slug"] == "reasoning-preservation"
+    assert loaded["focus"]["highlights"] == wiki._FOCUS_CONCEPT_FLOOR
+
+
+def test_load_overview_recommended_resolves_paper_refs_and_assigns_labels(tmp_path, monkeypatch):
+    """The recommended section resolves each ref to a paper object, attaches
+    the live attention chips, and assigns positional labels (Start here /
+    Next / Then) by index — not from the LLM."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    loaded = wiki.load_overview("vlms")
+    assert loaded["recommended"] is not None
+    picks = loaded["recommended"]["picks"]
+    assert len(picks) == 3
+    assert picks[0]["position_label"] == "Start here"
+    assert picks[1]["position_label"] == "Next"
+    assert picks[2]["position_label"] == "Then"
+    # Each pick carries a resolved paper object (id from the DB).
+    assert {pk["paper"]["id"] for pk in picks} == {1, 2, 3}
+    # why_now text preserved.
+    assert picks[0]["why_now"].startswith("Clearest framing")
 
 
 def _seed_three_papers_with_starter(tmp_path, monkeypatch):

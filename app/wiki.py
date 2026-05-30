@@ -962,6 +962,18 @@ def _overview_path(slug: str) -> Path:
 
 _LANDSCAPE_MAX_ITEMS = 6           # cap per column to force real clustering
 _THESIS_CALLOUTS = ("core_tension", "key_intuition", "central_question")
+# Phase B (2026-05-31): concept space + editorial recommended reading
+_CONCEPTS_MAX = 12               # how many concepts the field-model skill may keep
+_CONCEPTS_MIN_NAME_LEN = 3        # drop garbage names ("ab"); same rule as landscape items
+_CONCEPT_SYNONYMS_MAX = 6         # cap synonyms per concept (keeps the regex set sane)
+_RECOMMENDED_MAX = 5              # cap on recommended_reading; default rendered = 3
+# Threshold on a single concept's attention score before the Focus section
+# renders. Below this we don't even hint at user-mind inference (the user's
+# "premature inference is anchoring" concern from the blueprint).
+_FOCUS_CONCEPT_FLOOR = 3
+# Position labels for the recommended-reading list (assigned by index at render
+# time, not by the LLM — keeps the vocabulary consistent across collections).
+_REC_POSITIONS = ("Start here", "Next", "Then", "Then", "Then")
 
 # Slugify helper (page slugs, concept tags). The pattern stays the same; future
 # phases will reuse it.
@@ -980,6 +992,14 @@ def _thesis_path(slug: str) -> Path:
 
 def _landscape_path(slug: str) -> Path:
     return _sections_dir(slug) / "landscape.md"
+
+
+def _concepts_path(slug: str) -> Path:
+    return _sections_dir(slug) / "concepts.json"
+
+
+def _recommended_path(slug: str) -> Path:
+    return _sections_dir(slug) / "recommended.json"
 
 
 def _has_field_model(slug: str) -> bool:
@@ -1001,18 +1021,28 @@ def _has_starter_wiki(slug: str) -> bool:
 _SECTION_RE = re.compile(r"(?m)^##\s+(?P<title>[^\n]+?)\s*\n(?P<body>.*?)(?=^##\s+|\Z)", re.DOTALL)
 
 
-def _validate_field_model(data: dict) -> dict:
+def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
     """Validate the field-model LLM output and clamp it.
 
     Thesis: one paragraph + three single-sentence callouts. Empty fields stay
     empty (we never invent content to fill them).
 
-    Landscape: four lists of short items (problems, methods, debates,
-    open_questions). Each list capped at _LANDSCAPE_MAX_ITEMS so the agent
-    can't dump a 17-method bibliography. Items shorter than 3 chars or empty
-    are dropped."""
+    Landscape: four lists of short items capped at _LANDSCAPE_MAX_ITEMS so the
+    agent can't dump a 17-method bibliography. Items shorter than 3 chars or
+    duplicates are dropped.
+
+    Concepts (Phase B): a list of named research concepts the agent extracted
+    as worth tracking. Each carries 1-_CONCEPT_SYNONYMS_MAX synonyms used by
+    the deterministic attention scorer. Concept count capped at _CONCEPTS_MAX;
+    short/empty names dropped; duplicate slugs deduped.
+
+    Recommended reading (Phase B): 1-_RECOMMENDED_MAX papers the agent
+    suggests as a starting reading path. Refs not in ``valid_refs`` are
+    dropped; ``why_now`` text trimmed; positional labels assigned at render
+    time (not by the LLM) for consistency."""
     def text(s):
         return (s or "").strip() if isinstance(s, str) else ""
+    valid_refs = valid_refs or set()
 
     th = data.get("thesis") if isinstance(data.get("thesis"), dict) else {}
     thesis = {"one_paragraph": text(th.get("one_paragraph"))}
@@ -1041,7 +1071,53 @@ def _validate_field_model(data: dict) -> dict:
         "debates":        items("debates"),
         "open_questions": items("open_questions"),
     }
-    return {"thesis": thesis, "landscape": landscape}
+
+    # --- concepts (Phase B) -------------------------------------------------
+    concepts: list[dict] = []
+    seen_slugs: set[str] = set()
+    for c in (data.get("concepts") or []):
+        if not isinstance(c, dict):
+            continue
+        name = text(c.get("name"))
+        if len(name) < _CONCEPTS_MIN_NAME_LEN:
+            continue
+        slug = _SLUG_RE.sub("-", name.lower()).strip("-")
+        if not slug or slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+        raw_syns = c.get("synonyms") if isinstance(c.get("synonyms"), list) else []
+        synonyms = []
+        # Always include the canonical name as a synonym candidate so the
+        # scorer matches text that uses the name verbatim.
+        for syn_raw in [name, *raw_syns]:
+            s = text(syn_raw).lower()
+            if len(s) >= _CONCEPTS_MIN_NAME_LEN and s not in synonyms:
+                synonyms.append(s)
+            if len(synonyms) >= _CONCEPT_SYNONYMS_MAX:
+                break
+        concepts.append({
+            "name": name, "slug": slug, "synonyms": synonyms,
+            "blurb": text(c.get("blurb")),
+        })
+        if len(concepts) >= _CONCEPTS_MAX:
+            break
+
+    # --- recommended reading (Phase B) --------------------------------------
+    recommended: list[dict] = []
+    seen_recs: set[str] = set()
+    for r in (data.get("recommended_reading") or []):
+        if not isinstance(r, dict):
+            continue
+        ref = r.get("paper")
+        if ref not in valid_refs or ref in seen_recs:
+            continue
+        seen_recs.add(ref)
+        recommended.append({"paper": ref, "why_now": text(r.get("why_now"))})
+        if len(recommended) >= _RECOMMENDED_MAX:
+            break
+
+    return {"thesis": thesis, "landscape": landscape,
+            "concepts": concepts, "recommended": recommended}
 
 
 def _flag_underread(slug: str, limit: int = 10) -> list[dict]:
@@ -1231,6 +1307,32 @@ def _write_landscape_page(slug: str, landscape: dict, meta_extra: dict) -> None:
                                       encoding="utf-8")
 
 
+def _write_concepts_file(slug: str, concepts: list[dict]) -> None:
+    """Write wiki/sections/concepts.json — the concept space the deterministic
+    attention scorer uses. JSON, not markdown: structured data, no prose."""
+    payload = {
+        "concepts": concepts,
+        "_meta": {"generated_by": "agent", "generator": "field-model",
+                  "generated_at": _now()},
+    }
+    _concepts_path(slug).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _write_recommended_file(slug: str, recommended: list[dict]) -> None:
+    """Write wiki/sections/recommended.json — the agent's editorial reading
+    path (3-5 papers in order). JSON for the same reason as concepts: it's
+    structured data the renderer composes into a Section 4 card.
+
+    Key is `picks` (not `items`) because Jinja resolves `obj.items` as
+    `dict.items()`, not the key — a footgun we've hit twice already."""
+    payload = {
+        "picks": recommended,
+        "_meta": {"generated_by": "agent", "generator": "field-model",
+                  "generated_at": _now()},
+    }
+    _recommended_path(slug).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     """Generate the Field Model (Stage 0 of the cognitive-model wiki, 2026-05-31).
 
@@ -1283,25 +1385,34 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
         data = _extract_json(out)
     except Exception:  # noqa: BLE001
         return False
-    field = _validate_field_model(data or {})
+    field = _validate_field_model(data or {}, valid_refs=included_refs)
     # Refuse drafts where neither the thesis nor any landscape column came back
     # populated — better to fail visibly than write empty section files.
     if (not field["thesis"]["one_paragraph"]
             and not any(field["landscape"].values())):
         return False
 
-    # --- Write the two section files atomically ------------------------------
-    stage("writing", pages_done=0, pages_total=2)
+    # --- Write the section files atomically ----------------------------------
+    # Four files in Phase B: thesis.md, landscape.md, concepts.json,
+    # recommended.json. pages_total reflects all four for the progress UI.
+    stage("writing", pages_done=0, pages_total=4)
     _wipe_sections_tree(slug)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
     meta_extra = {"paper_count": len(included_refs),
                   "pdfs_read": len(pdf_refs),
                   "pdfs_missing": len(included_refs) - len(pdf_refs)}
     _write_thesis_page(slug, field["thesis"], meta_extra)
-    stage("writing", pages_done=1, pages_total=2)
+    stage("writing", pages_done=1, pages_total=4)
     _write_landscape_page(slug, field["landscape"], meta_extra)
-    stage("writing", pages_done=2, pages_total=2)
-    _append_log(slug, f"generated field model ({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
+    stage("writing", pages_done=2, pages_total=4)
+    _write_concepts_file(slug, field["concepts"])
+    stage("writing", pages_done=3, pages_total=4)
+    _write_recommended_file(slug, field["recommended"])
+    stage("writing", pages_done=4, pages_total=4)
+    _append_log(slug, f"generated field model "
+                       f"({len(pdf_refs)}/{len(included_refs)} PDFs, "
+                       f"{len(field['concepts'])} concepts, "
+                       f"{len(field['recommended'])} recommended)", digest)
     return True
 
 
@@ -1532,6 +1643,63 @@ def attention_scores(slug: str) -> dict[int, int]:
     return dict(scores)
 
 
+def attention_per_concept(slug: str, concepts: list[dict]) -> dict[str, int]:
+    """Per-concept attention score (Phase B). Deterministic regex over highlight
+    selected_text and per-paper note bodies — no LLM. A concept gets +1 per
+    matching highlight and +_ATTENTION_NOTE_WEIGHT per matching note. Synonym
+    matching is case-insensitive substring against the concept's synonyms list
+    (which always includes the canonical name; see _validate_field_model).
+
+    Returns ``{concept_slug: int}`` with entries only for concepts that scored
+    at least 1 (no fake zeros)."""
+    if not concepts:
+        return {}
+    scores: dict[str, int] = defaultdict(int)
+    # Pre-compile a single regex per concept that ORs its synonyms with word
+    # boundaries so 'gap' doesn't match 'agape'. Synonyms are lowercase already.
+    patterns: dict[str, re.Pattern] = {}
+    for c in concepts:
+        syns = [re.escape(s) for s in (c.get("synonyms") or []) if s]
+        if not syns:
+            continue
+        patterns[c["slug"]] = re.compile(r"\b(?:" + "|".join(syns) + r")\b",
+                                          flags=re.IGNORECASE)
+    if not patterns:
+        return {}
+    con = connect()
+    try:
+        # Highlights: count one hit per highlight (a long quote that mentions
+        # the concept multiple times still counts as one signal — same shape
+        # as Phase C's per-paper attention).
+        for r in con.execute(
+            "SELECT selected_text FROM annotations "
+            "WHERE collection_slug=? AND kind='highlight' "
+            "AND COALESCE(selected_text,'')<>''", (slug,)
+        ):
+            text = r["selected_text"] or ""
+            for slug_, pat in patterns.items():
+                if pat.search(text):
+                    scores[slug_] += 1
+        # Notes: a non-empty note that mentions the concept counts more (×5,
+        # same weighting as per-paper note attention). The match is over the
+        # union of summary/thoughts/key_quotes (anywhere in the user's writing).
+        for r in con.execute(
+            "SELECT COALESCE(summary,'') || ' ' || COALESCE(thoughts,'') || "
+            "' ' || COALESCE(key_quotes,'') AS body "
+            "FROM paper_notes WHERE collection_slug=? AND ("
+            "  COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' "
+            "  OR COALESCE(key_quotes,'')<>''"
+            ")", (slug,)
+        ):
+            body = r["body"] or ""
+            for slug_, pat in patterns.items():
+                if pat.search(body):
+                    scores[slug_] += _ATTENTION_NOTE_WEIGHT
+    finally:
+        con.close()
+    return dict(scores)
+
+
 def attention_changed_since(slug: str, since: str | None) -> set[int]:
     """Paper ids whose highlights/notes were created or updated after ``since``. Used to
     flag cards "new since last view" on the wiki page. ``since`` None → empty (no recency
@@ -1674,5 +1842,76 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
         "generated_by": thesis_meta.get("generated_by", "agent"),
     }
 
+    # --- Phase B: concepts → Focus + Recommended Reading -------------------
+    # Concepts are written by generate_overview; we read them and compute
+    # attention live. The Focus section is threshold-gated — it doesn't render
+    # at all until at least one concept crosses _FOCUS_CONCEPT_FLOOR.
+    focus = None
+    try:
+        if _concepts_path(slug).is_file():
+            concepts_payload = json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+            concepts = concepts_payload.get("concepts") or []
+            concept_scores = attention_per_concept(slug, concepts)
+            if any(s >= _FOCUS_CONCEPT_FLOOR for s in concept_scores.values()):
+                top = sorted(
+                    [{"name": c["name"], "slug": c["slug"], "blurb": c.get("blurb", ""),
+                      "score": concept_scores.get(c["slug"], 0)} for c in concepts
+                     if concept_scores.get(c["slug"], 0) >= _FOCUS_CONCEPT_FLOOR],
+                    key=lambda x: -x["score"])[:5]
+                # Honest signal counts (for the "Based on X highlights · Y notes"
+                # subtext under the focus chips). Pulled live; not stored.
+                # Use the module-level `connect` symbol so tests' monkeypatch
+                # of wiki.connect takes effect.
+                _con = connect()
+                try:
+                    nh = _con.execute(
+                        "SELECT COUNT(*) FROM annotations "
+                        "WHERE collection_slug=? AND kind='highlight'", (slug,)
+                    ).fetchone()[0]
+                    nn = _con.execute(
+                        "SELECT COUNT(*) FROM paper_notes WHERE collection_slug=? AND ("
+                        "  COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' "
+                        "  OR COALESCE(key_quotes,'')<>''"
+                        ")", (slug,)
+                    ).fetchone()[0]
+                finally:
+                    _con.close()
+                focus = {"concepts": top, "highlights": nh, "notes": nn}
+    except (ValueError, OSError):
+        focus = None
+
+    # Recommended reading: always render when the file has items. Resolve each
+    # ref to a paper object so the template can link straight to /c/<slug>/p/<id>,
+    # and decorate with hot/new chips driven by per-paper attention.
+    recommended = None
+    try:
+        if _recommended_path(slug).is_file():
+            rec_payload = json.loads(_recommended_path(slug).read_text(encoding="utf-8"))
+            raw_picks = rec_payload.get("picks") or []
+            paper_by_id = {p["id"]: p for p in papers}
+            # Resolve refs via _ref_map(slug) so any of {zotero_key,arxiv_id,
+            # openreview_id, str(id)} works.
+            rmap = _ref_map(slug)
+            picks_out = []
+            for i, r in enumerate(raw_picks):
+                ref = r.get("paper")
+                pinfo = rmap.get(ref) if ref else None
+                if not pinfo:
+                    continue
+                pid = pinfo["id"]
+                paper_full = paper_by_id.get(pid)
+                if not paper_full:
+                    continue
+                picks_out.append({
+                    "paper": paper_full,
+                    "why_now": (r.get("why_now") or "").strip(),
+                    "position_label": _REC_POSITIONS[min(i, len(_REC_POSITIONS) - 1)],
+                })
+            if picks_out:
+                recommended = {"picks": picks_out}
+    except (ValueError, OSError):
+        recommended = None
+
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
-            "papers": papers, "meta": meta_out}
+            "papers": papers, "focus": focus, "recommended": recommended,
+            "meta": meta_out}
