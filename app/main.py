@@ -1670,6 +1670,37 @@ def wiki_draft_status(slug: str) -> JSONResponse:
     })
 
 
+# --- Phase C: belief tray routes -------------------------------------------
+# Suggest is synchronous (typical 10-20s LLM call). Accept/Dismiss are pure
+# file moves. All three re-render the panel so the user sees the new state.
+
+@app.post("/c/{slug}/wiki/beliefs/suggest", response_class=HTMLResponse)
+def wiki_beliefs_suggest(request: Request, slug: str) -> HTMLResponse:
+    """Run the belief-draft LLM call synchronously and re-render the panel.
+    Refusal modes (no concepts, no signal) come back as a flash message via
+    request.session if available; otherwise the panel simply re-renders with
+    no new candidates."""
+    _require_collection(slug)
+    wiki.suggest_beliefs(slug)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/beliefs/{cid}/accept", response_class=HTMLResponse)
+def wiki_belief_accept(request: Request, slug: str, cid: str) -> HTMLResponse:
+    """Promote a candidate to accepted (file move). Re-render the panel."""
+    _require_collection(slug)
+    wiki.accept_belief(slug, cid)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/beliefs/{cid}/dismiss", response_class=HTMLResponse)
+def wiki_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
+    """Drop a candidate (delete the file). Re-render the panel."""
+    _require_collection(slug)
+    wiki.dismiss_belief(slug, cid)
+    return _wiki_panel(request, slug)
+
+
 def _find_wiki_page(slug: str, name: str):
     wdir = wiki._wikidir(slug)
     if wdir.is_dir():

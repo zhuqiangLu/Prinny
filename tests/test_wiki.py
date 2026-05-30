@@ -531,6 +531,219 @@ def test_load_overview_recommended_resolves_paper_refs_and_assigns_labels(tmp_pa
     assert picks[0]["why_now"].startswith("Clearest framing")
 
 
+# --- Phase C: beliefs (candidates tray + accepted) --------------------------
+
+_BELIEF_DRAFT_JSON = {
+    "candidates": [
+        {"title": "Reasoning information is concentrated in a small subset of KV states.",
+         "confidence": "emerging",
+         "supporting_papers": ["2401.00001", "2401.00002"],
+         "related_concepts": ["reasoning-preservation", "kv-distillation"]},
+        {"title": "Static importance scores are insufficient for hard reasoning.",
+         "confidence": "uncertain",
+         "supporting_papers": ["2401.00002"],
+         "related_concepts": ["reasoning-preservation"]},
+        # Hallucinated paper ref — validator drops the whole candidate.
+        {"title": "This belief cites only invalid papers.",
+         "confidence": "emerging",
+         "supporting_papers": ["NOPE"],
+         "related_concepts": []},
+        # Too-short title — validator drops it.
+        {"title": "Short.",
+         "confidence": "medium",
+         "supporting_papers": ["2401.00001"],
+         "related_concepts": []},
+    ],
+}
+
+
+def _two_step_stub(field=None, belief=None):
+    """LLM stub that returns different payloads based on the system prompt
+    fingerprint. The field-model skill includes "Output JSON: {thesis"; the
+    belief-draft skill includes "CONCEPTS in this collection" in the user
+    prompt. Either argument is forwarded if non-None; otherwise default JSON."""
+    fj = field if field is not None else _FIELD_MODEL_JSON
+    bj = belief if belief is not None else _BELIEF_DRAFT_JSON
+    def stub(messages, model=None):
+        user = messages[-1]["content"]
+        if "CONCEPTS in this collection" in user:
+            if bj is None:
+                raise RuntimeError("simulated belief LLM failure")
+            return json.dumps(bj)
+        if fj is None:
+            raise RuntimeError("simulated field LLM failure")
+        return json.dumps(fj)
+    return stub
+
+
+def _seed_with_signal(tmp_path, monkeypatch, stub=None, highlights=6):
+    """Fixture: 3 papers + draft Field Model + enough highlights to cross the
+    Suggest-beliefs floor. Returns the DB path."""
+    db = _seed_three_papers(tmp_path, monkeypatch, stub or _two_step_stub())
+    wiki.generate_overview("vlms")
+    con = connect(db)
+    # Plant `highlights` highlights all matching the "reasoning preservation"
+    # synonym so the concept crosses _BELIEF_SUGGEST_FLOOR=5 by default.
+    for _ in range(highlights):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                    "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', "
+                    "'we focus on reasoning preservation in long-context')")
+    con.commit(); con.close()
+    return db
+
+
+def test_validate_belief_candidates_drops_invalid_and_short():
+    """Beliefs without a valid supporting paper are dropped; short titles
+    dropped; duplicate slugs deduped; cap at _BELIEF_CANDIDATES_MAX."""
+    valid = {"2401.00001", "2401.00002", "2401.00003"}
+    concepts = {"reasoning-preservation", "kv-distillation"}
+    out = wiki._validate_belief_candidates(_BELIEF_DRAFT_JSON, valid, concepts)
+    titles = [c["title"] for c in out]
+    assert any("Reasoning information is concentrated" in t for t in titles)
+    assert any("Static importance" in t for t in titles)
+    # Hallucinated-only-refs belief dropped.
+    assert not any("invalid papers" in t for t in titles)
+    # Too-short title dropped.
+    assert not any(t == "Short." for t in titles)
+    # All survivors cite at least one valid ref.
+    for c in out:
+        assert c["supporting_papers"]
+        assert all(p in valid for p in c["supporting_papers"])
+    # Related concepts filtered to known slugs.
+    for c in out:
+        assert all(s in concepts for s in c["related_concepts"])
+
+
+def test_can_suggest_beliefs_respects_signal_floor(tmp_path, monkeypatch):
+    """Below the floor, can_suggest_beliefs is False (button hidden, premature
+    inference avoided). Above floor → True."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _two_step_stub())
+    wiki.generate_overview("vlms")
+    assert wiki.can_suggest_beliefs("vlms") is False    # no signal yet
+    con = connect(db)
+    # 4 < _BELIEF_SUGGEST_FLOOR=5 → still False
+    for _ in range(wiki._BELIEF_SUGGEST_FLOOR - 1):
+        con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                    "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', "
+                    "'reasoning preservation matters')")
+    con.commit(); con.close()
+    assert wiki.can_suggest_beliefs("vlms") is False
+    # One more highlight → crosses floor.
+    con = connect(db)
+    con.execute("INSERT INTO annotations(paper_id, collection_slug, kind, page, "
+                "position_json, selected_text) VALUES (1, 'vlms', 'highlight', 1, '{}', "
+                "'reasoning preservation again')")
+    con.commit(); con.close()
+    assert wiki.can_suggest_beliefs("vlms") is True
+
+
+def test_can_suggest_beliefs_unblocks_on_any_note(tmp_path, monkeypatch):
+    """OR-branch of the signal floor: any non-empty note unblocks the
+    Suggest button even without concept matches."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _two_step_stub())
+    wiki.generate_overview("vlms")
+    assert wiki.can_suggest_beliefs("vlms") is False
+    con = connect(db)
+    con.execute("INSERT INTO paper_notes(paper_id, collection_slug, thoughts, status) "
+                "VALUES (1, 'vlms', 'a real thought', 'noted')")
+    con.commit(); con.close()
+    assert wiki.can_suggest_beliefs("vlms") is True
+
+
+def test_suggest_beliefs_writes_candidates_to_tray(tmp_path, monkeypatch):
+    """The full pipeline: signal crosses floor → suggest_beliefs runs the LLM
+    → validates → writes each surviving candidate as its own .md file under
+    wiki/sections/beliefs/_candidates/."""
+    _seed_with_signal(tmp_path, monkeypatch)
+    result = wiki.suggest_beliefs("vlms")
+    assert result["generated"] >= 2
+    cdir = tmp_path / "collections" / "vlms" / "wiki" / "sections" / "beliefs" / "_candidates"
+    files = sorted(cdir.glob("*.md"))
+    assert len(files) >= 2
+    # Each candidate file has full frontmatter.
+    meta, _ = wiki.frontmatter.parse(files[0].read_text())
+    assert meta["type"] == "belief"
+    assert meta["status"] == "candidate"
+    assert meta["generated_by"] == "agent"
+    assert meta["generator"] == "belief-draft"
+    assert isinstance(meta["supporting_papers"], list) and meta["supporting_papers"]
+    assert meta["confidence"] in wiki._BELIEF_CONFIDENCE_VALUES
+
+
+def test_suggest_beliefs_refuses_below_signal_floor(tmp_path, monkeypatch):
+    """Calling suggest_beliefs below the signal floor returns an error and
+    writes nothing — same honesty rule as the button-hiding logic."""
+    _seed_three_papers(tmp_path, monkeypatch, _two_step_stub())
+    wiki.generate_overview("vlms")
+    result = wiki.suggest_beliefs("vlms")  # no signal yet
+    assert "error" in result and result["generated"] == 0
+    cdir = tmp_path / "collections" / "vlms" / "wiki" / "sections" / "beliefs" / "_candidates"
+    assert not cdir.exists() or not list(cdir.glob("*.md"))
+
+
+def test_suggest_beliefs_skips_duplicates(tmp_path, monkeypatch):
+    """A second suggest run that returns the same title slugs doesn't write
+    duplicate candidate files — the existing-titles check filters them out."""
+    _seed_with_signal(tmp_path, monkeypatch)
+    first = wiki.suggest_beliefs("vlms")
+    assert first["generated"] >= 2
+    second = wiki.suggest_beliefs("vlms")     # same stub returns same payload
+    assert second["generated"] == 0
+    assert second["dropped_dupes"] >= 2
+
+
+def test_accept_belief_moves_candidate_to_accepted(tmp_path, monkeypatch):
+    """accept_belief promotes the candidate file from _candidates/<id>.md to
+    beliefs/<title-slug>.md, bumps status='accepted' + accepted_at."""
+    _seed_with_signal(tmp_path, monkeypatch)
+    wiki.suggest_beliefs("vlms")
+    candidates = wiki.list_belief_candidates("vlms")
+    cid = candidates[0]["id"]
+    assert wiki.accept_belief("vlms", cid) is True
+    # Candidate file gone.
+    cdir = tmp_path / "collections" / "vlms" / "wiki" / "sections" / "beliefs" / "_candidates"
+    assert not (cdir / f"{cid}.md").exists()
+    # Accepted file exists in beliefs/ root.
+    accepted = wiki.list_accepted_beliefs("vlms")
+    assert len(accepted) == 1
+    assert accepted[0]["status"] == "accepted"
+    assert accepted[0]["accepted_at"]
+    # The other candidate is still pending.
+    remaining = wiki.list_belief_candidates("vlms")
+    assert len(remaining) == len(candidates) - 1
+
+
+def test_dismiss_belief_deletes_candidate(tmp_path, monkeypatch):
+    """dismiss_belief deletes the candidate file without writing anything."""
+    _seed_with_signal(tmp_path, monkeypatch)
+    wiki.suggest_beliefs("vlms")
+    candidates = wiki.list_belief_candidates("vlms")
+    cid = candidates[0]["id"]
+    assert wiki.dismiss_belief("vlms", cid) is True
+    remaining = wiki.list_belief_candidates("vlms")
+    assert cid not in {c["id"] for c in remaining}
+    # Nothing in accepted.
+    assert wiki.list_accepted_beliefs("vlms") == []
+
+
+def test_load_overview_returns_beliefs_with_resolved_papers(tmp_path, monkeypatch):
+    """load_overview decorates candidates and accepted beliefs with resolved
+    paper objects and concept names; can_suggest_beliefs reflects signal."""
+    _seed_with_signal(tmp_path, monkeypatch)
+    wiki.suggest_beliefs("vlms")
+    loaded = wiki.load_overview("vlms")
+    assert loaded["can_suggest_beliefs"] is True
+    assert loaded["belief_candidates"]
+    cand = loaded["belief_candidates"][0]
+    assert cand["papers"] and cand["papers"][0]["id"] in (1, 2, 3)
+    assert cand["related"]      # at least one concept tag resolved
+    # Accept one and verify it moves into the beliefs list.
+    wiki.accept_belief("vlms", cand["id"])
+    loaded2 = wiki.load_overview("vlms")
+    assert len(loaded2["beliefs"]) == 1
+    assert loaded2["beliefs"][0]["title"] == cand["title"]
+
+
 def _seed_three_papers_with_starter(tmp_path, monkeypatch):
     """Shared fixture for the attention tests: 3 papers + a generated Field
     Model, so paper-card re-ranking / hot / new badges have something to chew on."""

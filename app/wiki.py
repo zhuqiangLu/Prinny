@@ -975,6 +975,14 @@ _FOCUS_CONCEPT_FLOOR = 3
 # time, not by the LLM — keeps the vocabulary consistent across collections).
 _REC_POSITIONS = ("Start here", "Next", "Then", "Then", "Then")
 
+# Phase C (2026-05-31): beliefs — agent-drafted candidates the user accepts
+# to promote. Strict scope: a belief MUST cite ≥1 supporting paper in the
+# collection; below the signal floor, the Suggest button isn't even shown.
+_BELIEF_CANDIDATES_MAX = 5         # max candidates per Suggest run
+_BELIEF_SUGGEST_FLOOR = 5          # min concept score OR ≥1 note to enable the button
+_BELIEF_TITLE_MIN_LEN = 10         # shorter than this looks like a stub
+_BELIEF_CONFIDENCE_VALUES = ("emerging", "medium", "uncertain")
+
 # Slugify helper (page slugs, concept tags). The pattern stays the same; future
 # phases will reuse it.
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -1000,6 +1008,17 @@ def _concepts_path(slug: str) -> Path:
 
 def _recommended_path(slug: str) -> Path:
     return _sections_dir(slug) / "recommended.json"
+
+
+# Phase C: beliefs tree.
+#   wiki/sections/beliefs/                — accepted beliefs (the wiki content)
+#   wiki/sections/beliefs/_candidates/    — agent-drafted candidates (the tray)
+def _beliefs_dir(slug: str) -> Path:
+    return _sections_dir(slug) / "beliefs"
+
+
+def _belief_candidates_dir(slug: str) -> Path:
+    return _beliefs_dir(slug) / "_candidates"
 
 
 def _has_field_model(slug: str) -> bool:
@@ -1316,6 +1335,264 @@ def _write_concepts_file(slug: str, concepts: list[dict]) -> None:
                   "generated_at": _now()},
     }
     _concepts_path(slug).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+# --- belief tray (Phase C) ---------------------------------------------------
+
+def _validate_belief_candidates(data: dict, valid_refs: set, concept_slugs: set) -> list[dict]:
+    """Validate the belief-draft LLM output. Hard rules, enforced in code:
+      - title is a non-empty sentence (≥_BELIEF_TITLE_MIN_LEN chars).
+      - supporting_papers is a non-empty subset of valid_refs. A belief that
+        can't cite a paper in the collection gets dropped — same anti-
+        fabrication rule we use for the field model.
+      - related_concepts is filtered against concept_slugs; unknown slugs drop.
+      - confidence is clamped to _BELIEF_CONFIDENCE_VALUES (default 'emerging').
+      - Output capped at _BELIEF_CANDIDATES_MAX. Duplicates (by title slug)
+        deduped."""
+    def text(s):
+        return (s or "").strip() if isinstance(s, str) else ""
+    raw = data.get("candidates") if isinstance(data.get("candidates"), list) else []
+    out: list[dict] = []
+    seen_slugs: set[str] = set()
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        title = text(c.get("title"))
+        if len(title) < _BELIEF_TITLE_MIN_LEN:
+            continue
+        slug = _SLUG_RE.sub("-", title.lower()).strip("-")[:60]
+        if not slug or slug in seen_slugs:
+            continue
+        papers = [p for p in (c.get("supporting_papers") or []) if p in valid_refs]
+        if not papers:
+            continue  # un-cited beliefs are dropped (hard rule)
+        concepts = [s for s in (c.get("related_concepts") or []) if s in concept_slugs]
+        confidence = (text(c.get("confidence")).lower()
+                      if text(c.get("confidence")).lower() in _BELIEF_CONFIDENCE_VALUES
+                      else "emerging")
+        out.append({
+            "slug": slug, "title": title, "confidence": confidence,
+            "supporting_papers": papers, "related_concepts": concepts,
+        })
+        seen_slugs.add(slug)
+        if len(out) >= _BELIEF_CANDIDATES_MAX:
+            break
+    return out
+
+
+def _read_belief_file(path: Path) -> dict | None:
+    """Parse one belief .md file → dict {id, title, status, confidence,
+    supporting_papers, related_concepts, generated_at, accepted_at?}. Returns
+    None on read/parse failure (we skip rather than crash the panel)."""
+    try:
+        meta, body = frontmatter.parse(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    title = (meta.get("title") or "").strip()
+    if not title:
+        return None
+    return {
+        "id": (meta.get("id") or path.stem).strip(),
+        "title": title,
+        "status": meta.get("status") or "candidate",
+        "confidence": meta.get("confidence") or "emerging",
+        "supporting_papers": list(meta.get("supporting_papers") or []),
+        "related_concepts": list(meta.get("related_concepts") or []),
+        "generated_at": meta.get("generated_at"),
+        "accepted_at": meta.get("accepted_at"),
+        "body": body.strip(),
+    }
+
+
+def list_belief_candidates(slug: str) -> list[dict]:
+    """All pending candidates (the tray). Sorted oldest-first so the user
+    sees the longest-pending suggestion at the top."""
+    cdir = _belief_candidates_dir(slug)
+    if not cdir.is_dir():
+        return []
+    out = [_read_belief_file(p) for p in sorted(cdir.glob("*.md"))]
+    return [b for b in out if b]
+
+
+def list_accepted_beliefs(slug: str) -> list[dict]:
+    """All beliefs the user has accepted (Section 3 content). Excludes the
+    _candidates/ subdirectory."""
+    bdir = _beliefs_dir(slug)
+    if not bdir.is_dir():
+        return []
+    out = []
+    for p in sorted(bdir.glob("*.md")):
+        b = _read_belief_file(p)
+        if b and b.get("status") == "accepted":
+            out.append(b)
+    return out
+
+
+def can_suggest_beliefs(slug: str) -> bool:
+    """The 'Suggest beliefs' button only renders when there's honest signal:
+    at least one concept score ≥ _BELIEF_SUGGEST_FLOOR OR at least one non-
+    empty note in the collection. Below that, premature inference would
+    anchor (the user's blueprint concern)."""
+    if not _concepts_path(slug).is_file():
+        return False
+    try:
+        cdata = json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return False
+    concepts = cdata.get("concepts") or []
+    scores = attention_per_concept(slug, concepts)
+    if any(s >= _BELIEF_SUGGEST_FLOOR for s in scores.values()):
+        return True
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT 1 FROM paper_notes WHERE collection_slug=? AND ("
+            "COALESCE(thoughts,'')<>'' OR COALESCE(summary,'')<>''"
+            ") LIMIT 1", (slug,)
+        ).fetchone()
+        return bool(row)
+    finally:
+        con.close()
+
+
+def suggest_beliefs(slug: str) -> dict:
+    """One LLM call → 1-5 candidate beliefs written to the tray. The agent
+    sees the concept space, the top highlights and notes, and the current
+    accepted+candidate beliefs (so it doesn't propose duplicates).
+
+    Returns ``{generated, dropped_dupes, dropped_invalid, error}``. Each
+    candidate file is written individually so a partial parse failure still
+    surfaces what survived."""
+    if not _concepts_path(slug).is_file():
+        return {"error": "No concepts file yet — draft the Field Model first.",
+                "generated": 0}
+    try:
+        cdata = json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"error": "Concepts file is unreadable.", "generated": 0}
+    concepts = cdata.get("concepts") or []
+    if not concepts:
+        return {"error": "No concepts to anchor beliefs against.", "generated": 0}
+    if not can_suggest_beliefs(slug):
+        return {"error": "Not enough attention signal to honestly suggest beliefs yet.",
+                "generated": 0}
+
+    # --- Gather signal: top highlights + notes (the user's writing) ---------
+    con = connect()
+    try:
+        rows = con.execute(
+            "SELECT selected_text FROM annotations WHERE collection_slug=? "
+            "AND kind='highlight' AND COALESCE(selected_text,'')<>'' "
+            "ORDER BY created_at DESC LIMIT 25", (slug,)
+        ).fetchall()
+        highlights = [(r["selected_text"] or "").strip() for r in rows if r["selected_text"]]
+        rows = con.execute(
+            "SELECT COALESCE(summary,'') s, COALESCE(thoughts,'') t, "
+            "COALESCE(key_quotes,'') q FROM paper_notes WHERE collection_slug=? "
+            "AND (COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' "
+            "     OR COALESCE(key_quotes,'')<>'') ORDER BY updated_at DESC LIMIT 15",
+            (slug,)
+        ).fetchall()
+        notes = [" ".join(filter(None, [r["s"], r["t"], r["q"]])) for r in rows]
+    finally:
+        con.close()
+
+    # --- Existing beliefs (so the agent doesn't propose dupes) --------------
+    existing = list_accepted_beliefs(slug) + list_belief_candidates(slug)
+    existing_titles = "\n".join(f"- {b['title']}" for b in existing) or "(none yet)"
+    existing_slugs = {b["slug"] for b in existing if b.get("slug")} | {
+        _SLUG_RE.sub("-", b["title"].lower()).strip("-")[:60] for b in existing}
+
+    # --- Build the LLM input ------------------------------------------------
+    concepts_blurb = "\n".join(
+        f"- {c['name']} (slug: {c['slug']}; {c.get('blurb', '')})" for c in concepts)
+    # included_refs: refs of papers actually in the collection (the validator gate)
+    valid_refs = set()
+    rmap = _ref_map(slug)
+    for ref in rmap.keys():
+        valid_refs.add(ref)
+    valid_refs_blurb = "\n".join(f"- {r}" for r in sorted(valid_refs)[:60])
+
+    user = (
+        "CONCEPTS in this collection (slug — name — blurb):\n"
+        f"{concepts_blurb}\n\n"
+        "USER'S HIGHLIGHTS (most recent, one per line):\n"
+        + ("\n".join(f"- {h}" for h in highlights[:25]) or "(none)") + "\n\n"
+        "USER'S NOTES (most recent, joined):\n"
+        + ("\n\n---\n\n".join(notes[:15]) or "(none)") + "\n\n"
+        f"EXISTING BELIEFS (don't repeat these):\n{existing_titles}\n\n"
+        "VALID PAPER REFS (only cite these exactly):\n"
+        f"{valid_refs_blurb}\n"
+    )
+
+    from . import agent_skills
+    system = (agent_skills.skill_body("belief-draft")
+              or "Output JSON: {candidates:[{title, confidence, supporting_papers, related_concepts}]}.")
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": user}])
+        data = _extract_json(out)
+    except Exception:  # noqa: BLE001
+        return {"error": "The LLM call failed.", "generated": 0}
+
+    concept_slugs = {c["slug"] for c in concepts}
+    candidates = _validate_belief_candidates(data or {}, valid_refs, concept_slugs)
+    # Drop duplicates against existing beliefs
+    new_candidates = [c for c in candidates if c["slug"] not in existing_slugs]
+    dropped_dupes = len(candidates) - len(new_candidates)
+
+    # --- Write each candidate as its own .md file ---------------------------
+    cdir = _belief_candidates_dir(slug)
+    cdir.mkdir(parents=True, exist_ok=True)
+    import uuid
+    for c in new_candidates:
+        cid = uuid.uuid4().hex[:10]
+        meta = {
+            "id": cid, "type": "belief", "status": "candidate",
+            "title": c["title"], "confidence": c["confidence"],
+            "supporting_papers": c["supporting_papers"],
+            "related_concepts": c["related_concepts"],
+            "generated_by": "agent", "generator": "belief-draft",
+            "generated_at": _now(),
+        }
+        (cdir / f"{cid}.md").write_text(frontmatter.dump(meta, ""), encoding="utf-8")
+
+    _append_log(slug, f"suggested {len(new_candidates)} belief candidate(s) "
+                       f"(dropped {dropped_dupes} dupes)", "belief-draft")
+    return {"generated": len(new_candidates), "dropped_dupes": dropped_dupes,
+            "dropped_invalid": (data or {}).get("candidates", []) and
+                                len((data or {}).get("candidates", [])) - len(candidates)}
+
+
+def accept_belief(slug: str, candidate_id: str) -> bool:
+    """Promote a candidate to accepted. Moves the file from
+    wiki/sections/beliefs/_candidates/<id>.md to wiki/sections/beliefs/<slug>.md
+    and bumps status + accepted_at. Returns False if the candidate doesn't
+    exist."""
+    src = _belief_candidates_dir(slug) / f"{candidate_id}.md"
+    if not src.is_file():
+        return False
+    text = src.read_text(encoding="utf-8")
+    meta, body = frontmatter.parse(text)
+    meta["status"] = "accepted"
+    meta["accepted_at"] = _now()
+    title_slug = _SLUG_RE.sub("-", (meta.get("title") or "belief").lower()).strip("-")[:60]
+    if not title_slug:
+        title_slug = candidate_id
+    _beliefs_dir(slug).mkdir(parents=True, exist_ok=True)
+    (_beliefs_dir(slug) / f"{title_slug}.md").write_text(
+        frontmatter.dump(meta, body), encoding="utf-8")
+    src.unlink()
+    return True
+
+
+def dismiss_belief(slug: str, candidate_id: str) -> bool:
+    """Delete a candidate (the user said no). Returns False if not found."""
+    src = _belief_candidates_dir(slug) / f"{candidate_id}.md"
+    if not src.is_file():
+        return False
+    src.unlink()
+    return True
 
 
 def _write_recommended_file(slug: str, recommended: list[dict]) -> None:
@@ -1912,6 +2189,39 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     except (ValueError, OSError):
         recommended = None
 
+    # --- Phase C: beliefs (tray + accepted) --------------------------------
+    # Resolve supporting_papers refs to live paper objects (with attention
+    # chips) and related_concepts slugs to concept names (with blurbs) so the
+    # template can render rich cards without re-parsing the JSON files.
+    concepts_for_belief = []
+    try:
+        if _concepts_path(slug).is_file():
+            cdata = json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+            concepts_for_belief = cdata.get("concepts") or []
+    except (ValueError, OSError):
+        concepts_for_belief = []
+    concept_by_slug = {c["slug"]: c for c in concepts_for_belief}
+    rmap_b = _ref_map(slug)
+    paper_by_id_b = {p["id"]: p for p in papers}
+
+    def _decorate_belief(b: dict) -> dict:
+        papers_full = []
+        for ref in b.get("supporting_papers") or []:
+            pinfo = rmap_b.get(ref)
+            if pinfo and pinfo["id"] in paper_by_id_b:
+                papers_full.append(paper_by_id_b[pinfo["id"]])
+        related = [{"slug": s,
+                    "name": concept_by_slug.get(s, {}).get("name", s),
+                    "blurb": concept_by_slug.get(s, {}).get("blurb", "")}
+                   for s in b.get("related_concepts") or []
+                   if s in concept_by_slug]
+        return {**b, "papers": papers_full, "related": related}
+
+    belief_candidates = [_decorate_belief(b) for b in list_belief_candidates(slug)]
+    beliefs = [_decorate_belief(b) for b in list_accepted_beliefs(slug)]
+
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
             "papers": papers, "focus": focus, "recommended": recommended,
+            "belief_candidates": belief_candidates, "beliefs": beliefs,
+            "can_suggest_beliefs": can_suggest_beliefs(slug),
             "meta": meta_out}

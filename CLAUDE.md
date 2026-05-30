@@ -52,9 +52,50 @@ If a feature you're about to build lets the LLM produce wiki content without the
 >     rendered when populated. Each pick gets attention chips (🔥 hot / ✨ new) at render time
 >     from the same per-paper scorer as the Papers section.
 >
-> Beliefs / Research Questions (Stages 3/4) and the post-draft grilling (intent capture) remain
-> deferred to later phases with their own gating rules (Beliefs = agent-drafted candidates in a
-> tray that the user accepts to promote; intent = user-stated focus from a short grill).
+> **Phase C (2026-05-31)** adds the **Belief** layer (Stage 3 of the cognitive-model wiki).
+> Beliefs are single-sentence claims a researcher might hold about the collection — agent-
+> drafted candidates land in a tray, the user accepts to promote them to the wiki's
+> Section 3 "Your Current Understanding" (a hybrid contract: agent suggests, user owns).
+>
+> Files:
+>   - `wiki/sections/beliefs/_candidates/<id>.md` — pending candidates (the tray).
+>   - `wiki/sections/beliefs/<slug>.md` — accepted beliefs (Section 3 content).
+>
+> Each belief has YAML frontmatter: `type: belief`, `status: candidate|accepted`,
+> `title`, `confidence: emerging|medium|uncertain`, `supporting_papers: [refs]`,
+> `related_concepts: [slugs]`, plus the usual provenance (`generated_by: agent`,
+> `generator: belief-draft`).
+>
+> Pipeline (`wiki.suggest_beliefs`, one LLM call via the `belief-draft` skill):
+>   - **Signal floor (`can_suggest_beliefs`)**: the Suggest button only renders when at
+>     least one concept score crosses `_BELIEF_SUGGEST_FLOOR=5` OR the user has any
+>     non-empty note. Below the floor, neither the button nor the LLM call fires.
+>     The blueprint's "premature inference is anchoring" concern is enforced here.
+>   - The agent sees: concept space, top 25 highlights, top 15 notes, existing
+>     beliefs (to avoid duplicates), valid paper refs.
+>   - Validator (`_validate_belief_candidates`): drops candidates without any valid
+>     supporting paper (un-cited beliefs); drops titles shorter than 10 chars;
+>     dedupes by title slug; clamps confidence to enum; caps at
+>     `_BELIEF_CANDIDATES_MAX=5`.
+>   - Each surviving candidate written as its own .md file (parallel-safe; partial
+>     parse failure still surfaces what survived).
+>
+> Promote / dismiss:
+>   - `accept_belief(slug, cid)` moves the file from `_candidates/<cid>.md` to
+>     `beliefs/<title-slug>.md`, bumps `status` and stamps `accepted_at`.
+>   - `dismiss_belief(slug, cid)` deletes the candidate.
+>   - Routes: `POST /c/<slug>/wiki/beliefs/{suggest,<id>/accept,<id>/dismiss}`.
+>
+> Section 3 rendering:
+>   - Accepted beliefs render as cards with the confidence chip, supporting papers
+>     (live attention chips), and related-concept tags.
+>   - Candidate tray (amber-tinted) renders below the accepted beliefs with Accept /
+>     Dismiss buttons per candidate.
+>   - The Suggest button only renders when `can_suggest_beliefs` is True (signal floor).
+>   - Empty state: "No beliefs yet. Click ✦ Suggest beliefs above…"
+>
+> Research Questions (Stage 4) and the post-draft grilling (intent capture) remain
+> deferred to later phases.
 >
 > Migration: legacy `wiki/starter/index.md` OR `wiki/overview.json` on disk → `load_overview`
 > returns `{needs_migration: True}` so the panel renders a one-time "schema changed —

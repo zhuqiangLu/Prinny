@@ -194,6 +194,128 @@
   {% endif %}
 
   {# =================================================================
+     Section 3 — Your Current Understanding (Stage 3, Phase C)
+     Two sub-blocks:
+       (a) Accepted beliefs, rendered as cards (only if any exist).
+       (b) Belief candidates tray (only if any pending — agent-drafted,
+           awaiting user accept/dismiss). Tray sits BELOW the accepted
+           cards so existing beliefs stay the headline.
+     Plus a "✦ Suggest beliefs from my reading" button when can_suggest_beliefs.
+     ================================================================= #}
+  {% if overview.beliefs or overview.belief_candidates or overview.can_suggest_beliefs %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-baseline gap-2 mb-3">
+      {{ section_badge(3) }}
+      <h2 class="text-lg font-semibold text-slate-900">Your Current Understanding</h2>
+      {% if overview.can_suggest_beliefs %}
+      <form hx-post="/c/{{ slug }}/wiki/beliefs/suggest" hx-target="#left-panel" hx-swap="innerHTML"
+            hx-disabled-elt="find button" class="ml-auto">
+        <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
+                title="One LLM call: drafts 1-5 candidate beliefs from your reading. Each lands in the tray below for you to accept or dismiss.">
+          ✦ Suggest beliefs <span class="htmx-indicator text-violet-400">…</span>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# Accepted beliefs (the wiki's actual understanding layer) #}
+    {% if overview.beliefs %}
+    <ul class="space-y-3 {% if overview.belief_candidates %}mb-4{% endif %}">
+      {% for b in overview.beliefs %}
+      <li class="rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-slate-50/30 p-3">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ b.title }}</p>
+          {# Confidence chip — hardcoded color per value, no dynamic class. #}
+          {% if b.confidence == 'medium' %}
+          <span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">medium</span>
+          {% elif b.confidence == 'uncertain' %}
+          <span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">uncertain</span>
+          {% else %}
+          <span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">emerging</span>
+          {% endif %}
+        </div>
+        {% if b.papers or b.related %}
+        <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+          {% if b.papers %}
+          <span class="text-slate-400">supported by</span>
+          {% for p in b.papers %}
+          <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(38) }}</a>
+          {% endfor %}
+          {% endif %}
+          {% if b.related %}
+          <span class="text-slate-300">·</span>
+          <span class="text-slate-400">tags</span>
+          {% for r in b.related %}
+          <span class="text-slate-500" title="{{ r.blurb }}">#{{ r.name }}</span>
+          {% endfor %}
+          {% endif %}
+        </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {# Tray: pending candidates awaiting user accept/dismiss. Visually marked
+       as agent-drafted, NOT yet part of the user's understanding. #}
+    {% if overview.belief_candidates %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+      <div class="text-xs font-medium text-amber-900 mb-2">
+        ✦ {{ overview.belief_candidates|length }} proposed belief{{ 's' if overview.belief_candidates|length != 1 }} — review and accept the ones that match your thinking
+      </div>
+      <ul class="space-y-3">
+        {% for b in overview.belief_candidates %}
+        <li class="rounded border border-slate-200 bg-white p-3">
+          <div class="flex items-baseline gap-2 flex-wrap mb-2">
+            <p class="text-sm text-slate-800 leading-snug flex-1 min-w-0">{{ b.title }}</p>
+            {% if b.confidence == 'medium' %}
+            <span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">medium</span>
+            {% elif b.confidence == 'uncertain' %}
+            <span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">uncertain</span>
+            {% else %}
+            <span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">emerging</span>
+            {% endif %}
+          </div>
+          {% if b.papers or b.related %}
+          <div class="flex flex-wrap items-center gap-1.5 text-[11px] mb-2">
+            {% if b.papers %}
+            <span class="text-slate-400">supported by</span>
+            {% for p in b.papers %}
+            <a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(38) }}</a>
+            {% endfor %}
+            {% endif %}
+            {% if b.related %}
+            <span class="text-slate-300">·</span>
+            {% for r in b.related %}
+            <span class="text-slate-500" title="{{ r.blurb }}">#{{ r.name }}</span>
+            {% endfor %}
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="flex items-center gap-1.5">
+            <form hx-post="/c/{{ slug }}/wiki/beliefs/{{ b.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML"
+                  hx-disabled-elt="find button">
+              <button class="rounded bg-violet-600 text-white px-2.5 py-0.5 text-xs hover:bg-violet-700">Accept</button>
+            </form>
+            <form hx-post="/c/{{ slug }}/wiki/beliefs/{{ b.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML"
+                  hx-disabled-elt="find button">
+              <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
+            </form>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# Empty state: button visible but nothing accepted or pending yet. #}
+    {% if not overview.beliefs and not overview.belief_candidates and overview.can_suggest_beliefs %}
+    <p class="text-sm text-slate-500">No beliefs yet. Click <b>✦ Suggest beliefs</b> above and the agent will draft a few candidates from your highlights and notes — you decide which to keep.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# =================================================================
      Section 4 — Recommended Reading (Stage 0 editorial + Stage 2 attention chips)
      Always renders when recommended.json has items. Positional labels
      (Start here / Next / Then) assigned by index in load_overview.
