@@ -194,7 +194,43 @@
   {% endif %}
 
   {# =================================================================
-     Section 3 — Your Current Understanding (Stage 3, Phase C)
+     Section 3 — Recommended Reading (Stage 0: editorial, from abstracts).
+     Always renders when recommended.json has items — no attention needed, so
+     it lives with the Field Model rather than the gated belief layer.
+     Positional labels (Start here / Next / Then) assigned by index in
+     load_overview; attention chips (🔥/✨) are a Stage-2 bonus when present.
+     ================================================================= #}
+  {% if overview.recommended %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-baseline gap-2 mb-3">
+      {{ section_badge(3) }}
+      <h2 class="text-lg font-semibold text-slate-900">Recommended Reading</h2>
+      <span class="ml-auto text-xs text-slate-400 cursor-help"
+            title="Editorial picks from the agent. Order is intentional: start at #1.">Why these? ⓘ</span>
+    </div>
+    <ol class="space-y-3">
+      {% for r in overview.recommended.picks %}
+      <li class="flex items-start gap-3">
+        <span class="flex-none mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <a href="/c/{{ slug }}/p/{{ r.paper.id }}" class="text-sm font-medium text-slate-900 hover:underline">{{ r.paper.title }}</a>
+            {% if r.paper.is_hot %}<span class="text-[10px] rounded px-1 bg-orange-100 text-orange-700"
+              title="{{ r.paper.attention_score }} attention point(s)">🔥</span>{% endif %}
+            {% if r.paper.is_new %}<span class="text-[10px] rounded px-1 bg-sky-100 text-sky-700"
+              title="New activity since you last opened the wiki">✨</span>{% endif %}
+            <span class="ml-auto text-[10px] rounded px-2 py-0.5 bg-violet-100 text-violet-700">{{ r.position_label }}</span>
+          </div>
+          {% if r.why_now %}<p class="mt-0.5 text-xs text-slate-500 leading-snug">{{ r.why_now }}</p>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
+  {# =================================================================
+     Section 4 — Your Current Understanding (Stage 3, Phase C)
      Two sub-blocks:
        (a) Accepted beliefs, rendered as cards (only if any exist).
        (b) Belief candidates tray (only if any pending — agent-drafted,
@@ -205,7 +241,7 @@
   {% if overview.beliefs or overview.belief_candidates or overview.can_suggest_beliefs %}
   <section class="rounded-xl border border-slate-200 bg-white p-5">
     <div class="flex items-baseline gap-2 mb-3">
-      {{ section_badge(3) }}
+      {{ section_badge(4) }}
       <h2 class="text-lg font-semibold text-slate-900">Your Current Understanding</h2>
       {% if overview.can_suggest_beliefs %}
       <form hx-post="/c/{{ slug }}/wiki/beliefs/suggest" hx-target="#left-panel" hx-swap="innerHTML"
@@ -312,41 +348,6 @@
     {% if not overview.beliefs and not overview.belief_candidates and overview.can_suggest_beliefs %}
     <p class="text-sm text-slate-500">No beliefs yet. Click <b>✦ Suggest beliefs</b> above and the agent will draft a few candidates from your highlights and notes — you decide which to keep.</p>
     {% endif %}
-  </section>
-  {% endif %}
-
-  {# =================================================================
-     Section 4 — Recommended Reading (Stage 0 editorial + Stage 2 attention chips)
-     Always renders when recommended.json has items. Positional labels
-     (Start here / Next / Then) assigned by index in load_overview.
-     ================================================================= #}
-  {% if overview.recommended %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="flex items-baseline gap-2 mb-3">
-      {{ section_badge(4) }}
-      <h2 class="text-lg font-semibold text-slate-900">Recommended Reading</h2>
-      <span class="ml-auto text-xs text-slate-400 cursor-help"
-            title="Editorial picks from the agent. Order is intentional: start at #1.">Why these? ⓘ</span>
-    </div>
-    <ol class="space-y-3">
-      {% for r in overview.recommended.picks %}
-      <li class="flex items-start gap-3">
-        <span class="flex-none mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-baseline gap-2 flex-wrap">
-            <a href="/c/{{ slug }}/p/{{ r.paper.id }}" class="text-sm font-medium text-slate-900 hover:underline">{{ r.paper.title }}</a>
-            {% if r.paper.is_hot %}<span class="text-[10px] rounded px-1 bg-orange-100 text-orange-700"
-              title="{{ r.paper.attention_score }} attention point(s)">🔥</span>{% endif %}
-            {% if r.paper.is_new %}<span class="text-[10px] rounded px-1 bg-sky-100 text-sky-700"
-              title="New activity since you last opened the wiki">✨</span>{% endif %}
-            {# Positional label chip, assigned by index in load_overview. #}
-            <span class="ml-auto text-[10px] rounded px-2 py-0.5 bg-violet-100 text-violet-700">{{ r.position_label }}</span>
-          </div>
-          {% if r.why_now %}<p class="mt-0.5 text-xs text-slate-500 leading-snug">{{ r.why_now }}</p>{% endif %}
-        </div>
-      </li>
-      {% endfor %}
-    </ol>
   </section>
   {% endif %}
 
