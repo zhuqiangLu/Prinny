@@ -229,9 +229,15 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     cv = wiki.connection_view("vlms")
     # The fixture wires concepts + methods to shared papers, so SOMETHING surfaces.
     assert cv is not None
-    assert set(cv) == {"themes", "orphans", "co_occurrences"}
+    assert set(cv) == {"themes", "orphans", "co_occurrences", "graph"}
     # Orphans carry a resolvable paper id + label for linking.
     assert all("id" in o and "label" in o for o in cv["orphans"])
+    # The Cytoscape payload has nodes (papers + entities) and undirected edges.
+    assert cv["graph"]["nodes"]
+    kinds = {n["kind"] for n in cv["graph"]["nodes"]}
+    assert "paper" in kinds and "concept" in kinds
+    # paper nodes carry a paper_id for click-to-open; entity nodes don't.
+    assert all((n["paper_id"] is not None) == (n["kind"] == "paper") for n in cv["graph"]["nodes"])
 
 
 def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):

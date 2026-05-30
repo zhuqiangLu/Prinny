@@ -1543,6 +1543,25 @@ def connection_view(slug: str) -> dict | None:
     co = [{"a": label(a), "b": label(b), "shared": n}
           for a, b, n in ins["co_occurrences"][:6]]
 
-    if not themes and not orphans and not co:
+    # Cytoscape payload for the force-directed view. Every node (incl. orphan
+    # papers, which render as floating dots — Obsidian-style); undirected unique
+    # edges from the adjacency. paper_id lets the client link a node to its reader.
+    viz_nodes = [{"id": nid,
+                  "label": n["label"],
+                  "kind": n["kind"],
+                  "paper_id": (int(nid.split(":", 1)[1]) if n["kind"] == "paper" else None)}
+                 for nid, n in nodes.items()]
+    seen_e: set = set()
+    viz_edges = []
+    for a, nbrs in g["adj"].items():
+        for b in nbrs:
+            key = tuple(sorted((a, b)))
+            if key in seen_e:
+                continue
+            seen_e.add(key)
+            viz_edges.append({"source": a, "target": b})
+
+    if not viz_nodes and not orphans:
         return None
-    return {"themes": themes, "orphans": orphans, "co_occurrences": co}
+    return {"themes": themes, "orphans": orphans, "co_occurrences": co,
+            "graph": {"nodes": viz_nodes, "edges": viz_edges}}

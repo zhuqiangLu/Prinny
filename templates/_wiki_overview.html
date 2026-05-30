@@ -367,38 +367,63 @@
             title="Structural map of the collection — which concepts/methods/problems cluster, and which papers aren't connected yet. Derived from shared papers; no LLM.">How? ⓘ</span>
     </div>
 
-    {% if overview.connections.themes %}
+    {# Force-directed graph (Cytoscape.js). Nodes colored by kind; click a paper
+       node to open its reader. Data embedded as JSON; the init script runs on
+       HTMX swap (cytoscape is loaded once in base.html). #}
+    {% if overview.connections.graph and overview.connections.graph.nodes %}
     <div class="mb-3">
-      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Themes — concepts that travel together</div>
-      <div class="flex flex-wrap gap-2">
-        {% for th in overview.connections.themes %}
-        <div class="flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3">
-          <div class="flex flex-wrap gap-1 mb-1.5">
-            {% for e in th.entities %}
-            <span class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-violet-200 text-violet-800">{{ e.label }}</span>
-            {% endfor %}
-          </div>
-          <div class="text-[10px] text-slate-500">{{ th.n_papers }} paper{{ 's' if th.n_papers != 1 }} in this cluster</div>
+      <div class="flex items-center gap-2 mb-1.5">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Knowledge graph</div>
+        <div class="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
+          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
+          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
+          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
+          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
+          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#94a3b8"></span>paper</span>
         </div>
-        {% endfor %}
       </div>
+      <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-slate-50/40"
+           style="height: 360px;"
+           data-graph='{{ overview.connections.graph | tojson }}'
+           data-slug="{{ slug }}"></div>
     </div>
-    {% endif %}
-
-    {% if overview.connections.co_occurrences %}
-    <div class="mb-3">
-      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Strong co-occurrences</div>
-      <ul class="space-y-1 text-sm text-slate-700">
-        {% for c in overview.connections.co_occurrences %}
-        <li class="flex items-center gap-1.5">
-          <span class="text-slate-800">{{ c.a }}</span>
-          <span class="text-slate-400">↔</span>
-          <span class="text-slate-800">{{ c.b }}</span>
-          <span class="text-[10px] text-slate-400">({{ c.shared }} shared papers)</span>
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
+    <script>
+      (function () {
+        var el = document.getElementById("kg-cyto");
+        if (!el || typeof cytoscape !== "function" || el.dataset.kgInit) return;
+        el.dataset.kgInit = "1";
+        var data;
+        try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
+        var slug = el.getAttribute("data-slug");
+        var COLOR = {concept:"#7c3aed", method:"#0ea5e9", problem:"#f43f5e",
+                     belief:"#f59e0b", paper:"#94a3b8"};
+        var els = [];
+        data.nodes.forEach(function (n) {
+          els.push({data: {id: n.id, label: n.label, kind: n.kind, pid: n.paper_id}});
+        });
+        data.edges.forEach(function (e) {
+          els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target}});
+        });
+        var cy = cytoscape({
+          container: el, elements: els,
+          style: [
+            {selector: "node", style: {
+              "background-color": function (n) { return COLOR[n.data("kind")] || "#94a3b8"; },
+              "label": "data(label)", "font-size": 7, "color": "#334155",
+              "text-wrap": "ellipsis", "text-max-width": 80, "width": 12, "height": 12,
+              "text-valign": "bottom", "text-margin-y": 2}},
+            {selector: "node[kind = 'paper']", style: {"width": 9, "height": 9, "shape": "round-rectangle"}},
+            {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
+            {selector: "node:selected", style: {"border-width": 2, "border-color": "#0f172a"}},
+          ],
+          layout: {name: "cose", animate: false, padding: 12, nodeRepulsion: 6000, idealEdgeLength: 50},
+        });
+        cy.on("tap", "node", function (evt) {
+          var pid = evt.target.data("pid");
+          if (pid) window.location.href = "/c/" + slug + "/p/" + pid;
+        });
+      })();
+    </script>
     {% endif %}
 
     {% if overview.connections.orphans %}
