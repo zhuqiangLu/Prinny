@@ -224,197 +224,192 @@ def test_proposal_from_chat_requires_grounding(tmp_path, monkeypatch):
     assert prop["section"] == "synthesis"
 
 
-def _seed_setup(tmp_path, monkeypatch, llm_fn):
-    import app.library as library
-    import app.pdf_store as pdf_store
-    db = tmp_path / "app.sqlite"
-    init_db(db)
-    con = connect(db)
-    con.execute("INSERT INTO collections(slug,name) VALUES('vlms','VLMs')")
-    con.execute("INSERT INTO papers(id,title,abstract,arxiv_id,origin) "
-                "VALUES(1,'P1','We study efficient VLMs.','2401.00001','app-created')")
-    con.execute("INSERT INTO collection_papers(collection_slug,paper_id) VALUES('vlms',1)")
-    con.commit(); con.close()
-    monkeypatch.setattr(wiki, "connect", lambda: connect(db))
-    monkeypatch.setattr(wiki, "COLLECTIONS_DIR", tmp_path / "collections")
-    monkeypatch.setattr(library, "connect", lambda: connect(db))   # for load_overview ref-resolution
-    monkeypatch.setattr(pdf_store, "load_config", lambda: {"pdf_store_path": str(tmp_path / "store")})
-    monkeypatch.setattr("app.llm.complete", llm_fn)
-    return tmp_path / "collections" / "vlms" / "wiki"
+# --- llm_wiki-pattern starter-wiki tests (2026-05-30) ------------------------
+# The new pipeline does TWO kinds of LLM calls. The stub branches on user-prompt
+# content: analyze calls get a JSON top-picks payload; per-page calls get a
+# markdown body. Picks include a hallucinated ref so the validator is exercised;
+# per-page body includes a hallucinated [[wikilink]] so _clean_paper_page_body
+# is exercised too.
 
-
-# The curiosity-driven starter-wiki shape (2026-05-29). Includes one hallucinated ref
-# (NOPE) in each section so the test verifies the ref-validator drops them.
-_OVERVIEW_JSON = {
-    "field_overview": {
-        "one_sentence": "Long-context VLMs are bottlenecked by KV-cache memory, not compute.",
-        "one_paragraph": "All about efficient long-context VLMs — what gives and what doesn't when you push the context window.",
-        "core_tension": "Compression vs recall.",
-        "why_matters": "Deployment costs scale with the cache, not the model size.",
-        "what_changed_recently": "",
-        "what_newcomer_should_notice": "Read the eval setup before the method — most numbers are setup-dependent.",
-    },
-    "problems": [{
-        "title": "KV cache blows up at long context", "why": "memory-bound deployment",
-        "tension": "compression vs recall?",
-        "approaches": [{"label": "compression", "papers": ["2401.00001"]},
-                       {"label": "ghost", "papers": ["NOPE"]}],          # NOPE ref -> dropped
-        "read_first": {"paper": "2401.00001", "why": "clearest framing"},
-        "papers": ["2401.00001", "NOPE"],
-    }],
-    "paper_cards": [
-        {
-            "paper": "2401.00001", "status": "method", "difficulty": "medium",
-            "problem": "KV-cache memory at long context.",
-            "idea": "Quantize older entries to cut memory.",
-            "method_family": "KV compression",
-            "contribution": "First quantization scheme that holds at >32k tokens.",
-            "why_read": "Clearest framing of the trade-off.",
-            "prerequisites": [], "connected_papers": [],
-            # PDF-only fields — agent emits them; validator should BLANK them
-            # because this paper was supplied as ABSTRACT_ONLY in the test setup.
-            "mechanism": "per-block 4-bit quantization",
-            "evidence": "tested on 32k benchmarks",
-            "limitation": "recall drops at high compression",
-        },
-        # hallucinated card -> dropped entirely
-        {"paper": "NOPE", "status": "method", "problem": "x", "idea": "y"},
+_ANALYZE_JSON = {
+    "field_intro": "The collection circles efficient long-context VLMs and the compression-vs-recall trade-off.",
+    "top_picks": [
+        {"paper": "2401.00001", "why_now": "clearest framing", "focus_on": "§3", "skip": "§6"},
+        {"paper": "2401.00002", "why_now": "compare alt", "focus_on": "", "skip": ""},
+        {"paper": "2401.00003", "why_now": "extends with evals", "focus_on": "tables", "skip": ""},
+        {"paper": "NOPE",       "why_now": "ghost", "focus_on": "", "skip": ""},  # invalid -> dropped
     ],
-    "reading_paths": [
-        # honest: 3 unique refs (one duplicate to test dedupe), survives the ≥3 gate
-        {"name": "Orientation", "for_who": "newcomers", "goal": "lay of the land",
-         "ordered_papers": [{"paper": "2401.00001", "why_now": "start here"},
-                            {"paper": "2401.00001", "why_now": "dup"},  # dedupe
-                            {"paper": "NOPE", "why_now": "ghost"}]},     # invalid -> dropped
-        # too few honest refs (only 2401.00001) -> dropped per _READING_PATH_MIN_PAPERS
-        {"name": "Critical", "for_who": "skeptics", "goal": "see the cracks",
-         "ordered_papers": [{"paper": "2401.00001"}]},
-    ],
+    "reading_order": ["2401.00001", "2401.00002", "2401.00003", "NOPE"],
 }
 
+_PAGE_MD = (
+    "## Problem\nKV cache blows up at long context.\n\n"
+    "## Key idea\nJointly optimize importance and diversity.\n\n"
+    "## Mechanism\nQuantization plus diversity-aware eviction.\n\n"
+    "## Evidence\nTested on 32k benchmarks.\n\n"
+    "## Limitation\nRecall drops at very high compression.\n\n"
+    "## Why read\nClearest framing of the trade-off for newcomers.\n\n"
+    "## Connected\n- [[P2]] — extends the per-token scoring idea\n"
+    "- [[NonexistentPaper]] — this should be stripped to plain text\n"
+)
 
-def test_generate_overview_validates_and_drops_hallucinated_refs(tmp_path, monkeypatch):
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+
+def _llm_stub(analyze_json=None, page_md=None):
+    """Build a llm.complete stub for the two-step pipeline. Branches on whether
+    the user prompt names a single paper (page call) or starts with 'Papers:'
+    (analyze call). Either argument can be None to simulate that step failing."""
+    aj = analyze_json if analyze_json is not None else _ANALYZE_JSON
+    pm = page_md if page_md is not None else _PAGE_MD
+    def stub(messages, model=None):
+        user = messages[-1]["content"]
+        if "This paper:" in user:
+            if pm is None:
+                raise RuntimeError("simulated page-step failure")
+            return pm
+        if aj is None:
+            raise RuntimeError("simulated analyze-step failure")
+        return json.dumps(aj)
+    return stub
+
+
+def _seed_three_papers(tmp_path, monkeypatch, stub):
+    """Shared fixture: a 3-paper collection with the new pipeline's stubbed LLM."""
+    import app.library as library
+    import app.pdf_store as pdf_store
+    db = tmp_path / "app.sqlite"
+    init_db(db)
+    con = connect(db)
+    con.execute("INSERT INTO collections(slug,name) VALUES('vlms','VLMs')")
+    for i in (1, 2, 3):
+        con.execute("INSERT INTO papers(id,title,abstract,arxiv_id,origin) "
+                    f"VALUES({i}, 'P{i}', 'abs{i}', '2401.0000{i}', 'app-created')")
+        con.execute(f"INSERT INTO collection_papers(collection_slug,paper_id) VALUES('vlms', {i})")
+    con.commit(); con.close()
+    monkeypatch.setattr(wiki, "connect", lambda: connect(db))
+    monkeypatch.setattr(wiki, "COLLECTIONS_DIR", tmp_path / "collections")
+    monkeypatch.setattr(library, "connect", lambda: connect(db))
+    monkeypatch.setattr(pdf_store, "load_config", lambda: {"pdf_store_path": str(tmp_path / "store")})
+    monkeypatch.setattr("app.llm.complete", stub)
+    return db
+
+
+def test_generate_overview_writes_tree_and_drops_hallucinated_refs(tmp_path, monkeypatch):
+    """The new two-step pipeline writes wiki/starter/{index.md, papers/*.md}.
+    Hallucinated picks (NOPE) are dropped at the analyze step. The starter tree
+    is created and the index lists only valid picks in agent order."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     assert wiki.generate_overview("vlms") is True
-    ov = json.loads((wdir / "overview.json").read_text())
-    assert ov["_meta"]["generated_by"] == "agent" and ov["_meta"]["generator"] == "starter-wiki"
-    # field_overview migrates from agent output verbatim
-    assert ov["field_overview"]["one_sentence"].startswith("Long-context")
-    # problem refs filtered to valid only
-    prob = ov["problems"][0]
-    assert prob["papers"] == ["2401.00001"]              # hallucinated ref dropped
-    assert [a["label"] for a in prob["approaches"]] == ["compression"]  # ghost approach dropped
-    assert prob["read_first"] == "2401.00001"
-    # paper cards: hallucinated card dropped; valid one kept
-    assert [c["paper"] for c in ov["paper_cards"]] == ["2401.00001"]
-    # No PDF was cached in the test setup → that paper is ABSTRACT_ONLY → PDF-only
-    # fields (mechanism / evidence / limitation) MUST be blanked even if the agent emits them.
-    card = ov["paper_cards"][0]
-    assert card["abstract_only"] is True
-    assert card["mechanism"] == "" and card["evidence"] == "" and card["limitation"] == ""
-    assert card["idea"] != ""   # but abstract-fair fields are kept
-    # reading_paths: ≥3-paper gate kept Orientation (2401.00001 once, NOPE dropped) -> only
-    # 1 honest ref so it's actually under the floor → dropped. "Critical" has 1 -> dropped.
-    # → no reading_paths survive in this fixture.
-    assert ov["reading_paths"] == []
-    assert wiki.generate_overview("vlms") is False        # non-destructive
-    assert wiki.generate_overview("vlms", force=True) is True  # force regenerates
+    sdir = tmp_path / "collections" / "vlms" / "wiki" / "starter"
+    assert sdir.is_dir() and (sdir / "index.md").is_file()
+    pages = sorted(p.name for p in (sdir / "papers").glob("*.md"))
+    # 3 valid picks survived (P1/P2/P3 → slugs p1/p2/p3 in our test fixture);
+    # NOPE was dropped at the analyze validator.
+    assert pages == ["p1.md", "p2.md", "p3.md"]
+    idx_meta, _ = wiki.frontmatter.parse((sdir / "index.md").read_text())
+    assert idx_meta["generated_by"] == "agent"
+    assert idx_meta["generator"] == "starter-wiki"
+    assert idx_meta["top_picks"] == ["p1", "p2", "p3"]
 
 
-def test_load_overview_resolves_refs_to_papers(tmp_path, monkeypatch):
-    _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+def test_generate_overview_blanks_pdf_only_sections_for_abstract_only(tmp_path, monkeypatch):
+    """No PDF is cached in the test fixture → every page is ABSTRACT_ONLY → the
+    validator strips Mechanism / Evidence / Limitation sections regardless of
+    what the LLM emitted. The defensible-from-abstract sections (Problem / Key
+    idea / Why read / Connected) survive."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.generate_overview("vlms") is True
+    page_body = (tmp_path / "collections" / "vlms" / "wiki" / "starter" / "papers" / "p1.md").read_text()
+    _, body = wiki.frontmatter.parse(page_body)
+    assert "## Mechanism" not in body
+    assert "## Evidence" not in body
+    assert "## Limitation" not in body
+    assert "## Problem" in body
+    assert "## Key idea" in body
+    assert "## Why read" in body
+
+
+def test_generate_overview_strips_broken_wikilinks(tmp_path, monkeypatch):
+    """[[wikilinks]] pointing at page slugs we didn't generate get collapsed to
+    plain text (no broken links left in the rendered output). Links to valid
+    sibling pages survive."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.generate_overview("vlms") is True
+    body = (tmp_path / "collections" / "vlms" / "wiki" / "starter" / "papers" / "p1.md").read_text()
+    # [[P2]] points at a valid page (p2) → survives. [[NonexistentPaper]] → collapses.
+    assert "[[P2]]" in body
+    assert "[[NonexistentPaper]]" not in body
+    assert "NonexistentPaper" in body   # collapsed to plain text, not deleted
+
+
+def test_generate_overview_refuses_too_few_picks(tmp_path, monkeypatch):
+    """If the analyze step returns fewer than _STARTER_TOP_PICKS_MIN valid picks,
+    the pipeline refuses (returns False, writes nothing). Saves the user from a
+    one-pick starter wiki."""
+    thin = {**_ANALYZE_JSON, "top_picks": [_ANALYZE_JSON["top_picks"][0]]}  # 1 pick
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub(analyze_json=thin))
+    assert wiki.generate_overview("vlms") is False
+    sdir = tmp_path / "collections" / "vlms" / "wiki" / "starter"
+    assert not sdir.exists()
+
+
+def test_generate_overview_is_nondestructive_unless_forced(tmp_path, monkeypatch):
+    """A second generate_overview without force=True is a no-op (existing tree
+    survives). force=True regenerates."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.generate_overview("vlms") is True
+    assert wiki.generate_overview("vlms") is False                  # idempotent
+    assert wiki.generate_overview("vlms", force=True) is True       # forced
+
+
+def test_load_overview_reads_tree_and_resolves_refs(tmp_path, monkeypatch):
+    """load_overview reads the markdown tree, resolves frontmatter sources to
+    live paper objects, returns the top_picks in agent order (with no attention)."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     wiki.generate_overview("vlms")
     loaded = wiki.load_overview("vlms")
-    assert loaded["field_overview"]["one_paragraph"].startswith("All about")
-    p0 = loaded["problems"][0]
-    assert p0["read_first"]["id"] == 1 and p0["read_first"]["title"] == "P1"   # ref -> paper obj
-    assert [pp["id"] for pp in p0["papers"]] == [1]
-    # paper card refs are resolved to paper objects too
-    pc0 = loaded["paper_cards"][0]
-    assert pc0["paper"]["id"] == 1 and pc0["abstract_only"] is True
+    assert loaded is not None
+    assert loaded["needs_migration"] is False
+    assert loaded["field_intro_md"].startswith("The collection circles")
+    titles = [pg["title"] for pg in loaded["top_picks"]]
+    assert titles == ["P1", "P2", "P3"]
+    # Each page carries a resolved paper object and the body markdown.
+    for pg in loaded["top_picks"]:
+        assert pg["paper"]["id"] in (1, 2, 3)
+        assert pg["body_md"].startswith("## Problem")
+    # Wikilinks were rewritten to /c/<slug>/p/<paper-id> URLs at load time.
+    assert "/c/vlms/p/2" in loaded["top_picks"][0]["body_md"]
 
 
-def test_load_overview_migrates_old_shape(tmp_path, monkeypatch):
-    """An overview.json saved before the 2026-05-29 schema bump still renders."""
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")
+def test_load_overview_returns_migration_banner_for_legacy_json(tmp_path, monkeypatch):
+    """An old wiki/overview.json on disk with no new wiki/starter/ tree returns
+    {needs_migration: True} so the panel can show a regenerate prompt."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wdir = tmp_path / "collections" / "vlms" / "wiki"
     wdir.mkdir(parents=True, exist_ok=True)
-    (wdir / "overview.json").write_text(json.dumps({
-        "intro": "Old-shape intro.",
-        "gaps": [{"title": "Old gap", "body": "x", "papers": ["2401.00001"]}],
-        "reading_path": ["2401.00001", "2401.00001", "2401.00001"],
-        "_meta": {"generated_by": "agent"},
-    }))
+    (wdir / "overview.json").write_text("{}", encoding="utf-8")
     loaded = wiki.load_overview("vlms")
-    # intro migrates into field_overview.one_paragraph
-    assert loaded["field_overview"]["one_paragraph"] == "Old-shape intro."
-    # gaps migrate into open_problems
-    assert loaded["open_problems"][0]["title"] == "Old gap"
-    # singular reading_path migrates into one "Orientation" reading_paths entry
-    assert loaded["reading_paths"][0]["name"] == "Orientation"
-    assert loaded["reading_paths"][0]["ordered_papers"][0]["paper"]["id"] == 1
+    assert loaded is not None
+    assert loaded["needs_migration"] is True
+    assert loaded["top_picks"] == []
 
 
-def test_reading_path_min_papers_gate(tmp_path, monkeypatch):
-    """A reading path with ≥3 unique valid refs survives; thinner ones are dropped."""
-    import app.library as library
-    import app.pdf_store as pdf_store
-    db = tmp_path / "app.sqlite"
-    init_db(db)
-    con = connect(db)
-    con.execute("INSERT INTO collections(slug,name) VALUES('vlms','VLMs')")
-    for i in (1, 2, 3):
-        con.execute("INSERT INTO papers(id,title,abstract,arxiv_id,origin) "
-                    f"VALUES({i}, 'P{i}', 'abs{i}', '2401.0000{i}', 'app-created')")
-        con.execute(f"INSERT INTO collection_papers(collection_slug,paper_id) VALUES('vlms', {i})")
-    con.commit(); con.close()
-    monkeypatch.setattr(wiki, "connect", lambda: connect(db))
-    monkeypatch.setattr(wiki, "COLLECTIONS_DIR", tmp_path / "collections")
-    monkeypatch.setattr(library, "connect", lambda: connect(db))
-    monkeypatch.setattr(pdf_store, "load_config", lambda: {"pdf_store_path": str(tmp_path / "store")})
-    monkeypatch.setattr("app.llm.complete", lambda m, model=None: json.dumps({
-        "reading_paths": [
-            # 3 unique valid refs -> survives
-            {"name": "Orientation", "for_who": "x", "goal": "y",
-             "ordered_papers": [{"paper": "2401.00001"}, {"paper": "2401.00002"},
-                                {"paper": "2401.00003"}]},
-            # only 2 unique valid refs -> dropped
-            {"name": "Skeptic", "for_who": "x", "goal": "y",
-             "ordered_papers": [{"paper": "2401.00001"}, {"paper": "2401.00002"}]},
-        ],
-        "paper_cards": [{"paper": "2401.00001", "idea": "x"}],  # so generate accepts
-    }))
-    assert wiki.generate_overview("vlms") is True
-    loaded = wiki.load_overview("vlms")
-    assert [rp["name"] for rp in loaded["reading_paths"]] == ["Orientation"]
+def test_load_overview_returns_none_when_no_wiki(tmp_path, monkeypatch):
+    """No starter tree AND no legacy overview.json → None (template shows the
+    'No starter wiki yet' card with the Draft button)."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.load_overview("vlms") is None
 
 
-def _seed_three_papers_with_cards(tmp_path, monkeypatch):
-    """Shared fixture for the attention-reweighting tests: 3 papers, an overview whose
-    cards are deliberately in 'editorial' order (P1, P2, P3) so any re-rank is visible."""
-    import app.library as library
-    import app.pdf_store as pdf_store
-    db = tmp_path / "app.sqlite"
-    init_db(db)
-    con = connect(db)
-    con.execute("INSERT INTO collections(slug,name) VALUES('vlms','VLMs')")
-    for i in (1, 2, 3):
-        con.execute("INSERT INTO papers(id,title,abstract,arxiv_id,origin) "
-                    f"VALUES({i}, 'P{i}', 'abs{i}', '2401.0000{i}', 'app-created')")
-        con.execute(f"INSERT INTO collection_papers(collection_slug,paper_id) VALUES('vlms', {i})")
-    con.commit(); con.close()
-    monkeypatch.setattr(wiki, "connect", lambda: connect(db))
-    monkeypatch.setattr(wiki, "COLLECTIONS_DIR", tmp_path / "collections")
-    monkeypatch.setattr(library, "connect", lambda: connect(db))
-    monkeypatch.setattr(pdf_store, "load_config", lambda: {"pdf_store_path": str(tmp_path / "store")})
-    monkeypatch.setattr("app.llm.complete", lambda m, model=None: json.dumps({
-        "paper_cards": [{"paper": f"2401.0000{i}", "idea": f"i{i}"} for i in (1, 2, 3)],
-    }))
+def _seed_three_papers_with_starter(tmp_path, monkeypatch):
+    """Shared fixture for the attention tests: 3 papers + a generated starter
+    wiki, so re-ranking / hot / new badges have something to chew on."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     wiki.generate_overview("vlms")
     return db
 
 
 def test_attention_scores_counts_highlights_and_notes(tmp_path, monkeypatch):
-    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+    db = _seed_three_papers_with_starter(tmp_path, monkeypatch)
     con = connect(db)
     # P1: 3 highlights -> 3
     for _ in range(3):
@@ -436,8 +431,8 @@ def test_attention_scores_counts_highlights_and_notes(tmp_path, monkeypatch):
     assert wiki.attention_scores("vlms") == {1: 3, 2: 1}    # back to 1 (just the highlight)
 
 
-def test_paper_cards_reranked_by_attention(tmp_path, monkeypatch):
-    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+def test_top_picks_reranked_by_attention(tmp_path, monkeypatch):
+    db = _seed_three_papers_with_starter(tmp_path, monkeypatch)
     con = connect(db)
     # P3 gets the biggest signal -> should float to the top despite being last editorially.
     for _ in range(10):
@@ -447,18 +442,18 @@ def test_paper_cards_reranked_by_attention(tmp_path, monkeypatch):
                 "VALUES (1, 'vlms', 't', 'noted')")    # P1 gets 5
     con.commit(); con.close()
     loaded = wiki.load_overview("vlms")
-    order = [c["paper"]["id"] for c in loaded["paper_cards"]]
+    order = [pg["paper"]["id"] for pg in loaded["top_picks"]]
     assert order == [3, 1, 2]                     # by score: 10, 5, 0
-    # With no signal at all, editorial order holds (the stable-sort property).
+    # With no signal at all, agent's reading order holds (the stable-sort property).
     con = connect(db); con.execute("DELETE FROM annotations"); con.execute("DELETE FROM paper_notes")
     con.commit(); con.close()
     loaded2 = wiki.load_overview("vlms")
-    assert [c["paper"]["id"] for c in loaded2["paper_cards"]] == [1, 2, 3]
+    assert [pg["paper"]["id"] for pg in loaded2["top_picks"]] == [1, 2, 3]
 
 
 def test_is_hot_and_is_new_badges(tmp_path, monkeypatch):
     import time
-    db = _seed_three_papers_with_cards(tmp_path, monkeypatch)
+    db = _seed_three_papers_with_starter(tmp_path, monkeypatch)
     # Establish a "last viewed" baseline BEFORE adding the new signal.
     baseline = wiki.read_and_bump_viewed("vlms")
     # The very first call has no prior value -> returns None.
@@ -475,100 +470,83 @@ def test_is_hot_and_is_new_badges(tmp_path, monkeypatch):
                     "VALUES (2, 'vlms', 'highlight', 1, '{}')")
     con.commit(); con.close()
     loaded = wiki.load_overview("vlms", attention_since=since)
-    by_id = {c["paper"]["id"]: c for c in loaded["paper_cards"]}
+    by_id = {pg["paper"]["id"]: pg for pg in loaded["top_picks"]}
     assert by_id[2]["is_new"] is True                      # had new signal post-baseline
     assert by_id[1]["is_new"] is False and by_id[3]["is_new"] is False
     assert by_id[2]["is_hot"] is True                      # 4 ≥ floor of 2 & is the only nonzero
     # Without a `since`, no card is ever marked new (no fake recency claims).
     loaded2 = wiki.load_overview("vlms")
-    assert all(c["is_new"] is False for c in loaded2["paper_cards"])
+    assert all(pg["is_new"] is False for pg in loaded2["top_picks"])
 
 
 def test_stage_callback_fires_through_pipeline(tmp_path, monkeypatch):
-    """generate_overview calls stage_cb in the right order with the right shape."""
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
-    stages = []
-    wiki.generate_overview("vlms", force=True, stage_cb=lambda n, **kw: stages.append((n, kw)))
+    """generate_overview calls stage_cb in the new two-step pipeline's order:
+    gathering → reading_pdfs (with count) → analyzing → writing (per page) → linking."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    stages: list = []
+    assert wiki.generate_overview("vlms", force=True,
+                                   stage_cb=lambda n, **kw: stages.append((n, kw))) is True
     names = [s[0] for s in stages]
-    # gathering -> at least one reading_pdfs -> drafting -> validating
     assert names[0] == "gathering"
-    assert "reading_pdfs" in names
-    assert "drafting" in names and "validating" in names
-    # reading_pdfs reports pdfs_done/pdfs_total
+    for expected in ("reading_pdfs", "analyzing", "writing", "linking"):
+        assert expected in names, f"stage {expected!r} missing from {names}"
+    # reading_pdfs reports a real pdfs_done/pdfs_total fraction
     rp = next(s for s in stages if s[0] == "reading_pdfs")
     assert "pdfs_done" in rp[1] and "pdfs_total" in rp[1]
-    # drafting/validating carry paper_count + pdfs_read
-    dr = next(s for s in stages if s[0] == "drafting")
-    assert "paper_count" in dr[1] and "pdfs_read" in dr[1]
+    # writing reports a real pages_done/pages_total fraction (one event per pick)
+    writes = [s for s in stages if s[0] == "writing"]
+    assert len(writes) >= 2                       # at least one before-call, one after
+    assert all("pages_done" in s[1] and "pages_total" in s[1] for s in writes)
 
 
 def test_stage_callback_errors_dont_abort_generation(tmp_path, monkeypatch):
     """A broken UI callback can't take down a draft."""
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     def bad(name, **kw):
         raise RuntimeError("UI exploded")
     assert wiki.generate_overview("vlms", force=True, stage_cb=bad) is True
-    assert (wdir / "overview.json").exists()
+    assert (tmp_path / "collections" / "vlms" / "wiki" / "starter" / "index.md").is_file()
 
 
 def test_stage_message_single_action_line():
-    """_stage_message returns a single human-voice action line per stage and an
-    empty subline (kept in the shape for JSON-contract stability). Counts are
-    folded into the action itself."""
+    """_stage_message returns a single human-voice action line per stage."""
     assert wiki._stage_message({"stage": "gathering"})["action"].startswith("I'm collecting")
     rp = wiki._stage_message({"stage": "reading_pdfs", "pdfs_done": 3, "pdfs_total": 12})
     assert rp["action"] == "I'm reading the PDFs (3/12)."
-    assert rp["subline"] == ""           # always empty in the new shape
-    dr = wiki._stage_message({"stage": "drafting", "paper_count": 12, "pdfs_read": 8})
-    assert dr["action"] == "I'm drafting the wiki."
-    assert dr["subline"] == ""
+    assert rp["subline"] == ""
+    wr = wiki._stage_message({"stage": "writing", "pages_done": 2, "pages_total": 5})
+    assert wr["action"] == "I'm writing the page (2/5)."
+    assert wiki._stage_message({"stage": "analyzing"})["action"].startswith("I'm picking")
+    assert wiki._stage_message({"stage": "linking"})["action"].startswith("I'm wiring")
     assert wiki._stage_message({"stage": "done"})["action"] == "Done."
     # Unknown stage falls back to gathering voice rather than crashing.
     assert wiki._stage_message({"stage": "wat"})["action"].startswith("I'm collecting")
 
 
 def test_stage_progress_monotone_and_capped():
-    """_stage_progress climbs in the right order and stays <100 until status='done'."""
-    p_gather = wiki._stage_progress({"stage": "gathering"})
-    p_pdf_0  = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 0, "pdfs_total": 10})
-    p_pdf_5  = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 5, "pdfs_total": 10})
-    p_pdf_10 = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 10, "pdfs_total": 10})
-    p_draft  = wiki._stage_progress({"stage": "drafting"})
-    p_valid  = wiki._stage_progress({"stage": "validating"})
-    # gathering < reading_pdfs band < drafting (no start time → low band) ≤ validating < 100
-    assert p_gather < p_pdf_0 < p_pdf_5 < p_pdf_10 <= p_draft < p_valid < 100
-    # Done flips to 100 regardless of stage payload.
-    assert wiki._stage_progress({"stage": "drafting", "status": "done"}) == 100
-    assert wiki._stage_progress({"stage": "validating", "status": "failed"}) == 100
-
-
-def test_drafting_progress_climbs_over_time():
-    """In the drafting stage, the bar climbs asymptotically from ~30 toward 95 as
-    drafting_started_at recedes into the past. Fixes the 'stuck at 60% then leaps
-    to 100%' UX. Never crosses 95 — the honest cap before status flips to done."""
-    import time
-    now = time.time()
-    p_just_started = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 0.1})
-    p_mid          = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 35})
-    p_late         = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 120})
-    p_runaway      = wiki._stage_progress({"stage": "drafting", "drafting_started_at": now - 9999})
-    assert 28 <= p_just_started <= 32     # near LOW (30)
-    assert p_mid > p_just_started + 20    # has climbed substantially by t≈τ
-    assert p_late > p_mid                 # still climbing
-    assert p_runaway == 95                 # asymptote cap holds forever
+    """_stage_progress climbs through the pipeline's real stages and stays <100
+    until status='done'/'failed' lands on 100."""
+    p_gather   = wiki._stage_progress({"stage": "gathering"})
+    p_pdf_0    = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 0, "pdfs_total": 10})
+    p_pdf_10   = wiki._stage_progress({"stage": "reading_pdfs", "pdfs_done": 10, "pdfs_total": 10})
+    p_analyze  = wiki._stage_progress({"stage": "analyzing"})
+    p_write_0  = wiki._stage_progress({"stage": "writing", "pages_done": 0, "pages_total": 5})
+    p_write_5  = wiki._stage_progress({"stage": "writing", "pages_done": 5, "pages_total": 5})
+    p_link     = wiki._stage_progress({"stage": "linking"})
+    assert p_gather < p_pdf_0 < p_pdf_10 <= p_analyze <= p_write_0 < p_write_5 <= p_link < 100
+    # Done/failed flip to 100 regardless of stage payload.
+    assert wiki._stage_progress({"stage": "writing", "status": "done"}) == 100
+    assert wiki._stage_progress({"stage": "linking", "status": "failed"}) == 100
 
 
 def test_start_draft_async_publishes_state_and_completes(tmp_path, monkeypatch):
-    """The async runner: kicks off in a thread, publishes state via get_draft_job,
-    transitions to 'done' on success, writes overview.json. Tests the contract end-
-    to-end with a fast in-process llm.complete stub."""
+    """The async runner: kicks off in a thread, transitions to 'done' on success,
+    writes the wiki/starter/ tree. Tests the contract end-to-end."""
     import time
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: json.dumps(_OVERVIEW_JSON))
-    wiki.clear_draft_job("vlms")   # ensure clean
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.clear_draft_job("vlms")
     assert wiki.start_draft_async("vlms", force=True) is True
-    # A second start while running is rejected.
-    assert wiki.start_draft_async("vlms", force=True) is False
-    # Wait for completion (the runner is in a daemon thread; this test's LLM stub is sync).
+    assert wiki.start_draft_async("vlms", force=True) is False     # already running
     deadline = time.time() + 5
     while time.time() < deadline:
         job = wiki.get_draft_job("vlms")
@@ -577,17 +555,18 @@ def test_start_draft_async_publishes_state_and_completes(tmp_path, monkeypatch):
         time.sleep(0.05)
     job = wiki.get_draft_job("vlms")
     assert job is not None and job["status"] == "done"
-    assert (wdir / "overview.json").exists()
-    # Cleared on demand.
+    assert (tmp_path / "collections" / "vlms" / "wiki" / "starter" / "index.md").is_file()
     wiki.clear_draft_job("vlms")
     assert wiki.get_draft_job("vlms") is None
 
 
 def test_start_draft_async_publishes_failure(tmp_path, monkeypatch):
-    """If generate_overview returns False (no usable LLM output), the job ends as
-    status='failed' with a human-readable error."""
+    """If generate_overview returns False (e.g. the analyze step returns no picks),
+    the job ends as status='failed' with a human-readable error."""
     import time
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")  # empty -> validator rejects
+    _seed_three_papers(tmp_path, monkeypatch,
+                        _llm_stub(analyze_json={"top_picks": [], "reading_order": [],
+                                                "field_intro": "x"}))
     wiki.clear_draft_job("vlms")
     wiki.start_draft_async("vlms", force=True)
     deadline = time.time() + 5
@@ -603,8 +582,9 @@ def test_start_draft_async_publishes_failure(tmp_path, monkeypatch):
 
 
 def test_generate_overview_no_abstracts_returns_false(tmp_path, monkeypatch):
-    wdir = _seed_setup(tmp_path, monkeypatch, lambda m, model=None: "{}")
+    """Without abstracts on any paper, the digest is empty → pipeline refuses."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
     con = connect(tmp_path / "app.sqlite")
-    con.execute("UPDATE papers SET abstract='' WHERE id=1"); con.commit(); con.close()
-    assert wiki.generate_overview("vlms") is False        # nothing to ground a map on
-    assert not (wdir / "overview.json").exists()
+    con.execute("UPDATE papers SET abstract=''"); con.commit(); con.close()
+    assert wiki.generate_overview("vlms", force=True) is False
+    assert not (tmp_path / "collections" / "vlms" / "wiki" / "starter").exists()

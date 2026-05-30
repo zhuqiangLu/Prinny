@@ -1500,11 +1500,20 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
         job = None
     else:
         job_err = None
+
+    # Render starter wiki markdown to HTML server-side. body_md was already
+    # wikilink-resolved against the picks set in load_overview.
+    overview = wiki.load_overview(slug, attention_since=attention_since)
+    if overview and overview.get("top_picks"):
+        overview["field_intro_html"] = render_md(overview.get("field_intro_md", ""), slug)
+        for pg in overview["top_picks"]:
+            pg["body_html"] = render_md(pg.get("body_md", ""), slug)
+
     return templates.TemplateResponse(
         request, "_wiki_panel.html",
         {"slug": slug, "pages": _wiki_pages(slug),
          "index_html": render_md(index_md, slug) if index_md else "",
-         "overview": wiki.load_overview(slug, attention_since=attention_since),
+         "overview": overview,
          "pending": len(wiki.list_proposed(slug)), "gaps": gaps,
          "open_questions": debt_mod.list_debt(slug),
          "recommended_papers": triage_mod.list_triage(slug, status="pending"),

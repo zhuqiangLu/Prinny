@@ -27,19 +27,28 @@
   </div>
   {% endif %}
 
-  {# --- interactive starter overview (curiosity-driven blueprint) --- #}
-  {% if overview and (overview.paper_cards or overview.problems or overview.methods
-                     or overview.open_problems or overview.benchmarks
-                     or overview.reading_paths or overview.field_overview.one_paragraph) %}
+  {# --- starter wiki (llm_wiki pattern: index + 3-7 top picks) --- #}
+  {% if overview and overview.needs_migration %}
+  {# Legacy overview.json detected (pre-2026-05-30) — the old JSON shape can't
+     be re-rendered safely under the new tree. Show a one-time regenerate prompt. #}
+  <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
+    <p class="text-sm font-medium text-amber-900">The starter wiki format changed.</p>
+    <p class="text-xs text-amber-800 mt-1">Your previous starter wiki was a single JSON file; the new one is a small set of curated paper pages. Regenerate to upgrade — your notes-based wiki is untouched.</p>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="mt-2">
+      <button class="rounded bg-amber-600 text-white px-3 py-1.5 text-xs hover:bg-amber-700">↻ Regenerate starter wiki</button>
+    </form>
+  </div>
+  {% elif overview and overview.top_picks %}
     {% include "_wiki_overview.html" %}
   {% elif not pages %}
   <div class="rounded border border-slate-200 bg-white p-3">
-    <p class="text-sm text-slate-600">No starter overview yet.</p>
-    <p class="text-xs text-slate-400 mt-1">Draft a curiosity-driven map from the papers’ abstracts + cached PDFs — an AI starting point that tells you what to read and why:</p>
+    <p class="text-sm text-slate-600">No starter wiki yet.</p>
+    <p class="text-xs text-slate-400 mt-1">Draft 3-7 top-pick paper pages from your collection — an AI starting point that tells you what to read first and why:</p>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="mt-2">
       <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
-      <span class="ml-1 text-xs text-slate-400">~1 min, one LLM pass over all your papers’ abstracts + cached PDFs</span>
+      <span class="ml-1 text-xs text-slate-400">a few minutes; one analyze pass + one page-write per pick</span>
     </form>
   </div>
   {% endif %}

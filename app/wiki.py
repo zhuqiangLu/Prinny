@@ -932,170 +932,140 @@ def _collection_abstracts(slug: str) -> list[dict]:
 
 
 def _overview_path(slug: str) -> Path:
+    """LEGACY (pre-2026-05-30): the JSON starter wiki's location. Kept for migration
+    detection only — _starter_dir(slug) is the new home (markdown pages, llm_wiki
+    pattern). load_overview() returns the migration banner shape when this file
+    still exists and the new tree doesn't."""
     return _wikidir(slug) / "overview.json"
 
 
-# Starter-wiki content shape (the curiosity-driven blueprint, 2026-05-29).
-# Field overview free-text fields the agent is allowed to fill.
-_FIELD_OVERVIEW_FIELDS = ("one_sentence", "one_paragraph", "core_tension",
-                          "why_matters", "what_changed_recently",
-                          "what_newcomer_should_notice")
-# Per-paper card status / difficulty enums. Anything else from the agent is dropped.
-_PAPER_CARD_STATUS = {"foundation", "method", "benchmark", "empirical", "critique",
-                      "survey", "application", "bridge", "outdated"}
-_PAPER_CARD_DIFFICULTY = {"easy", "medium", "hard"}
-# A reading path needs at least this many concrete papers or it gets dropped (the
-# blueprint's "fabrication guard" — don't surface a path the collection can't honestly fill).
-_READING_PATH_MIN_PAPERS = 3
+# --- starter wiki: llm_wiki-pattern markdown tree (2026-05-30) -----------------
+# Replaces the single JSON file with per-paper markdown pages + an index.md, so
+# the starter wiki composes like Karpathy/nashsu's llm_wiki: pages with YAML
+# frontmatter, [[wikilinks]] across pages, agent-tagged + ref-validated. The
+# tree is regenerable on demand; the notes-based wiki under wiki/<section>/* is
+# untouched.
+_STARTER_TOP_PICKS_MIN = 3     # below this, the validator refuses the draft
+_STARTER_TOP_PICKS_MAX = 7     # above this, we cap (per user 2026-05-30: "3-7 picks")
+# Fields the per-paper page MUST expose as H2 sections. The validator parses
+# these out of the agent's markdown so we can blank PDF-only fields server-side.
+_PAPER_PAGE_SECTIONS = ("Problem", "Key idea", "Mechanism", "Evidence",
+                        "Limitation", "Why read", "Connected")
+# PDF-only fields: blanked on cards whose paper was supplied ABSTRACT_ONLY,
+# regardless of what the LLM emitted.
+_PAGE_PDF_ONLY_SECTIONS = ("Mechanism", "Evidence", "Limitation")
+# Slugify the paper title for the on-disk filename. Stable enough; if the title
+# changes (rare) a regenerate replaces it.
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+# Wikilink syntax: [[Paper Title]] resolved at render time to the matching page.
+_WIKILINK_PAGE_RE = re.compile(r"\[\[([^\]\|]+)(?:\|[^\]]+)?\]\]")
 
 
-def _validate_overview(data: dict, valid: set, pdf_refs: set) -> dict:
-    """Validate the curiosity-driven starter-wiki output. Drops hallucinated refs and
-    any field-overview text that's empty. PDF-only fields (mechanism/evidence/limitation)
-    are blanked on cards whose paper wasn't in the PDF-excerpt set — the agent shouldn't
-    have visible evidence for them, so we don't display its guesses.
+def _starter_dir(slug: str) -> Path:
+    return _wikidir(slug) / "starter"
 
-    Reading paths with fewer than _READING_PATH_MIN_PAPERS papers are dropped; we'd
-    rather show zero paths than fake one (Beginner / Critical paths from a homogeneous
-    collection were the main pre-rule failure mode)."""
-    def keep(refs):
-        return [r for r in (refs or []) if r in valid]
+
+def _starter_papers_dir(slug: str) -> Path:
+    return _starter_dir(slug) / "papers"
+
+
+def _starter_index_path(slug: str) -> Path:
+    return _starter_dir(slug) / "index.md"
+
+
+def _has_starter_wiki(slug: str) -> bool:
+    """True iff the new starter tree exists with at least an index. Drives the
+    regen-button vs migration-banner branching."""
+    return _starter_index_path(slug).is_file()
+
+
+def _paper_slug(title: str, ref: str) -> str:
+    """Slug for a paper page filename. Falls back to the ref if the title is
+    empty (an unusual Zotero entry)."""
+    base = _SLUG_RE.sub("-", (title or "").lower()).strip("-")
+    return (base or _SLUG_RE.sub("-", (ref or "").lower()).strip("-"))[:80]
+
+
+def _ref_to_slug_map(picks: list[dict]) -> dict[str, str]:
+    """Build the ref -> on-disk slug map for the picks set. Used by the per-page
+    generator and by the wikilink resolver."""
+    return {p["ref"]: _paper_slug(p["title"], p["ref"]) for p in picks}
+
+
+def _validate_analysis(data: dict, valid: set, pdf_refs: set) -> dict:
+    """Validate the analyze-step output: pick 3–7 top picks + a reading order +
+    a 1–2-paragraph field intro. Drops hallucinated refs; clamps the picks list
+    to [_STARTER_TOP_PICKS_MIN, _STARTER_TOP_PICKS_MAX]; returns a dict the
+    per-paper generate step can iterate over."""
     def text(s):
         return (s or "").strip()
 
-    # Field overview ----------------------------------------------------------------
-    fo = data.get("field_overview") if isinstance(data.get("field_overview"), dict) else {}
-    # Migration: old shape had a top-level "intro" — fold it into one_paragraph.
-    if not fo.get("one_paragraph") and data.get("intro"):
-        fo = dict(fo, one_paragraph=data["intro"])
-    field_overview = {k: text(fo.get(k)) for k in _FIELD_OVERVIEW_FIELDS}
-
-    # Problems ----------------------------------------------------------------------
-    problems = []
-    for p in (data.get("problems") or []):
-        if not isinstance(p, dict) or not text(p.get("title")):
+    intro = text(data.get("field_intro"))
+    raw_picks = data.get("top_picks") if isinstance(data.get("top_picks"), list) else []
+    # Dedupe and keep only refs we actually supplied.
+    picks, seen = [], set()
+    for pick in raw_picks:
+        if not isinstance(pick, dict):
             continue
-        approaches = [{"label": text(a.get("label")), "papers": keep(a.get("papers"))}
-                      for a in (p.get("approaches") or []) if isinstance(a, dict) and a.get("label")]
-        rf = p.get("read_first") if isinstance(p.get("read_first"), dict) else {}
-        rf_paper = rf.get("paper") if rf.get("paper") in valid else None
-        problems.append({
-            "title": text(p["title"]),
-            "why": text(p.get("why")),
-            "tension": text(p.get("tension")),
-            "approaches": [a for a in approaches if a["papers"]],
-            "read_first": rf_paper,
-            "read_first_why": text(rf.get("why")) if rf_paper else "",
-            "papers": keep(p.get("papers")),
-        })
-
-    def grouped(key: str) -> list[dict]:
-        """methods / benchmarks share a shape: title / key_idea / body / papers[]."""
-        out = []
-        for x in (data.get(key) or []):
-            if not isinstance(x, dict) or not text(x.get("title")):
-                continue
-            out.append({
-                "title": text(x["title"]),
-                "key_idea": text(x.get("key_idea")),
-                "body": text(x.get("body")),
-                "papers": keep(x.get("papers")),
-            })
-        return out
-
-    # Open problems — renamed from `gaps`; accept either key for migration ----------
-    raw_op = data.get("open_problems") if data.get("open_problems") is not None else data.get("gaps")
-    open_problems = []
-    for g in (raw_op or []):
-        if not isinstance(g, dict) or not text(g.get("title")):
+        ref = pick.get("paper")
+        if ref not in valid or ref in seen:
             continue
-        open_problems.append({
-            "title": text(g["title"]),
-            "body": text(g.get("body")),
-            "papers": keep(g.get("sources") or g.get("papers")),
-        })
-
-    # Paper cards — NEW (the heart of the blueprint) -------------------------------
-    paper_cards = []
-    for pc in (data.get("paper_cards") or []):
-        if not isinstance(pc, dict):
-            continue
-        ref = pc.get("paper")
-        if ref not in valid:
-            continue
-        connected = []
-        for c in (pc.get("connected_papers") or []):
-            if not isinstance(c, dict):
-                continue
-            cref = c.get("paper")
-            if cref not in valid or cref == ref:
-                continue
-            connected.append({"paper": cref, "relation": text(c.get("relation")),
-                              "why": text(c.get("why"))})
-        prereqs = [r for r in keep(pc.get("prerequisites")) if r != ref]
-        status = text(pc.get("status")).lower()
-        diff = text(pc.get("difficulty")).lower()
-        is_abstract_only = ref not in pdf_refs
-        paper_cards.append({
+        seen.add(ref)
+        picks.append({
             "paper": ref,
-            "status": status if status in _PAPER_CARD_STATUS else "",
-            "problem": text(pc.get("problem")),
-            "idea": text(pc.get("idea")),
-            "method_family": text(pc.get("method_family")),
-            "contribution": text(pc.get("contribution")),
-            "why_read": text(pc.get("why_read")),
-            "difficulty": diff if diff in _PAPER_CARD_DIFFICULTY else "",
-            "prerequisites": prereqs,
-            "connected_papers": connected,
-            # PDF-only fields — blanked when no excerpt was supplied (honest about what was read).
-            "mechanism": "" if is_abstract_only else text(pc.get("mechanism")),
-            "evidence": "" if is_abstract_only else text(pc.get("evidence")),
-            "limitation": "" if is_abstract_only else text(pc.get("limitation")),
-            "abstract_only": is_abstract_only,
+            "why_now": text(pick.get("why_now")),
+            "focus_on": text(pick.get("focus_on")),
+            "skip": text(pick.get("skip")),
         })
+        if len(picks) >= _STARTER_TOP_PICKS_MAX:
+            break
+    # Reading order: respect agent ordering, but only refs in `picks` survive.
+    raw_order = data.get("reading_order") if isinstance(data.get("reading_order"), list) else []
+    picks_by_ref = {p["paper"]: p for p in picks}
+    ordered = []
+    for ref in raw_order:
+        if ref in picks_by_ref and ref not in {o["paper"] for o in ordered}:
+            ordered.append(picks_by_ref[ref])
+    # Any picks the agent forgot to put in reading_order fall to the end.
+    for p in picks:
+        if p["paper"] not in {o["paper"] for o in ordered}:
+            ordered.append(p)
+    return {"field_intro": intro, "top_picks": ordered, "pdf_refs": pdf_refs}
 
-    # Reading paths (plural). Old top-level singular `reading_path` migrates to one
-    # "Orientation" entry so old overviews still render after a reload. -------------
-    reading_paths = []
-    for rp in (data.get("reading_paths") or []):
-        if not isinstance(rp, dict):
-            continue
-        name = text(rp.get("name"))
-        if not name:
-            continue
-        ordered, seen = [], set()
-        for step in (rp.get("ordered_papers") or []):
-            if not isinstance(step, dict):
-                continue
-            sref = step.get("paper")
-            if sref not in valid or sref in seen:
-                continue
-            seen.add(sref)
-            ordered.append({"paper": sref, "why_now": text(step.get("why_now")),
-                            "focus_on": text(step.get("focus_on")), "skip": text(step.get("skip"))})
-        if len(ordered) >= _READING_PATH_MIN_PAPERS:
-            reading_paths.append({"name": name, "for_who": text(rp.get("for_who")),
-                                  "goal": text(rp.get("goal")), "ordered_papers": ordered})
-    if not reading_paths and data.get("reading_path"):
-        legacy = [r for r in (data.get("reading_path") or []) if r in valid][:6]
-        if len(legacy) >= _READING_PATH_MIN_PAPERS:
-            reading_paths.append({
-                "name": "Orientation",
-                "for_who": "anyone new to this collection",
-                "goal": "Get the lay of the land",
-                "ordered_papers": [{"paper": r, "why_now": "", "focus_on": "", "skip": ""}
-                                   for r in legacy],
-            })
 
-    return {
-        "field_overview": field_overview,
-        "problems": problems,
-        "methods": grouped("methods"),
-        "open_problems": open_problems,
-        "benchmarks": grouped("benchmarks"),
-        "paper_cards": paper_cards,
-        "reading_paths": reading_paths,
-    }
+# Section-parser regex: splits a page body by `## <Heading>` lines, capturing the
+# heading and the content until the next `##` (or end of file). Used by
+# _clean_paper_page_body to enforce the abstract-only blanking rule server-side.
+_SECTION_RE = re.compile(r"(?m)^##\s+(?P<title>[^\n]+?)\s*\n(?P<body>.*?)(?=^##\s+|\Z)", re.DOTALL)
+
+
+def _clean_paper_page_body(body: str, abstract_only: bool, valid_page_slugs: set[str]) -> str:
+    """Server-side enforcement on the per-paper page markdown the LLM emits:
+
+    * If ``abstract_only=True``, the Mechanism/Evidence/Limitation sections are
+      stripped entirely (the agent shouldn't claim things it couldn't read).
+    * ``[[wikilinks]]`` pointing at a page slug not in ``valid_page_slugs`` are
+      collapsed to plain text (no broken links left rendering).
+
+    Other sections — Problem / Key idea / Why read / Connected — pass through;
+    they're defensible from abstracts."""
+    # 1) Strip PDF-only sections if abstract_only.
+    if abstract_only:
+        def section_filter(m):
+            title = m.group("title").strip()
+            return "" if title in _PAGE_PDF_ONLY_SECTIONS else m.group(0)
+        body = _SECTION_RE.sub(section_filter, body)
+    # 2) Validate wikilinks. Drop unknown targets to plain text.
+    def fix_link(m):
+        target = m.group(1).strip()
+        target_slug = _SLUG_RE.sub("-", target.lower()).strip("-")
+        if target_slug in valid_page_slugs:
+            return f"[[{target}]]"
+        return target  # collapse to plain text
+    body = _WIKILINK_PAGE_RE.sub(fix_link, body)
+    # 3) Tidy: trim double blank lines left by removed sections.
+    body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"
+    return body
 
 
 def _flag_underread(slug: str, limit: int = 10) -> list[dict]:
@@ -1233,32 +1203,98 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
 
+def _analyze_step(digest: str, included_refs: set, pdf_refs: set) -> dict | None:
+    """LLM call #1: pick 3-7 top picks + reading order + 1-paragraph field intro
+    from the whole-collection digest. The skill is split into TWO sub-skills:
+    `starter-wiki-analyze` prompts only this step. Returns None on LLM/parse
+    failure (caller decides whether that's fatal)."""
+    from . import agent_skills
+    system = (agent_skills.skill_body("starter-wiki-analyze")
+              or "Output JSON: {field_intro, top_picks:[{paper, why_now, focus_on, skip}], reading_order:[paper_ref]}.")
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": "Papers:\n\n" + digest}])
+        data = _extract_json(out)
+    except Exception:  # noqa: BLE001
+        return None
+    return _validate_analysis(data or {}, included_refs, pdf_refs)
+
+
+def _write_paper_page_step(paper: dict, picks: list[dict], field_intro: str,
+                            valid_page_slugs: set[str]) -> str | None:
+    """LLM call #2 (one per pick): write the markdown body for one paper page.
+
+    The agent emits a markdown body with sections (Problem / Key idea / Mechanism
+    / Evidence / Limitation / Why read / Connected) — _clean_paper_page_body
+    blanks PDF-only sections if this paper is abstract-only and drops broken
+    [[wikilinks]]. Returns the cleaned body, or None on LLM/parse failure."""
+    from . import agent_skills
+    system = (agent_skills.skill_body("starter-wiki-page")
+              or "Output markdown for one paper page with sections: Problem, Key idea, Mechanism, Evidence, Limitation, Why read, Connected.")
+    abstract_only = not paper.get("pdf_excerpt")
+    excerpt = paper.get("pdf_excerpt") or ""
+    abstract = (paper.get("abstract") or "")[:_OVERVIEW_ABSTRACT_CHARS]
+    other_picks = "\n".join(f"  - [{p['ref']}] {p['title']}"
+                            for p in picks if p["ref"] != paper["ref"])
+    # The page generator sees the paper + the other picks (so [[wikilinks]] can
+    # reference them) + the field intro for tonal consistency.
+    user = (
+        f"Field intro for context (do not repeat verbatim):\n{field_intro}\n\n"
+        f"This paper:\n[{paper['ref']}] {paper['title']}\n"
+        f"Abstract: {abstract}\n"
+        + (f"PDF excerpt:\n{excerpt}\n" if excerpt else "")
+        + ("(ABSTRACT_ONLY — leave Mechanism / Evidence / Limitation EMPTY for this paper.)\n"
+           if abstract_only else
+           "(HAS_PDF_EXCERPT — Mechanism / Evidence / Limitation are fair game.)\n")
+        + f"\nOther top picks you may [[wikilink]] to (use the paper TITLE as the link target):\n{other_picks}\n"
+    )
+    try:
+        body = llm.complete([{"role": "system", "content": system},
+                             {"role": "user", "content": user}])
+    except Exception:  # noqa: BLE001
+        return None
+    return _clean_paper_page_body(body or "", abstract_only, valid_page_slugs)
+
+
+def _wipe_starter_tree(slug: str) -> None:
+    """Remove the previous starter tree before a regenerate. Only touches
+    wiki/starter/ — the notes-based wiki under wiki/<section>/* is untouched."""
+    import shutil
+    sdir = _starter_dir(slug)
+    if sdir.exists():
+        shutil.rmtree(sdir)
+
+
 def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
-    """Generate the curiosity-driven starter wiki from the papers' abstracts + (where
-    cached) PDF excerpts, via the ``starter-wiki`` skill. Always-Deepen at init (user
-    decision 2026-05-29) — papers with PDFs contribute the first ~2000 chars of body text
-    so the agent can populate mechanism/evidence/limitation fields honestly.
+    """Generate the starter wiki (llm_wiki pattern, 2026-05-30) from the papers'
+    abstracts + cached PDF excerpts. Two-step pipeline:
 
-    Direct-write agent seed (CLAUDE.md amendment broadened 2026-05-29), stored as
-    ``wiki/overview.json``. Non-destructive unless ``force``. Returns True on success.
+      1) ANALYZE — one LLM call picks 3-7 top picks + reading order + field intro
+         from the whole-collection digest.
+      2) WRITE   — one LLM call per pick generates the markdown body for that
+         paper's page. Validator strips PDF-only sections for abstract-only
+         papers and drops broken [[wikilinks]] (in code, not in the prompt).
 
-    ``stage_cb`` is an optional callable invoked at each pipeline stage with the
-    stage name and any kwargs (paper counts, PDF progress). Used by ``start_draft_async``
-    to publish progress for the UI polling endpoint. No-op if None."""
+    Output: wiki/starter/index.md + wiki/starter/papers/<slug>.md. Direct-write
+    agent seed (CLAUDE.md amendment, broadened 2026-05-30). Non-destructive of
+    the notes-based wiki under wiki/<section>/*. Returns True on success.
+
+    ``stage_cb`` is the progress callback used by start_draft_async to publish
+    state into the polling endpoint. No-op if None."""
     def stage(name, **extra):
         if stage_cb:
             try:
                 stage_cb(name, **extra)
-            except Exception:  # noqa: BLE001 - never let UI callback errors abort generation
+            except Exception:  # noqa: BLE001
                 pass
 
-    if _overview_path(slug).exists() and not force:
+    if _has_starter_wiki(slug) and not force:
         return False
+
+    # --- Gather + read PDFs (real progress) -----------------------------------
     stage("gathering")
     papers = _collection_abstracts(slug)
     with_abs = [p for p in papers if p["abstract"]]
-    # Pull cached PDF excerpts in one pass (best-effort; missing PDFs just mean
-    # abstract-only cards). This is the always-deepen step.
     total = len(with_abs)
     for i, p in enumerate(with_abs):
         stage("reading_pdfs", pdfs_done=i, pdfs_total=total)
@@ -1267,32 +1303,97 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     digest, included_refs, pdf_refs = _overview_digest(with_abs)
     if not digest.strip():
         return False
-    stage("drafting", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
-    from . import agent_skills
-    system = agent_skills.skill_body("starter-wiki") or "Output a JSON starter wiki from the papers."
-    try:
-        out = llm.complete([{"role": "system", "content": system},
-                            {"role": "user", "content": "Papers:\n\n" + digest}])
-        data = _extract_json(out)
-    except Exception:  # noqa: BLE001 - no agent / bad output
+
+    # --- Step 1: analyze (one LLM call picks 3-7) -----------------------------
+    stage("analyzing", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
+    analysis = _analyze_step(digest, included_refs, pdf_refs)
+    if not analysis or len(analysis["top_picks"]) < _STARTER_TOP_PICKS_MIN:
+        # Refuse a draft we can't honestly fill — the user gets a clear failure
+        # rather than a 1-pick starter.
         return False
-    stage("validating", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
-    overview = _validate_overview(data or {}, included_refs, pdf_refs)
-    # Accept if ANY major section came back populated. field_overview alone isn't enough
-    # (the agent may dump only the hook); paper_cards alone IS — that's the spine.
-    if not any(overview[k] for k in ("problems", "methods", "open_problems",
-                                     "benchmarks", "paper_cards", "reading_paths")):
+
+    # --- Step 2: per-paper page generation (N LLM calls) ----------------------
+    picks_resolved = []
+    for pick in analysis["top_picks"]:
+        # Stitch the pick info onto its source paper record (abstract, excerpt, title).
+        src = next((p for p in with_abs if p["ref"] == pick["paper"]), None)
+        if src:
+            picks_resolved.append({**src, **pick})
+    # The set of slugs that exist BY THE END OF THIS RUN — used to validate
+    # [[wikilinks]] in each page body. Computed up front so cross-references
+    # between picks resolve regardless of generation order.
+    valid_slugs = {_paper_slug(p["title"], p["ref"]) for p in picks_resolved}
+
+    pages_total = len(picks_resolved)
+    written: list[tuple[dict, str]] = []   # (paper, cleaned_body)
+    for i, paper in enumerate(picks_resolved):
+        stage("writing", pages_done=i, pages_total=pages_total)
+        body = _write_paper_page_step(paper, picks_resolved,
+                                       analysis["field_intro"], valid_slugs)
+        if body and body.strip():
+            written.append((paper, body))
+    stage("writing", pages_done=pages_total, pages_total=pages_total)
+
+    if len(written) < _STARTER_TOP_PICKS_MIN:
+        # The per-page step failed on too many picks. Don't write a half-baked tree.
         return False
-    overview["_meta"] = {
-        "generated_by": "agent", "generator": "starter-wiki",
-        "generated_at": _now(),
+
+    # --- Step 3: link + write the tree atomically -----------------------------
+    stage("linking")
+    _wipe_starter_tree(slug)
+    pdir = _starter_papers_dir(slug)
+    pdir.mkdir(parents=True, exist_ok=True)
+    now = _now()
+    page_meta_by_ref: dict[str, dict] = {}
+    for paper, body in written:
+        page_slug = _paper_slug(paper["title"], paper["ref"])
+        meta = {
+            "type": "paper",
+            "title": paper["title"],
+            "sources": [paper["ref"]],
+            "abstract_only": not paper.get("pdf_excerpt"),
+            "generated_by": "agent",
+            "generator": "starter-wiki",
+            "generated_at": now,
+            "paper_id": paper["id"],
+        }
+        (pdir / f"{page_slug}.md").write_text(frontmatter.dump(meta, body), encoding="utf-8")
+        page_meta_by_ref[paper["ref"]] = {"slug": page_slug, "title": paper["title"],
+                                           "paper_id": paper["id"]}
+
+    # Index.md — top picks in reading order + the agent's field intro.
+    index_body_lines = [analysis["field_intro"].strip(), "",
+                         "## Top picks (in reading order)", ""]
+    for n, pick in enumerate(analysis["top_picks"], start=1):
+        if pick["paper"] not in page_meta_by_ref:
+            continue
+        title = page_meta_by_ref[pick["paper"]]["title"]
+        suffix_bits = []
+        if pick["why_now"]:
+            suffix_bits.append(f"_{pick['why_now']}_")
+        if pick["focus_on"]:
+            suffix_bits.append(f"focus on _{pick['focus_on']}_")
+        if pick["skip"]:
+            suffix_bits.append(f"skip _{pick['skip']}_")
+        suffix = " — " + " · ".join(suffix_bits) if suffix_bits else ""
+        index_body_lines.append(f"{n}. [[{title}]]{suffix}")
+    index_meta = {
+        "type": "starter-index",
+        "title": f"Where to start in {slug}",
+        "top_picks": [page_meta_by_ref[p["paper"]]["slug"]
+                      for p in analysis["top_picks"]
+                      if p["paper"] in page_meta_by_ref],
+        "generated_by": "agent",
+        "generator": "starter-wiki",
+        "generated_at": now,
         "paper_count": len(included_refs),
         "pdfs_read": len(pdf_refs),
         "pdfs_missing": len(included_refs) - len(pdf_refs),
     }
-    _wikidir(slug).mkdir(parents=True, exist_ok=True)
-    _overview_path(slug).write_text(json.dumps(overview, indent=2), encoding="utf-8")
-    _append_log(slug, f"generated starter wiki ({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
+    _starter_index_path(slug).write_text(
+        frontmatter.dump(index_meta, "\n".join(index_body_lines)), encoding="utf-8")
+    _append_log(slug, f"generated starter wiki — {len(written)} top picks "
+                       f"({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
     return True
 
 
@@ -1314,8 +1415,9 @@ _DRAFT_LOCK = threading.Lock()
 _STAGE_MESSAGES = {
     "gathering":    "I'm collecting your papers' abstracts.",
     "reading_pdfs": "I'm reading the PDFs.",   # gets "(done/total)" appended below
-    "drafting":     "I'm drafting the wiki.",
-    "validating":   "I'm checking the refs and saving.",
+    "analyzing":    "I'm picking the top papers to start with.",  # the analyze step
+    "writing":      "I'm writing the page.",   # gets "(N of M)" appended below
+    "linking":      "I'm wiring up cross-references.",
     "done":         "Done.",
     "failed":       "Something went wrong. Try Regenerate again.",
 }
@@ -1355,44 +1457,47 @@ def _stage_message(job: dict) -> dict:
         done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0)
         if total:
             action = f"I'm reading the PDFs ({done}/{total})."
+    elif stage == "writing":
+        done, total = job.get("pages_done", 0), job.get("pages_total", 0)
+        if total:
+            action = f"I'm writing the page ({done}/{total})."
     return {"action": action, "subline": ""}
 
 
-# Time-based asymptote inside the drafting stage. The LLM call gives no inner
-# progress events, so without this the bar sits at a fixed value (was 60) for the
-# 60-90s the call takes, then leaps. With this, progress climbs smoothly inside
-# the 30→95 band:
-#   p(t) = LOW + (HIGH - LOW) · (1 − e^(−t / TAU))
-# Caps at HIGH (=95) until status flips to done — the same honesty rule used
-# before: never claim 100% before the response actually arrives.
-_DRAFTING_LOW = 30      # progress where reading_pdfs left off
-_DRAFTING_HIGH = 95     # asymptote ceiling
-_DRAFTING_TAU = 35.0    # seconds; at t≈35s the curve has reached ~63% of the band
+# Stage progress milestones. With the llm_wiki pipeline we have multiple real
+# events to peg progress to (reading_pdfs fraction, analyzing milestone, writing
+# fraction of pages_done/pages_total), so a time-based asymptote isn't needed —
+# progress climbs in real steps with stage events. Caps at <100 until status=done
+# lands; never claim 100% before the response actually arrives (the honesty rule).
+_PCT_GATHERING   = 3
+_PCT_PDFS_FLOOR  = 5
+_PCT_PDFS_CEIL   = 25   # reading_pdfs maxes here; analyze begins above
+_PCT_ANALYZING   = 30
+_PCT_WRITING_LO  = 35
+_PCT_WRITING_HI  = 90   # writing maxes here as pages_done -> pages_total
+_PCT_LINKING     = 95
 
 
 def _stage_progress(job: dict) -> int:
-    """Coarse 0-100 progress estimate from the job state. Reading-pdfs has a real
-    fraction (done/total). Drafting uses a time-based asymptote so the bar keeps
-    moving while the LLM runs. Caps at 95 until status='done' lands on 100."""
-    import math
-    import time as _time
+    """Coarse 0-100 progress estimate from the job state. Each stage has real
+    events (PDF count, page count) so progress moves in discrete observed steps,
+    not time-based guesses. Caps at <100 until status='done' lands on 100."""
     stage = job.get("stage", "gathering")
     if job.get("status") in ("done", "failed"):
         return 100
     if stage == "gathering":
-        return 3
+        return _PCT_GATHERING
     if stage == "reading_pdfs":
         done, total = job.get("pdfs_done", 0), job.get("pdfs_total", 0) or 1
-        return min(_DRAFTING_LOW, 5 + int(25 * done / total))
-    if stage == "drafting":
-        dts = job.get("drafting_started_at")
-        if dts:
-            elapsed = max(0.0, _time.time() - dts)
-            p = _DRAFTING_LOW + (_DRAFTING_HIGH - _DRAFTING_LOW) * (1 - math.exp(-elapsed / _DRAFTING_TAU))
-            return min(_DRAFTING_HIGH, int(p))
-        return _DRAFTING_LOW  # drafting just started; pre-asymptote starting point
-    if stage == "validating":
-        return _DRAFTING_HIGH
+        return min(_PCT_PDFS_CEIL, _PCT_PDFS_FLOOR + int((_PCT_PDFS_CEIL - _PCT_PDFS_FLOOR) * done / total))
+    if stage == "analyzing":
+        return _PCT_ANALYZING
+    if stage == "writing":
+        done, total = job.get("pages_done", 0), job.get("pages_total", 0) or 1
+        # Linearly scale within the writing band as pages complete.
+        return min(_PCT_WRITING_HI, _PCT_WRITING_LO + int((_PCT_WRITING_HI - _PCT_WRITING_LO) * done / total))
+    if stage == "linking":
+        return _PCT_LINKING
     return 0
 
 
@@ -1404,19 +1509,11 @@ def start_draft_async(slug: str, force: bool = True) -> bool:
     if existing and existing.get("status") == "running":
         return False
     _set_job(slug, status="running", stage="gathering", started_at=_now(),
-             pdfs_done=0, pdfs_total=0, paper_count=None, pdfs_read=None,
-             drafting_started_at=None, error=None, finished_at=None)
+             pdfs_done=0, pdfs_total=0, pages_done=0, pages_total=0,
+             paper_count=None, pdfs_read=None, error=None, finished_at=None)
 
     def cb(name: str, **extra):
-        # Stamp drafting_started_at on first entry to drafting so the time-based
-        # progress curve has a reference point (see _stage_progress).
-        update = {"stage": name, **extra}
-        if name == "drafting":
-            import time as _time
-            existing = _DRAFT_JOBS.get(slug, {})
-            if not existing.get("drafting_started_at"):
-                update["drafting_started_at"] = _time.time()
-        _set_job(slug, **update)
+        _set_job(slug, stage=name, **extra)
 
     def runner():
         try:
@@ -1576,127 +1673,106 @@ def read_and_bump_viewed(slug: str) -> str | None:
 
 
 def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
-    """Read overview.json and resolve every ref to a paper object for the interactive render.
-    Unresolvable refs (paper since removed) are dropped. None if no overview exists.
+    """Read the starter wiki tree at wiki/starter/{index.md, papers/*.md} and
+    return the shape the panel template renders. None if no starter wiki exists.
 
-    Tolerates old-shape overviews (top-level ``intro``, ``gaps``, singular ``reading_path``)
-    so a regenerate isn't required after the 2026-05-29 schema bump — they migrate on read.
+    Migration: if a legacy wiki/overview.json (pre-2026-05-30 JSON shape) is on
+    disk but the new tree isn't, return a stub ``{needs_migration: True}`` so
+    the template can show a "schema changed — regenerate?" banner without
+    pretending the old content is still valid.
 
-    Phase C reweighting: paper cards are annotated with attention_score, is_hot (top-tier
-    score floor), and is_new (highlights/notes after ``attention_since``). Cards are
-    stable-sorted by ``-attention_score`` so attended papers float to the top; with all
-    zeros the editorial order is preserved."""
-    path = _overview_path(slug)
-    if not path.exists():
+    Phase C reweighting: each top pick is decorated with attention_score, is_hot
+    (top-tier score floor), and is_new (highlights/notes after ``attention_since``).
+    Picks are stable-sorted by ``-attention_score`` so attended papers float to
+    the top; with all zeros the agent's reading order is preserved exactly."""
+    if not _has_starter_wiki(slug):
+        # Legacy migration banner — no new tree yet, but an old overview.json
+        # may have been generated by the pre-llm_wiki pipeline.
+        if _overview_path(slug).exists():
+            return {"needs_migration": True, "top_picks": [], "meta": {}}
         return None
+
+    # --- read the index ----------------------------------------------------------
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
+        index_text = _starter_index_path(slug).read_text(encoding="utf-8")
+    except OSError:
         return None
+    idx_meta, idx_body = frontmatter.parse(index_text)
+    pick_slugs = idx_meta.get("top_picks") or []
+    if not isinstance(pick_slugs, list):
+        pick_slugs = []
+
+    # --- read each paper page in the index's reading order ----------------------
+    pdir = _starter_papers_dir(slug)
     rmap = _ref_map(slug)
-    resolve = lambda refs: [rmap[r] for r in (refs or []) if r in rmap]
-
-    # field_overview ----------------------------------------------------------------
-    fo_raw = data.get("field_overview") if isinstance(data.get("field_overview"), dict) else {}
-    if not fo_raw.get("one_paragraph") and data.get("intro"):
-        fo_raw = dict(fo_raw, one_paragraph=data["intro"])
-    field_overview = {k: fo_raw.get(k, "") for k in _FIELD_OVERVIEW_FIELDS}
-
-    # problems / methods / benchmarks ----------------------------------------------
-    problems = []
-    for p in data.get("problems", []):
-        rf = rmap.get(p.get("read_first")) if p.get("read_first") else None
-        problems.append({
-            "title": p.get("title", ""), "why": p.get("why", ""), "tension": p.get("tension", ""),
-            "approaches": [{"label": a["label"], "papers": resolve(a["papers"])}
-                           for a in p.get("approaches", []) if resolve(a["papers"])],
-            "read_first": rf, "read_first_why": p.get("read_first_why", ""),
-            "papers": resolve(p.get("papers")),
+    pages: list[dict] = []
+    for page_slug in pick_slugs:
+        path = pdir / f"{page_slug}.md"
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        meta, body = frontmatter.parse(text)
+        sources = meta.get("sources") or []
+        if not isinstance(sources, list) or not sources:
+            continue
+        paper = rmap.get(sources[0])
+        if not paper:
+            # The paper was removed from the collection since the draft. Drop
+            # the page from the render (no orphan paper widgets).
+            continue
+        pages.append({
+            "page_slug": page_slug,
+            "paper": paper,
+            "title": meta.get("title") or paper.get("title", ""),
+            "body_md": body,
+            "abstract_only": str(meta.get("abstract_only", "")).lower() == "true",
         })
-    def _items(key: str) -> list[dict]:
-        return [{"title": x.get("title", ""), "key_idea": x.get("key_idea", ""),
-                 "body": x.get("body", ""), "papers": resolve(x.get("papers"))}
-                for x in data.get(key, []) if x.get("title")]
 
-    # Open problems (migrate from `gaps` on old overviews) -------------------------
-    raw_op = data.get("open_problems") if data.get("open_problems") is not None else data.get("gaps", [])
-    open_problems = [{"title": x.get("title", ""), "body": x.get("body", ""),
-                      "papers": resolve(x.get("papers"))}
-                     for x in (raw_op or []) if x.get("title")]
+    # --- wikilink resolution: [[Paper Title]] -> /c/<slug>/p/<paper-id> --------
+    # Done here (not in the general markdown renderer) because our [[X]] targets
+    # are paper pages, not notes-based wiki pages. Unresolved titles fall back
+    # to plain text — the per-page validator already stripped broken targets.
+    title_to_pid = {pg["title"]: pg["paper"]["id"] for pg in pages}
+    def _resolve(text: str) -> str:
+        def repl(m: re.Match) -> str:
+            title = m.group(1).strip()
+            pid = title_to_pid.get(title)
+            if pid is None:
+                return title
+            return f"[{title}](/c/{slug}/p/{pid})"
+        return _WIKILINK_PAGE_RE.sub(repl, text)
+    for pg in pages:
+        pg["body_md"] = _resolve(pg["body_md"])
 
-    # Paper cards -------------------------------------------------------------------
-    # Phase C: pull attention signals once (cheap SQL aggregates, no LLM) and decorate
-    # each card. is_hot picks the median nonzero score (floored at _ATTENTION_HOT_FLOOR)
-    # so the 🔥 badge surfaces "actively attended" cards without spamming low-noise ones.
+    # --- attention decoration (cheap, on every render) --------------------------
     scores = attention_scores(slug)
     nonzero = sorted(v for v in scores.values() if v > 0)
     hot_threshold = max(_ATTENTION_HOT_FLOOR, nonzero[len(nonzero) // 2]) if nonzero else None
     changed = attention_changed_since(slug, attention_since)
-    paper_cards = []
-    for pc in data.get("paper_cards", []):
-        paper = rmap.get(pc.get("paper"))
-        if not paper:
-            continue
-        connected = []
-        for c in pc.get("connected_papers", []):
-            cp = rmap.get(c.get("paper"))
-            if cp:
-                connected.append({"paper": cp, "relation": c.get("relation", ""),
-                                  "why": c.get("why", "")})
-        pid = paper["id"]
+    for pg in pages:
+        pid = pg["paper"]["id"]
         score = scores.get(pid, 0)
-        paper_cards.append({
-            "paper": paper,
-            "status": pc.get("status", ""),
-            "problem": pc.get("problem", ""),
-            "idea": pc.get("idea", ""),
-            "method_family": pc.get("method_family", ""),
-            "contribution": pc.get("contribution", ""),
-            "why_read": pc.get("why_read", ""),
-            "difficulty": pc.get("difficulty", ""),
-            "prerequisites": resolve(pc.get("prerequisites")),
-            "connected_papers": connected,
-            "mechanism": pc.get("mechanism", ""),
-            "evidence": pc.get("evidence", ""),
-            "limitation": pc.get("limitation", ""),
-            "abstract_only": bool(pc.get("abstract_only")),
-            "attention_score": score,
-            "is_hot": hot_threshold is not None and score >= hot_threshold,
-            "is_new": pid in changed,
-        })
-    # Stable re-rank: high-score cards float; with zeros everywhere, editorial order holds.
-    paper_cards.sort(key=lambda c: -c["attention_score"])
+        pg["attention_score"] = score
+        pg["is_hot"] = hot_threshold is not None and score >= hot_threshold
+        pg["is_new"] = pid in changed
+    # Stable sort: attended papers float; zeros preserve the agent's reading order.
+    pages.sort(key=lambda p: -p["attention_score"])
 
-    # Reading paths (migrate singular reading_path → one "Orientation" path) -------
-    reading_paths = []
-    for rp in (data.get("reading_paths") or []):
-        ordered = []
-        for step in rp.get("ordered_papers", []):
-            sp = rmap.get(step.get("paper"))
-            if sp:
-                ordered.append({"paper": sp, "why_now": step.get("why_now", ""),
-                                "focus_on": step.get("focus_on", ""), "skip": step.get("skip", "")})
-        if ordered:
-            reading_paths.append({"name": rp.get("name", ""), "for_who": rp.get("for_who", ""),
-                                  "goal": rp.get("goal", ""), "ordered_papers": ordered})
-    if not reading_paths and data.get("reading_path"):
-        legacy = resolve(data["reading_path"])[:6]
-        if legacy:
-            reading_paths.append({
-                "name": "Orientation",
-                "for_who": "anyone new to this collection",
-                "goal": "Get the lay of the land",
-                "ordered_papers": [{"paper": p, "why_now": "", "focus_on": "", "skip": ""}
-                                   for p in legacy],
-            })
+    # --- meta passthrough -------------------------------------------------------
+    meta_out = {
+        "generated_at": idx_meta.get("generated_at"),
+        "paper_count": idx_meta.get("paper_count"),
+        "pdfs_read": idx_meta.get("pdfs_read"),
+        "pdfs_missing": idx_meta.get("pdfs_missing"),
+        "generated_by": idx_meta.get("generated_by", "agent"),
+    }
 
     return {
-        "field_overview": field_overview,
-        "problems": problems,
-        "methods": _items("methods"),
-        "open_problems": open_problems,
-        "benchmarks": _items("benchmarks"),
-        "paper_cards": paper_cards,
-        "reading_paths": reading_paths,
-        "meta": data.get("_meta", {}),
+        "needs_migration": False,
+        "field_intro_md": idx_body.split("## Top picks", 1)[0].strip(),
+        "top_picks": pages,
+        "meta": meta_out,
     }
