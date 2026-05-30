@@ -91,8 +91,8 @@ def test_upload_only_dark_keeps_default_light(app_home):
     assert t["bg_light_url"] == theme.DEFAULT_THEME["bg_light_url"]   # skipped mode → default scene
 
 
-def test_agent_tool_override_read_toggle_write_locked(app_home):
-    from app import agents, agentic_chat, organizer
+def test_agent_tool_override_read_toggle_write_locked(app_home, monkeypatch):
+    from app import agents, agentic_chat, mcp_server
     base = lambda lst: [t.replace("mcp__pa__", "") for t in lst]
     ct = agentic_chat.CHAT_TOOLS
     # a read tool can be disabled and re-enabled
@@ -100,13 +100,17 @@ def test_agent_tool_override_read_toggle_write_locked(app_home):
     assert "search_fragments" not in base(agents.effective_tools("chat", ct))
     agents.set_tool_enabled("chat", "search_fragments", True)
     assert "search_fragments" in base(agents.effective_tools("chat", ct))
-    # a write tool stays locked on (can't be disabled from the UI)
-    assert "submit_proposal" in base(organizer._TOOLS)        # sanity: organizer has a write tool
-    agents.set_tool_enabled("organizer", "submit_proposal", False)
-    assert "submit_proposal" in base(agents.effective_tools("organizer", organizer._TOOLS))
-    # unknown tool / wrong agent is ignored (can't grant new powers)
-    agents.set_tool_enabled("chat", "submit_proposal", True)
-    assert "submit_proposal" not in base(agents.effective_tools("chat", ct))
+    # The write-tool lock still holds generically. No write tools ship today
+    # (the notes-pipeline ones were removed), so simulate one to exercise the
+    # lethal-trifecta boundary: a write tool in an agent's code default stays on
+    # regardless of overrides, and can never be granted to an agent that lacks it.
+    monkeypatch.setattr(mcp_server, "WRITE_TOOLS", {"fake_write"})
+    deflist = list(ct) + ["mcp__pa__fake_write"]
+    assert "fake_write" in base(agents.effective_tools("chat", deflist))   # present by default
+    agents.set_tool_enabled("chat", "fake_write", False)                   # UI attempt to remove
+    assert "fake_write" in base(agents.effective_tools("chat", deflist))   # still locked on
+    agents.set_tool_enabled("chat", "fake_write", True)                    # UI attempt to grant
+    assert "fake_write" not in base(agents.effective_tools("chat", ct))    # not addable (write)
 
 
 def test_agent_can_add_read_tool_beyond_defaults(app_home):

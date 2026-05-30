@@ -36,9 +36,9 @@ SEED_CAP = 60          # max seeds returned per call
 SEARCH_CAP = 20
 
 
-# Tools that WRITE (to the review queue). Hidden/denied in read-only mode so a chat
-# sub-agent can never reach them — server-side enforcement, independent of the engine.
-WRITE_TOOLS = {"submit_proposal", "submit_debt", "submit_brainstorm"}
+# This MCP surface is now read-only — the cognitive-model wiki has no agent
+# write tools. Kept as an (empty) set so callers that test membership keep working.
+WRITE_TOOLS: set[str] = set()
 
 
 def _readonly() -> bool:
@@ -243,40 +243,6 @@ def read_wiki_page(slug: str, page: str) -> dict:
     return {"page": page, "content": target.read_text(encoding="utf-8")}
 
 
-def submit_debt(slug: str, items: list[dict]) -> dict:
-    """Record reading-debt QUESTIONS the agent raised (P7 find pass). No prose/claims —
-    just questions + the fragment ids they span. Deduped/persisted by debt."""
-    from . import debt  # lazy: debt imports mcp_server
-    if not isinstance(items, list):
-        return {"error": "items must be a list"}
-    written = skipped = 0
-    for it in items if isinstance(items, list) else []:
-        did = debt.upsert_debt(slug, (it or {}).get("question", ""), (it or {}).get("sources", []))
-        written += 1 if did else 0
-        skipped += 0 if did else 1
-    return {"written": written, "skipped": skipped}
-
-
-def submit_brainstorm(slug: str, pages: list[dict]) -> dict:
-    """Submit SPECULATIVE (agent) brainstorm pages (P7). Gate-exempt; lands in the
-    review queue and, on accept, in wiki/brainstorming/ — never a grounded claim."""
-    if not isinstance(pages, list):
-        return {"error": "pages must be a list"}
-    return wiki.brainstorm_pages(slug, pages)
-
-
-def submit_proposal(slug: str, pages: list[dict]) -> dict:
-    """Validate agent-produced pages, run the gate, and write survivors to the review
-    queue. The agent calls this; the APP writes — and only the queue, never the wiki."""
-    if not isinstance(pages, list):
-        return {"error": "pages must be a list"}
-    inputs = wiki.gather_inputs(slug, "agent")
-    summary = wiki.process_pages(slug, pages, inputs, "agent")
-    return {"written": summary["written"], "demoted": summary["demoted"],
-            "rejected": summary["rejected"],
-            "pages": [p["page_path"] for p in summary["proposals"]]}
-
-
 # --- JSON-RPC dispatch (minimal MCP) ----------------------------------------
 PROTOCOL_VERSION = "2025-06-18"
 _TOOLS = [
@@ -301,15 +267,6 @@ _TOOLS = [
     {"name": "read_wiki_page",
      "description": "Read one current wiki page, e.g. 'problems/efficiency' or 'index'.",
      "inputSchema": {"type": "object", "properties": {"page": {"type": "string"}}, "required": ["page"]}},
-    {"name": "submit_proposal",
-     "description": "Submit proposed wiki pages. Each claim is gated in code; survivors land in the review queue (NOT the wiki). pages: [{section, slug, title, claims:[{text, claim_type, notes, thoughts, papers, highlights}]}].",
-     "inputSchema": {"type": "object", "properties": {"pages": {"type": "array"}}, "required": ["pages"]}},
-    {"name": "submit_debt",
-     "description": "Record reading-debt QUESTIONS (never answers/prose). items: [{question, sources:[fragment ids]}].",
-     "inputSchema": {"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]}},
-    {"name": "submit_brainstorm",
-     "description": "Submit SPECULATIVE brainstorm pages (machine notes, never grounded). pages: [{title, slug, body, sources:[fragment ids]}].",
-     "inputSchema": {"type": "object", "properties": {"pages": {"type": "array"}}, "required": ["pages"]}},
 ]
 
 
@@ -330,12 +287,6 @@ def _call_tool(slug: str, name: str, args: dict):
         return get_chat_history(slug, args.get("paper_id"), args.get("limit", 200))
     if name == "read_wiki_page":
         return read_wiki_page(slug, args.get("page", ""))
-    if name == "submit_proposal":
-        return submit_proposal(slug, args.get("pages", []))
-    if name == "submit_debt":
-        return submit_debt(slug, args.get("items", []))
-    if name == "submit_brainstorm":
-        return submit_brainstorm(slug, args.get("pages", []))
     raise KeyError(name)
 
 

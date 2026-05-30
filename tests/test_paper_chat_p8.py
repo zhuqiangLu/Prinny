@@ -112,19 +112,21 @@ def test_skills_ship_and_materialize(tmp_path, monkeypatch):
 
 
 def test_per_agent_skills_homes_are_scoped(tmp_path, monkeypatch):
-    """Each sub-agent gets its OWN home carrying only its skills — the organizer home
-    has organize-wiki and not the paper-reading skills, and vice versa."""
+    """Each sub-agent gets its OWN home carrying only its skills — the chat home
+    has answer-from-collection and not the paper-reading skills, and vice versa.
+    (Post-cleanup: only paper / chat / wiki homes remain.)"""
     import app.agent_skills as ag
     monkeypatch.setattr(ag, "APP_DIR", tmp_path)
-    for home, expect in [("organizer", "organize-wiki"), ("debt", "find-reading-debt"),
-                         ("brainstorm", "brainstorm-open-questions"),
-                         ("chat", "answer-from-collection")]:
-        h = ag.ensure_skills_home(home)
-        skills = {p.name for p in (h / ".claude" / "skills").iterdir()}
-        assert skills == {expect}                             # scoped: only its own skill
+    # Single-skill home stays scoped to exactly its skill.
+    h = ag.ensure_skills_home("chat")
+    assert {p.name for p in (h / ".claude" / "skills").iterdir()} == {"answer-from-collection"}
+    # Multi-skill home carries exactly its set (the wiki drafter's two skills).
+    w = ag.ensure_skills_home("wiki")
+    assert {p.name for p in (w / ".claude" / "skills").iterdir()} == {"field-model", "belief-draft"}
+    # Paper home has its reading skills and none of the others'.
     paper = ag.ensure_skills_home("paper")
     pnames = {p.name for p in (paper / ".claude" / "skills").iterdir()}
-    assert "organize-wiki" not in pnames and "summarize-section" in pnames
+    assert "answer-from-collection" not in pnames and "summarize-section" in pnames
 
 
 def test_stream_self_heals_stale_session(wired, tmp_path, monkeypatch):

@@ -1,8 +1,0 @@
-{% extends "base.html" %}
-{% block title %}{{ title }} — Wiki{% endblock %}
-{% block content %}
-<a href="/c/{{ slug }}/wiki" class="text-sm text-slate-500 hover:text-slate-900">← Wiki</a>
-<article class="prose prose-sm max-w-none mt-3 rounded border border-slate-200 bg-white p-4">
-  {{ html | safe }}
-</article>
-{% endblock %}

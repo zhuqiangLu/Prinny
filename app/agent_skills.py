@@ -26,12 +26,11 @@ _SRC = Path(__file__).resolve().parent / "skills"
 _HOMES: dict[str, list[str]] = {
     "paper": ["summarize-section", "extract-contributions", "compare-to-my-notes",
               "list-assumptions", "locate-figure", "find-evidence-for", "resume-paper-chat"],
-    "organizer": ["organize-wiki"],
-    "debt": ["find-reading-debt"],
-    "brainstorm": ["brainstorm-open-questions"],
     "chat": ["answer-from-collection"],
-    "lint": ["lint-wiki"],
-    "wiki": ["starter-wiki"],
+    # The "wiki" agent is the one-shot cognitive-model drafter: Field Model
+    # (field-model) + belief candidates (belief-draft). The old notes-pipeline
+    # homes (organizer/debt/brainstorm/lint) were removed with the pipeline.
+    "wiki": ["field-model", "belief-draft"],
 }
 
 

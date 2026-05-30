@@ -25,7 +25,6 @@ from . import (
     agents as agents_mod,
     annotations as ann_mod,
     context,
-    debt as debt_mod,
     discover,
     export_dir as export_mod,
     frontmatter,
@@ -33,16 +32,13 @@ from . import (
     live_session,
     llm,
     notes as notes_mod,
-    organizer,
     paper_chat,
     pdf_store,
-    suggest,
     sync as sync_mod,
     theme as theme_mod,
     thoughts as thoughts_mod,
     triage as triage_mod,
     wiki,
-    wiki_lint as wiki_lint_mod,
 )
 from .config import highlight_scheme as config_highlight_scheme, load_config, save_config
 from .db import init_db
@@ -52,7 +48,6 @@ from .repo import (
     clear_messages,
     delete_thread,
     get_artifact,
-    get_message,
     get_messages,
     get_or_create_thread,
     get_session_id,
@@ -420,9 +415,7 @@ def collection_page(request: Request, slug: str) -> HTMLResponse:
             "export_dir_default": str(export_mod.default_dir(slug)),
             "papers": papers,
             "others": others,
-            "proposed_count": len(wiki.list_proposed(slug)),
             "triage_count": len(triage_mod.list_triage(slug)),
-            "debt_count": debt_mod.count_open(slug),
             "dup_count": len(library.find_duplicate_groups(slug)),
             "read_map": {str(p["id"]): p["read"] for p in papers},
             "graveyard_count": library.graveyard_count(slug),
@@ -935,18 +928,11 @@ def chat_post(
     # an orphan user message with no reply.
     error = None
     assistant_text = ""
-    assistant_id = None
-    suggestion = None
     try:
         assistant_text = llm.complete(messages)
         add_message(thread_id, "user", stored or "(image)", refs)
-        # Store refs on the assistant turn too, so a chat→wiki draft can ground it.
-        assistant_id = add_message(thread_id, "assistant", assistant_text, refs)
-        # Phase 6: cheap classifier — only meaningful if the turn cited something.
-        if refs:
-            verdict = suggest.classify(message, assistant_text)
-            if verdict["update"]:
-                suggestion = {"message_id": assistant_id, "section": verdict["section"]}
+        # Store refs on the assistant turn too (kept for context/grounding).
+        add_message(thread_id, "assistant", assistant_text, refs)
     except llm.LLMError as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 - surface API errors in the UI
@@ -962,7 +948,6 @@ def chat_post(
             "user_images": images,
             "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
             "error": error,
-            "suggestion": suggestion,
             "usage": llm.usage(),
             "agentic": False,
         },
@@ -1467,17 +1452,6 @@ def _hx(request: Request) -> bool:
     return request.headers.get("HX-Request") == "true"
 
 
-def _wiki_pages(slug: str) -> list[str]:
-    wdir = wiki._wikidir(slug)
-    pages: list[str] = []
-    if wdir.is_dir():
-        for f in sorted(wdir.rglob("*.md")):
-            if f.name in ("index.md", "log.md"):
-                continue
-            pages.append(str(f.relative_to(wdir)).replace(".md", ""))
-    return pages
-
-
 def _wiki_panel(request: Request, slug: str, gaps=None,
                 attention_since: str | None = None) -> HTMLResponse:
     """Render the inline wiki panel. ``attention_since`` is the user's PREVIOUS
@@ -1489,8 +1463,6 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     the template can render the in-panel overlay. A done/failed job is observed
     once here and then cleared, so the next render is back to the idle path and
     /wiki/draft/status starts returning 'idle' for new polls."""
-    index_md = wiki._read(wiki._wikidir(slug) / "index.md")
-    from . import debt as debt_mod, triage as triage_mod
     job = wiki.get_draft_job(slug)
     if job and job.get("status") in ("done", "failed"):
         # Job finished; this render shows the regenerated panel (no overlay).
@@ -1501,31 +1473,20 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     else:
         job_err = None
 
-    # Field Model (Phase A) — no markdown rendering needed at the panel level;
-    # the new template renders structured data (thesis callouts, landscape
-    # bullet lists, paper cards) directly via Jinja.
+    # Field Model (cognitive-model wiki) — no markdown rendering needed at the
+    # panel level; the template renders structured data (thesis callouts,
+    # landscape bullet lists, paper cards) directly via Jinja.
     overview = wiki.load_overview(slug, attention_since=attention_since)
 
     return templates.TemplateResponse(
         request, "_wiki_panel.html",
-        {"slug": slug, "pages": _wiki_pages(slug),
-         "index_html": render_md(index_md, slug) if index_md else "",
+        {"slug": slug,
          "overview": overview,
-         "pending": len(wiki.list_proposed(slug)), "gaps": gaps,
-         "open_questions": debt_mod.list_debt(slug),
-         "recommended_papers": triage_mod.list_triage(slug, status="pending"),
          "draft_job": job,                       # active running job, or None
          "draft_initial_action": wiki._stage_message(job)["action"] if job else "",
          "draft_initial_subline": wiki._stage_message(job)["subline"] if job else "",
          "draft_initial_progress": wiki._stage_progress(job) if job else 0,
          "draft_error": job_err},
-    )
-
-
-def _proposed_panel(request: Request, slug: str) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "_proposed_panel.html",
-        {"slug": slug, "proposals": wiki.list_proposed(slug), "lint": wiki.lint_wiki(slug)},
     )
 
 
@@ -1536,99 +1497,6 @@ def _triage_panel(request: Request, slug: str) -> HTMLResponse:
     )
 
 
-def _debt_panel(request: Request, slug: str, error: str | None = None) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "_debt_panel.html",
-        {"slug": slug, "items": debt_mod.list_debt(slug, ("open",)), "error": error},
-    )
-
-
-@app.get("/c/{slug}/debt/panel", response_class=HTMLResponse)
-def debt_panel(request: Request, slug: str) -> HTMLResponse:
-    _require_collection(slug)
-    return _debt_panel(request, slug)
-
-
-@app.post("/c/{slug}/debt/find", response_class=HTMLResponse)
-def debt_find(request: Request, slug: str) -> HTMLResponse:
-    """On-demand: agent surfaces reading debt as questions (P7). Never background."""
-    _require_collection(slug)
-    error = None
-    try:
-        debt_mod.find_debt(slug)
-    except llm.LLMError as exc:
-        error = str(exc)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("paper_agent.debt").exception("debt find failed")
-        error = f"Find reading debt failed: {exc}"
-    return _debt_panel(request, slug, error)
-
-
-@app.post("/c/{slug}/debt/{did}/fill", response_class=HTMLResponse)
-def debt_fill(request: Request, slug: str, did: str, reasoning: str = Form("")) -> HTMLResponse:
-    """Fill a debt with YOUR reasoning → (reasoning, human) thought; grounds on next organize."""
-    _require_collection(slug)
-    debt_mod.fill_debt(slug, did, reasoning)
-    return _debt_panel(request, slug)
-
-
-@app.post("/c/{slug}/debt/{did}/ignore", response_class=HTMLResponse)
-def debt_ignore(request: Request, slug: str, did: str) -> HTMLResponse:
-    _require_collection(slug)
-    debt_mod.set_status(slug, did, "ignored")
-    return _debt_panel(request, slug)
-
-
-@app.post("/c/{slug}/debt/{did}/brainstorm", response_class=HTMLResponse)
-def debt_brainstorm(request: Request, slug: str, did: str) -> HTMLResponse:
-    """Agent brainstorms this debt → (agent) content in the review queue → wiki/brainstorming/."""
-    _require_collection(slug)
-    error = None
-    try:
-        debt_mod.brainstorm(slug, did)
-    except llm.LLMError as exc:
-        error = str(exc)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("paper_agent.debt").exception("brainstorm failed")
-        error = f"Brainstorm failed: {exc}"
-    return _debt_panel(request, slug, error)
-
-
-@app.post("/c/{slug}/debt/brainstorm-all", response_class=HTMLResponse)
-def debt_brainstorm_all(request: Request, slug: str) -> HTMLResponse:
-    _require_collection(slug)
-    error = None
-    try:
-        debt_mod.brainstorm(slug, None)
-    except llm.LLMError as exc:
-        error = str(exc)
-    except Exception as exc:  # noqa: BLE001
-        logging.getLogger("paper_agent.debt").exception("brainstorm-all failed")
-        error = f"Brainstorm failed: {exc}"
-    return _debt_panel(request, slug, error)
-
-
-@app.get("/c/{slug}/wiki", response_class=HTMLResponse)
-def wiki_index(request: Request, slug: str) -> HTMLResponse:
-    col = _require_collection(slug)
-    index_md = wiki._read(wiki._wikidir(slug) / "index.md")
-    from . import debt as debt_mod, triage as triage_mod
-    # Phase C: bump last_wiki_viewed_at and remember the OLD value for "new" badges
-    # in the overview's paper cards. We don't need it on wiki.html itself (no cards
-    # there) but the embedded overview panel is rendered via _wiki_panel separately.
-    wiki.read_and_bump_viewed(slug)
-    return templates.TemplateResponse(
-        request, "wiki.html",
-        {"slug": slug, "name": col["name"], "pages": _wiki_pages(slug),
-         "index_html": render_md(index_md, slug) if index_md else "",
-         "pending": len(wiki.list_proposed(slug)), "gaps": None,
-         "signal": wiki.refresh_signal(slug),
-         "open_questions": debt_mod.list_debt(slug),
-         "recommended_papers": triage_mod.list_triage(slug, status="pending")},
-    )
-
-
-# Declared before /wiki/{name} so the literal "panel" isn't matched as a page name.
 @app.get("/c/{slug}/wiki/panel", response_class=HTMLResponse)
 def wiki_panel(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)
@@ -1701,89 +1569,9 @@ def wiki_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
-def _find_wiki_page(slug: str, name: str):
-    wdir = wiki._wikidir(slug)
-    if wdir.is_dir():
-        for f in wdir.rglob("*.md"):
-            meta, _ = frontmatter.parse(f.read_text(encoding="utf-8"))
-            if f.stem == name or slugify(meta.get("title", "")) == name:
-                return f
-    return None
-
-
-@app.get("/c/{slug}/wiki/{name}/panel", response_class=HTMLResponse)
-def wiki_page_panel(request: Request, slug: str, name: str) -> HTMLResponse:
-    _require_collection(slug)
-    target = _find_wiki_page(slug, name)
-    if target is None:
-        raise HTTPException(status_code=404, detail=f"No wiki page '{name}'")
-    return templates.TemplateResponse(
-        request, "_wiki_page_panel.html",
-        {"slug": slug, "title": target.stem,
-         "html": render_md(target.read_text(encoding="utf-8"), slug)},
-    )
-
-
-@app.get("/c/{slug}/wiki/{name}", response_class=HTMLResponse)
-def wiki_page(request: Request, slug: str, name: str) -> HTMLResponse:
-    col = _require_collection(slug)
-    target = _find_wiki_page(slug, name)
-    if target is None:
-        raise HTTPException(status_code=404, detail=f"No wiki page '{name}'")
-    return templates.TemplateResponse(
-        request, "wiki_page.html",
-        {"slug": slug, "name": col["name"], "title": target.stem,
-         "html": render_md(target.read_text(encoding="utf-8"), slug)},
-    )
-
-
-@app.post("/c/{slug}/wiki/refresh", response_class=HTMLResponse)
-def wiki_refresh(request: Request, slug: str) -> HTMLResponse:
-    """Unified manual wiki refresh — runs the curator (proposed edits + debt + triage snapshot)
-    in one pass and returns a popup-style summary the user reviews."""
-    _require_collection(slug)
-    summary = wiki.run_curator(slug)
-    return templates.TemplateResponse(
-        request, "_wiki_refresh_popup.html", {"slug": slug, "summary": summary})
-
-
-@app.post("/c/{slug}/wiki/generate", response_class=HTMLResponse)
-def wiki_generate(request: Request, slug: str, mode: str = Form("full")):
-    _require_collection(slug)
-    try:
-        # Agentic when a CLI agent is the engine (it reads via MCP + submit_proposal);
-        # tool-less two-step otherwise. Both gate and write only the review queue.
-        organizer.organize(slug, "incremental" if mode == "incremental" else "full")
-    except llm.LLMError:
-        pass  # surfaced on the proposed queue (empty + note)
-    # Edits land in the review queue, so show it.
-    if _hx(request):
-        return _proposed_panel(request, slug)
-    return RedirectResponse(f"/c/{slug}/proposed", status_code=303)
-
-
-@app.post("/c/{slug}/wiki/lint", response_class=HTMLResponse)
-def wiki_lint_run(request: Request, slug: str) -> HTMLResponse:
-    """Report-only wiki health check: deterministic findings (code) + the heuristic
-    agent pass (read-only). Surfaces issues; never edits the wiki."""
-    _require_collection(slug)
-    det = wiki.lint_wiki(slug)
-    report_html, agentic, error = "", False, None
-    try:
-        deep = wiki_lint_mod.deep_lint(slug)
-        agentic = deep["agentic"]
-        report_html = render_md(deep["report"], slug) if deep.get("report") else ""
-    except llm.LLMError as exc:
-        error = str(exc)
-    return templates.TemplateResponse(
-        request, "_lint_panel.html",
-        {"slug": slug, "lint": det, "report_html": report_html, "agentic": agentic, "error": error},
-    )
-
-
 @app.post("/c/{slug}/wiki/gaps", response_class=HTMLResponse)
 def wiki_gaps(request: Request, slug: str) -> HTMLResponse:
-    col = _require_collection(slug)
+    _require_collection(slug)
     error = None
     gaps = []
     try:
@@ -1793,55 +1581,7 @@ def wiki_gaps(request: Request, slug: str) -> HTMLResponse:
     except Exception as exc:  # noqa: BLE001
         error = f"Gap search failed: {exc}"
     gaps_ctx = {"items": gaps, "error": error}
-    if _hx(request):
-        return _wiki_panel(request, slug, gaps=gaps_ctx)
-    return templates.TemplateResponse(
-        request, "wiki.html",
-        {"slug": slug, "name": col["name"], "pages": _wiki_pages(slug),
-         "index_html": "", "pending": len(wiki.list_proposed(slug)), "gaps": gaps_ctx},
-    )
-
-
-@app.get("/c/{slug}/proposed", response_class=HTMLResponse)
-def proposed_get(request: Request, slug: str) -> HTMLResponse:
-    col = _require_collection(slug)
-    return templates.TemplateResponse(
-        request, "proposed.html",
-        {"slug": slug, "name": col["name"], "proposals": wiki.list_proposed(slug),
-         "lint": wiki.lint_wiki(slug)},
-    )
-
-
-@app.get("/c/{slug}/proposed/panel", response_class=HTMLResponse)
-def proposed_panel(request: Request, slug: str) -> HTMLResponse:
-    _require_collection(slug)
-    return _proposed_panel(request, slug)
-
-
-@app.post("/c/{slug}/proposed/{edit_id}/accept", response_class=HTMLResponse)
-def proposed_accept(request: Request, slug: str, edit_id: str, edited_content: str = Form(None)):
-    wiki.accept_proposed(slug, edit_id, edited_content)
-    if _hx(request):
-        return _proposed_panel(request, slug)
-    return RedirectResponse(f"/c/{slug}/proposed", status_code=303)
-
-
-@app.post("/c/{slug}/proposed/{edit_id}/reject", response_class=HTMLResponse)
-def proposed_reject(request: Request, slug: str, edit_id: str):
-    wiki.reject_proposed(slug, edit_id)
-    if _hx(request):
-        return _proposed_panel(request, slug)
-    return RedirectResponse(f"/c/{slug}/proposed", status_code=303)
-
-
-# Phase 6 — draft a wiki edit from a chat turn
-@app.post("/c/{slug}/proposed/from-chat")
-def proposed_from_chat(slug: str, message_id: int = Form(...), section: str = Form("synthesis")) -> RedirectResponse:
-    _require_collection(slug)
-    msg = get_message(message_id)
-    if msg and msg["role"] == "assistant":
-        wiki.proposal_from_chat(slug, msg["content"], msg["refs"], section)
-    return RedirectResponse(f"/c/{slug}/proposed", status_code=303)
+    return _wiki_panel(request, slug, gaps=gaps_ctx)
 
 
 # ===========================================================================

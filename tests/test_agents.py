@@ -8,13 +8,16 @@ import app.agents as agents
 def test_registry_lists_all_agents_with_real_tools():
     items = agents.list_agents()
     keys = {a["key"] for a in items}
-    assert {"paper", "chat", "organizer", "debt", "brainstorm", "lint", "wiki"} <= keys
+    # Post-cleanup registry: the notes-pipeline agents (organizer/debt/brainstorm/lint)
+    # were removed with the pipeline; only the read-only paper/chat agents and the
+    # one-shot wiki drafter remain.
+    assert keys == {"paper", "chat", "wiki"}
     paper = next(a for a in items if a["key"] == "paper")
     assert "Read" in [t["name"] for t in paper["tools"]]          # real allowlist
     assert any(s["name"] == "summarize-section" for s in paper["skills"])
-    org = next(a for a in items if a["key"] == "organizer")
-    assert any(t["name"] == "submit_proposal" and t["write"] for t in org["tools"])  # write tool flagged
     assert next(a for a in items if a["key"] == "wiki")["tools"] == []  # one-shot, no tools
+    # No agent carries a write tool anymore (the lethal-trifecta surface is gone).
+    assert all(not t["write"] for a in items for t in a["tools"])
 
 
 def test_skill_override_save_reset(tmp_path, monkeypatch):

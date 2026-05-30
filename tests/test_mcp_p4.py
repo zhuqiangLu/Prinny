@@ -63,18 +63,6 @@ def test_search_fragments_finds_thought(wired):
     assert any(h["type"] == "thought" for h in hits["hits"])
 
 
-def test_submit_proposal_runs_the_gate(wired):
-    # attributed citing the paper -> ACCEPT (written); attributed citing nothing -> REJECT
-    pages = [{"section": "problems", "slug": "eff", "title": "Eff", "claims": [
-        {"text": "P1 reports R.", "claim_type": "attributed", "papers": ["1"]},
-        {"text": "unsupported.", "claim_type": "attributed", "papers": ["GHOST"]},
-    ]}]
-    res = mcp.submit_proposal("c", pages)
-    assert res["written"] == 1 and res["rejected"] == 1
-    assert wiki.list_proposed("c")                       # in the queue
-    assert not (wired["cols"] / "c" / "wiki" / "problems" / "eff.md").exists()  # NOT the wiki
-
-
 # --- stdio launch config --------------------------------------------------------
 def test_stdio_mcp_config_scopes_to_collection():
     cfg = mcp.stdio_mcp_config("robotics")
@@ -91,7 +79,7 @@ def test_dispatch_initialize_and_tools_list(wired):
     tl = mcp.dispatch("c", {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in tl["result"]["tools"]}
     assert {"get_unreasoned_seeds", "get_fragment", "search_fragments",
-            "read_wiki_page", "submit_proposal"} <= names
+            "read_wiki_page"} <= names
 
 
 def test_dispatch_notification_returns_none(wired):
@@ -104,18 +92,6 @@ def test_dispatch_tools_call_wraps_payload(wired):
                               "params": {"name": "get_unreasoned_seeds", "arguments": {}}})
     payload = json.loads(resp["result"]["content"][0]["text"])
     assert payload["collection"] == "c"
-
-
-def test_readonly_mode_hides_and_denies_write_tools(wired, monkeypatch):
-    monkeypatch.setenv("PA_MCP_READONLY", "1")
-    tl = mcp.dispatch("c", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
-    names = {t["name"] for t in tl["result"]["tools"]}
-    assert "submit_proposal" not in names and "submit_debt" not in names   # write tools hidden
-    assert "get_unreasoned_seeds" in names and "read_paper_text" in names   # read tools stay
-    resp = mcp.dispatch("c", {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                              "params": {"name": "submit_proposal", "arguments": {"pages": []}}})
-    payload = json.loads(resp["result"]["content"][0]["text"])
-    assert "read-only" in payload["error"]                                  # and denied if called
 
 
 def test_dispatch_unknown_tool_errors(wired):

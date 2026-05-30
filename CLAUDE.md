@@ -99,9 +99,19 @@ If a feature you're about to build lets the LLM produce wiki content without the
 >
 > Migration: legacy `wiki/starter/index.md` OR `wiki/overview.json` on disk → `load_overview`
 > returns `{needs_migration: True}` so the panel renders a one-time "schema changed —
-> regenerate?" banner. No silent conversion. The `gate()` function and `accept_proposed()`
-> are retained (chat-derived edits + the eventual Phase C belief-promotion flow both go
-> through them); the legacy notes-based wiki UI is dropped from the default render.
+> regenerate?" banner. No silent conversion.
+>
+> **Cleanup (2026-05-31):** the old **notes-based wiki pipeline** (the `gate()` /
+> `run_generation` / `process_pages` / `proposal_from_chat` flow, `organizer.py`, the
+> `proposed-edits/` review queue + `accept_proposed`/`reject_proposed`, the `run_curator`
+> refresh, `lint_wiki`/`wiki_lint.py`, the standalone `wiki.html` hub + `/c/<slug>/wiki/<name>`
+> page viewer, the chat→proposal classifier `suggest.py`, and the MCP `submit_proposal` /
+> brainstorm write tools) and the **reading-debt** subsystem (`debt.py`) were **removed** — the
+> cognitive-model wiki replaced them and beliefs use `accept_belief` (not the gate). The belief
+> tray IS the human-in-the-loop gate now. **Kept:** `triage.py` (arXiv paper inbox) and
+> `discover.py` (gap-fill, stale detection, add-by-URL) as separate paper-management features,
+> still reachable via `/c/<slug>/triage`, `/c/<slug>/wiki/gaps`, `/c/<slug>/stale`. The Phase 5
+> feature list below describes that removed pipeline and is retained only as historical spec.
 
 ## Existing pieces (do not rebuild)
 

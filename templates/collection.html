@@ -155,13 +155,11 @@
       <div class="shrink-0 flex items-center gap-1 border-b border-slate-200 px-2 py-1.5 text-sm">
         <button @click="switchLeft('papers')" :class="leftTabCls('papers')">Papers</button>
         <button @click="switchLeft('wiki')" :class="leftTabCls('wiki')">Wiki
-          <span x-show="proposedCount" x-text="proposedCount"
-                class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5"></span>
-          <span x-show="triageCount + debtCount" x-text="triageCount + debtCount"
+          <span x-show="triageCount" x-text="triageCount"
                 class="ml-0.5 rounded-full bg-sky-200 text-sky-900 text-xs px-1.5"
-                :title="triageCount + ' triage · ' + debtCount + ' open questions'"></span>
+                :title="triageCount + ' triage'"></span>
         </button>
-        {# Triage + Debt tabs dropped — surfaced inline on the Wiki panel instead. #}
+        {# Triage tab dropped — surfaced inline on the Wiki panel instead. #}
         <div class="ml-auto flex items-center gap-1">
           {% if papers %}
           <button x-show="leftView === 'papers'" x-cloak @click="toggleTools()"
@@ -388,9 +386,7 @@
       dupOpen: false,
       toolsOpen: false,
       sortBy: localStorage.getItem("cc.sort") || "title",
-      proposedCount: {{ proposed_count|default(0) }},
       triageCount: {{ triage_count|default(0) }},
-      debtCount: {{ debt_count|default(0) }},
       init() {
         this.$watch("tab", (v) => { localStorage.setItem("cc.tab", v); if (v === "thoughts") this.loadThoughts(); });
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));

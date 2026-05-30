@@ -17,20 +17,6 @@ _DEFS = [
     ("chat", "Collection chat",
      "Answers across the whole collection (papers, your notes, the wiki) for the side chat.",
      "chat", "Read-only. Surfaces and connects what you've written; never mutates artifacts."),
-    ("organizer", "Wiki organizer",
-     "Drafts wiki page edits from your notes & thoughts — as proposals you review.",
-     "organizer", "Proposes diffs to the review queue; NEVER writes the wiki directly. Every "
-     "claim is provenance-gated in code before you see it."),
-    ("debt", "Reading-debt finder",
-     "Finds clusters of material you've captured but not yet reasoned over, as open questions.",
-     "debt", "Read-only over your fragments; records QUESTIONS only — never answers or prose."),
-    ("brainstorm", "Brainstormer",
-     "Throws out speculative connections/hypotheses for you to react to.",
-     "brainstorm", "Writes only clearly-tagged speculative machine-notes; they can never ground "
-     "a wiki claim."),
-    ("lint", "Wiki health check",
-     "Reads the wiki and flags drift, stale or unsupported pages — report only.",
-     "lint", "Read-only. Reports issues; changes nothing."),
     ("wiki", "Starter overview",
      "Drafts the problem-oriented starter overview from the papers' abstracts on import.",
      "wiki", "One-shot completion over abstracts — no tools/MCP. Writes the agent-tagged "
@@ -46,18 +32,6 @@ def _resolve_tools(key: str) -> list[str]:
     if key == "chat":
         from .agentic_chat import CHAT_TOOLS
         return list(CHAT_TOOLS)
-    if key == "organizer":
-        from .organizer import _TOOLS
-        return list(_TOOLS)
-    if key == "debt":
-        from .debt import _FIND_TOOLS
-        return list(_FIND_TOOLS)
-    if key == "brainstorm":
-        from .debt import _BRAINSTORM_TOOLS
-        return list(_BRAINSTORM_TOOLS)
-    if key == "lint":
-        from .wiki_lint import _TOOLS
-        return list(_TOOLS)
     return []   # wiki: one-shot, no tools
 
 

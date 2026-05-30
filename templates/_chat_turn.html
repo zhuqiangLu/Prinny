@@ -35,15 +35,4 @@
   </div>
 </div>
 {% endif %}
-{% if suggestion %}
-<div class="flex justify-start">
-  <form method="post" action="/c/{{ slug }}/proposed/from-chat"
-        class="text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1 text-amber-800">
-    <input type="hidden" name="message_id" value="{{ suggestion.message_id }}">
-    <input type="hidden" name="section" value="{{ suggestion.section }}">
-    💡 Might update <strong>{{ suggestion.section }}</strong>.
-    <button class="underline" type="submit">Draft edit →</button>
-  </form>
-</div>
-{% endif %}
 {% endif %}

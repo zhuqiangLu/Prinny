@@ -1,7 +1,0 @@
-{# A single wiki page, rendered inline in #left-panel. #}
-<div class="p-3">
-  <button @click="loadPanel('/c/{{ slug }}/wiki/panel')"
-          class="text-sm text-slate-500 hover:text-slate-900">← Wiki</button>
-  <h2 class="text-base font-semibold mt-1 mb-2">{{ title }}</h2>
-  <div class="prose prose-sm max-w-none rounded border border-slate-200 bg-white p-3">{{ html | safe }}</div>
-</div>
