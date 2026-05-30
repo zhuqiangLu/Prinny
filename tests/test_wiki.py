@@ -47,7 +47,8 @@ _FIELD_MODEL_JSON = {
     # Phase B: concepts + recommended_reading
     "concepts": [
         {"name": "Reasoning Preservation", "synonyms": ["reasoning preservation",
-            "preserving reasoning", "reasoning-state"], "blurb": "Keep the KV cache that matters."},
+            "preserving reasoning", "reasoning-state"], "blurb": "Keep the KV cache that matters.",
+         "papers": ["2401.00002", "NOPE"]},        # NOPE filtered; 2401.00002 kept
         {"name": "Semantic Anchors", "synonyms": ["semantic anchor", "anchor token"],
          "blurb": "Tokens that carry the meaningful structure."},
         {"name": "KV Distillation", "synonyms": ["kv distillation", "distill kv cache"],
@@ -145,6 +146,57 @@ def test_generate_overview_is_nondestructive_unless_forced(tmp_path, monkeypatch
     assert wiki.generate_overview("vlms") is True
     assert wiki.generate_overview("vlms") is False                  # idempotent
     assert wiki.generate_overview("vlms", force=True) is True       # forced
+
+
+def test_papers_to_concepts_tags_by_synonym_match(tmp_path, monkeypatch):
+    """papers_to_concepts maps each paper to concept(s) whose synonyms appear in
+    the paper's title+abstract. Deterministic, no LLM. Papers matching nothing
+    are absent (no fake tags)."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    con = connect(db)
+    con.execute("UPDATE papers SET title='Streaming Inference for Video', "
+                "abstract='online processing of continuous streams' WHERE id=1")
+    con.execute("UPDATE papers SET title='Unrelated topic', abstract='nothing matches' WHERE id=2")
+    con.commit(); con.close()
+    concepts = [
+        {"name": "Streaming Inference", "slug": "streaming-inference",
+         "synonyms": ["streaming inference", "online processing", "continuous streams"]},
+        {"name": "Token Efficiency", "slug": "token-efficiency",
+         "synonyms": ["token efficiency", "patch pruning"]},
+    ]
+    tags = wiki.papers_to_concepts("vlms", concepts)
+    assert tags.get(1) == [{"name": "Streaming Inference", "slug": "streaming-inference"}]
+    assert 2 not in tags                       # matched nothing → absent, no fake tag
+
+
+def test_papers_to_concepts_unions_llm_membership_and_synonyms(tmp_path, monkeypatch):
+    """LLM-assigned concept.papers membership is honored even when the paper text
+    matches no synonym — listed first, then synonym matches fill in."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    con = connect(db)
+    con.execute("UPDATE papers SET title='Totally generic title', abstract='no synonyms here' WHERE id=3")
+    con.commit(); con.close()
+    concepts = [
+        {"name": "KV Distillation", "slug": "kv-distillation",
+         "synonyms": ["kv distillation"], "papers": ["2401.00003"]},  # LLM assigns paper 3
+    ]
+    tags = wiki.papers_to_concepts("vlms", concepts)
+    # Paper 3 has no synonym match but is LLM-assigned → still tagged.
+    assert tags.get(3) == [{"name": "KV Distillation", "slug": "kv-distillation"}]
+
+
+def test_load_overview_papers_carry_concept_tags(tmp_path, monkeypatch):
+    """load_overview attaches concept tags to each paper in the evidence row."""
+    db = _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    con = connect(db)
+    con.execute("UPDATE papers SET abstract='reasoning preservation matters here' WHERE id=1")
+    con.commit(); con.close()
+    wiki.generate_overview("vlms")    # writes concepts.json (has 'Reasoning Preservation')
+    loaded = wiki.load_overview("vlms")
+    p1 = next(p for p in loaded["papers"] if p["id"] == 1)
+    assert any(t["slug"] == "reasoning-preservation" for t in p1["tags"])
+    # every paper dict has a tags key (possibly empty)
+    assert all("tags" in p for p in loaded["papers"])
 
 
 def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):

@@ -336,9 +336,18 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
                 synonyms.append(s)
             if len(synonyms) >= _CONCEPT_SYNONYMS_MAX:
                 break
+        # LLM-assigned membership: which papers this concept covers. The agent
+        # sees every abstract at draft, so this is the reliable mapping; the
+        # deterministic synonym match (papers_to_concepts) is a fallback for
+        # what the LLM misses / for pre-membership drafts. Filtered to real refs.
+        cpapers, seen_cp = [], set()
+        for ref in (c.get("papers") or []):
+            if ref in valid_refs and ref not in seen_cp:
+                seen_cp.add(ref)
+                cpapers.append(ref)
         concepts.append({
             "name": name, "slug": slug, "synonyms": synonyms,
-            "blurb": text(c.get("blurb")),
+            "blurb": text(c.get("blurb")), "papers": cpapers,
         })
         if len(concepts) >= _CONCEPTS_MAX:
             break
@@ -1057,6 +1066,52 @@ def attention_per_concept(slug: str, concepts: list[dict]) -> dict[str, int]:
     return dict(scores)
 
 
+def papers_to_concepts(slug: str, concepts: list[dict], max_tags: int = 2) -> dict[int, list[dict]]:
+    """Map each paper to the concept(s) it belongs to — turning the Papers (Evidence)
+    row from a flat list into a map of the Field Model's concept space.
+
+    Two sources, unioned:
+      1. **LLM-assigned membership** (``concept["papers"]`` refs) — the reliable
+         mapping the field-model agent produced at draft (it saw every abstract).
+         Listed FIRST per paper.
+      2. **Deterministic synonym match** over title + abstract — a no-LLM fallback
+         that fills what the LLM missed and covers pre-membership drafts.
+
+    Returns ``{paper_id: [{name, slug}, ...]}`` (up to ``max_tags`` per paper).
+    Papers tied to no concept are absent (no fake tags)."""
+    if not concepts:
+        return {}
+    name_by_slug = {c["slug"]: c.get("name", c["slug"]) for c in concepts}
+    patterns: dict[str, re.Pattern] = {}
+    for c in concepts:
+        syns = [re.escape(s) for s in (c.get("synonyms") or []) if s]
+        if syns:
+            patterns[c["slug"]] = re.compile(r"\b(?:" + "|".join(syns) + r")\b", flags=re.IGNORECASE)
+
+    # Invert LLM membership (concept.papers refs) → {ref: [concept_slug, ...]}.
+    llm_by_ref: dict[str, list[str]] = defaultdict(list)
+    for c in concepts:
+        for ref in (c.get("papers") or []):
+            llm_by_ref[ref].append(c["slug"])
+
+    out: dict[int, list[dict]] = {}
+    for p in _collection_abstracts(slug):
+        ordered: list[str] = []      # concept slugs, LLM-assigned first, then synonym
+        for s in llm_by_ref.get(p["ref"], []):
+            if s in name_by_slug and s not in ordered:
+                ordered.append(s)
+        text = f"{p.get('title', '')} {p.get('abstract', '')}"
+        syn_hits = sorted(
+            ((s, len(pat.findall(text))) for s, pat in patterns.items() if pat.search(text)),
+            key=lambda x: -x[1])
+        for s, _ in syn_hits:
+            if s not in ordered:
+                ordered.append(s)
+        if ordered:
+            out[p["id"]] = [{"name": name_by_slug[s], "slug": s} for s in ordered[:max_tags]]
+    return out
+
+
 def attention_changed_since(slug: str, since: str | None) -> set[int]:
     """Paper ids whose highlights/notes were created or updated after ``since``. Used to
     flag cards "new since last view" on the wiki page. ``since`` None → empty (no recency
@@ -1166,13 +1221,24 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     thesis = _parse_thesis_body(thesis_body)
     landscape = _parse_landscape_body(landscape_body)
 
-    # --- Papers (live from DB, decorated with attention) ---------------------
+    # --- Concept space (drives Focus, belief tags, and the Papers evidence map) --
+    concept_list: list[dict] = []
+    try:
+        if _concepts_path(slug).is_file():
+            concept_list = (json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+                            .get("concepts") or [])
+    except (ValueError, OSError):
+        concept_list = []
+
+    # --- Papers (live from DB, decorated with attention + concept tags) ----------
     from . import library
     raw_papers = library.list_papers(slug)
     scores = attention_scores(slug)
     nonzero = sorted(v for v in scores.values() if v > 0)
     hot_threshold = max(_ATTENTION_HOT_FLOOR, nonzero[len(nonzero) // 2]) if nonzero else None
     changed = attention_changed_since(slug, attention_since)
+    # Per-paper concept tags — turns the evidence row into a map of the concept space.
+    paper_tags = papers_to_concepts(slug, concept_list)
     papers: list[dict] = []
     for p in raw_papers:
         pid = p["id"]
@@ -1186,6 +1252,7 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
             "attention_score": score,
             "is_hot": hot_threshold is not None and score >= hot_threshold,
             "is_new": pid in changed,
+            "tags": paper_tags.get(pid, []),
         })
     # Stable sort: attended papers float to the top of the evidence row; zeros
     # preserve DB order (which is title-sorted from library.list_papers).

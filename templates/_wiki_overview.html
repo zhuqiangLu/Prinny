@@ -371,6 +371,17 @@
           {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
         </div>
         <p class="text-sm font-medium text-slate-900 leading-snug line-clamp-3 group-hover:text-slate-950">{{ p.title }}</p>
+        {# Concept tags — each paper's place in the Field Model's concept space
+           (deterministic synonym match over title+abstract; no LLM). This is the
+           "evidence node" link that makes the row a map, not a bibliography. #}
+        {% if p.tags %}
+        <div class="mt-2 flex flex-wrap gap-1">
+          {% for t in p.tags %}
+          <span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700"
+                title="Maps to the concept “{{ t.name }}”">{{ t.name }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
           {% if p.arxiv_id %}<span>arXiv</span>{% endif %}
           {% if p.year %}{% if p.arxiv_id %}<span>·</span>{% endif %}<span>{{ p.year }}</span>{% endif %}

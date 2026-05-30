@@ -45,7 +45,8 @@ You see every paper in the collection (abstracts + cached PDF excerpts). Your jo
       "synonyms": [
         "3-5 lowercase strings, including variants and shorter forms (e.g. 'reasoning preservation', 'preserving reasoning', 'reasoning-state')"
       ],
-      "blurb": "ONE sentence: what this concept is about in this collection."
+      "blurb": "ONE sentence: what this concept is about in this collection.",
+      "papers": ["refs of the papers in this collection that this concept covers — assign EVERY paper to at least one concept so the evidence map has no orphans"]
     }
   ],
   "recommended_reading": [
