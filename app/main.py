@@ -1501,13 +1501,10 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     else:
         job_err = None
 
-    # Render starter wiki markdown to HTML server-side. body_md was already
-    # wikilink-resolved against the picks set in load_overview.
+    # Field Model (Phase A) — no markdown rendering needed at the panel level;
+    # the new template renders structured data (thesis callouts, landscape
+    # bullet lists, paper cards) directly via Jinja.
     overview = wiki.load_overview(slug, attention_since=attention_since)
-    if overview and overview.get("top_picks"):
-        overview["field_intro_html"] = render_md(overview.get("field_intro_md", ""), slug)
-        for pg in overview["top_picks"]:
-            pg["body_html"] = render_md(pg.get("body_md", ""), slug)
 
     return templates.TemplateResponse(
         request, "_wiki_panel.html",

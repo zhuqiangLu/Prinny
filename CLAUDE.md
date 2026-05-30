@@ -17,30 +17,33 @@ Concretely:
 
 If a feature you're about to build lets the LLM produce wiki content without the user having written something first, stop and check with the user.
 
-> **Amendment (2026-05-27 … rewritten 2026-05-30 to llm_wiki pattern):** The starter wiki is now
-> a tree of agent-written markdown pages under `wiki/starter/` — `index.md` + a small set
-> (3–7) of `papers/<slug>.md` per-paper pages. Pages use YAML frontmatter, `[[wikilink]]`
-> cross-references, the llm_wiki/Karpathy convention. **Top picks only**: the agent picks the
-> 3–7 papers a researcher should open first; the full collection lives in the Papers tab, not
-> the wiki. Two-step pipeline (`wiki.generate_overview`):
-> (1) **analyze** — one LLM call (`starter-wiki-analyze` skill) reads the whole-collection
-> digest (abstracts + cached PDF excerpts) and returns top picks + reading order + a one-paragraph
-> field intro; (2) **per-page write** — one LLM call per pick (`starter-wiki-page` skill) writes
-> the page body with fixed `##` sections (Problem / Key idea / Mechanism / Evidence / Limitation
-> / Why read / Connected). Same constraints as before, now enforced at the per-page level:
-> **non-destructive** of the notes-based wiki (`wiki/<phase-5-section>/*` is untouched; only
-> `wiki/starter/*` is written); **honestly tagged** (`generated_by: agent` frontmatter on every
-> page + a per-page chip showing whether the agent saw the PDF); pages whose paper was supplied
-> ABSTRACT_ONLY have the Mechanism/Evidence/Limitation sections **stripped server-side** by
-> `_clean_paper_page_body`; `[[wikilinks]]` whose targets weren't generated are **collapsed to
-> plain text** so no broken links land; pipeline **refuses** drafts with fewer than the
-> minimum-picks floor rather than writing a one-pick wiki. The notes-based wiki (chat-derived
-> edits, notes, the curator-driven refresh) still goes through the propose→review→accept gate
-> and is the durable knowledge artifact. Features that mint claims about the user's mind or
-> unverified inter-paper debates remain review-queue-gated and outside this exception.
-> Legacy `wiki/overview.json` files are detected on read; `load_overview` returns a
-> `{needs_migration: True}` stub so the panel renders a "schema changed — regenerate?" banner
-> instead of silently rendering stale content.
+> **Amendment (2026-05-27 … cognitive-model rewrite 2026-05-31, Phase A):** The wiki is now a
+> single page composed of stage-gated sections under `wiki/sections/`, following a cognitive-
+> model progression: **Field Model → Belief Model → Research Model** (the user's blueprint,
+> 2026-05-31). Phase A ships **Stage 0 only** — the Field Model:
+>
+>   - `wiki/sections/thesis.md` — Collection Thesis: one paragraph + three callouts
+>     (`core_tension`, `key_intuition`, `central_question`).
+>   - `wiki/sections/landscape.md` — Research Landscape: four bullet-list columns
+>     (Problems / Methods / Debates / Open Questions), each capped at 6 items by the validator
+>     to force real clustering. The previous failure mode (17 method "families" on a 26-paper
+>     collection — bibliography by another name) is prevented in code, not in the prompt.
+>   - Papers (Evidence) row is rendered live from the DB; no agent-written file for it.
+>
+> Single LLM call (`field-model` skill). Direct-write agent seed, agent-tagged
+> (`generated_by: agent` frontmatter). **Non-destructive** of legacy wikis: the prior
+> `wiki/starter/*` tree (llm_wiki-pattern top picks) and `wiki/<phase-5-section>/*`
+> (notes-based wiki under problems/methods/gaps/benchmarks/synthesis) are no longer read —
+> they stay on disk for safety but contribute nothing to the rendered wiki. The agent will
+> not author user-claim sections (Focus / Beliefs / Research Questions) in this phase;
+> those layers arrive in Phase B / C with their own gating rules (Focus = deterministic from
+> attention; Beliefs = agent-drafted candidates in a tray that the user accepts to promote).
+>
+> Migration: legacy `wiki/starter/index.md` OR `wiki/overview.json` on disk → `load_overview`
+> returns `{needs_migration: True}` so the panel renders a one-time "schema changed —
+> regenerate?" banner. No silent conversion. The `gate()` function and `accept_proposed()`
+> are retained (chat-derived edits + the eventual Phase C belief-promotion flow both go
+> through them); the legacy notes-based wiki UI is dropped from the default render.
 
 ## Existing pieces (do not rebuild)
 

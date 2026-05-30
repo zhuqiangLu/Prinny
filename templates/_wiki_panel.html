@@ -39,16 +39,17 @@
       <button class="rounded bg-amber-600 text-white px-3 py-1.5 text-xs hover:bg-amber-700">↻ Regenerate starter wiki</button>
     </form>
   </div>
-  {% elif overview and overview.top_picks %}
+  {% elif overview and (overview.thesis.one_paragraph or overview.landscape.problems
+                         or overview.landscape.methods or overview.papers) %}
     {% include "_wiki_overview.html" %}
   {% elif not pages %}
   <div class="rounded border border-slate-200 bg-white p-3">
-    <p class="text-sm text-slate-600">No starter wiki yet.</p>
-    <p class="text-xs text-slate-400 mt-1">Draft 3-7 top-pick paper pages from your collection — an AI starting point that tells you what to read first and why:</p>
+    <p class="text-sm text-slate-600">No wiki yet.</p>
+    <p class="text-xs text-slate-400 mt-1">Draft the Field Model for this collection — a one-paragraph thesis + a four-column research landscape, in one pass:</p>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="mt-2">
-      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft starter wiki</button>
-      <span class="ml-1 text-xs text-slate-400">a few minutes; one analyze pass + one page-write per pick</span>
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft Field Model</button>
+      <span class="ml-1 text-xs text-slate-400">a minute or two; one LLM pass over abstracts + cached PDFs</span>
     </form>
   </div>
   {% endif %}

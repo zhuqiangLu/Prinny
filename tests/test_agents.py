@@ -19,7 +19,7 @@ def test_registry_lists_all_agents_with_real_tools():
 
 def test_skill_override_save_reset(tmp_path, monkeypatch):
     monkeypatch.setattr(agent_skills, "_USER", tmp_path / "skills")
-    name = "starter-wiki-analyze"
+    name = "field-model"
     assert agent_skills.is_customized(name) is False
     shipped = agent_skills.read_skill(name)["body"]
 

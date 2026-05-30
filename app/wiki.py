@@ -932,140 +932,116 @@ def _collection_abstracts(slug: str) -> list[dict]:
 
 
 def _overview_path(slug: str) -> Path:
-    """LEGACY (pre-2026-05-30): the JSON starter wiki's location. Kept for migration
-    detection only — _starter_dir(slug) is the new home (markdown pages, llm_wiki
-    pattern). load_overview() returns the migration banner shape when this file
-    still exists and the new tree doesn't."""
+    """LEGACY (pre-2026-05-30): the JSON starter wiki's location. Kept for
+    migration detection only — wiki/sections/ is the new home (cognitive-model
+    layout, Phase A). load_overview() returns the migration-banner shape when
+    this file or the intermediate wiki/starter/ tree still exists and the new
+    sections directory doesn't."""
     return _wikidir(slug) / "overview.json"
 
 
-# --- starter wiki: llm_wiki-pattern markdown tree (2026-05-30) -----------------
-# Replaces the single JSON file with per-paper markdown pages + an index.md, so
-# the starter wiki composes like Karpathy/nashsu's llm_wiki: pages with YAML
-# frontmatter, [[wikilinks]] across pages, agent-tagged + ref-validated. The
-# tree is regenerable on demand; the notes-based wiki under wiki/<section>/* is
-# untouched.
-_STARTER_TOP_PICKS_MIN = 3     # below this, the validator refuses the draft
-_STARTER_TOP_PICKS_MAX = 7     # above this, we cap (per user 2026-05-30: "3-7 picks")
-# Fields the per-paper page MUST expose as H2 sections. The validator parses
-# these out of the agent's markdown so we can blank PDF-only fields server-side.
-_PAPER_PAGE_SECTIONS = ("Problem", "Key idea", "Mechanism", "Evidence",
-                        "Limitation", "Why read", "Connected")
-# PDF-only fields: blanked on cards whose paper was supplied ABSTRACT_ONLY,
-# regardless of what the LLM emitted.
-_PAGE_PDF_ONLY_SECTIONS = ("Mechanism", "Evidence", "Limitation")
-# Slugify the paper title for the on-disk filename. Stable enough; if the title
-# changes (rare) a regenerate replaces it.
+# --- cognitive-model wiki: Phase A (2026-05-31) -------------------------------
+# The wiki is now a single page composed of stage-gated sections. Phase A ships
+# Stage 0 only:
+#   wiki/sections/thesis.md       — Collection Thesis (1 paragraph + 3 callouts)
+#   wiki/sections/landscape.md    — Research Landscape (problems/methods/debates/open)
+# Papers (Stage 0) are pulled live from the DB and decorated with attention at
+# render time — no agent-written file needed for them.
+#
+# Later phases add more files in the same directory:
+#   focus.md          — Stage 2 (concept-based attention)
+#   understanding.md  — Stage 3 (accepted beliefs)
+#   recommended.md    — Stage 2/3 (reading order)
+#   beliefs/*.md      — belief tray + accepted beliefs
+#   concepts.json     — extracted concept space
+#   intent.md         — stored grilling answers
+#
+# Legacy wiki/starter/ (the prior llm_wiki layout) and wiki/<phase-5-section>/*
+# (the notes-based wiki) are deprecated. They stay on disk for safety; nothing
+# reads them. A regenerate of the Field Model writes only wiki/sections/.
+
+_LANDSCAPE_MAX_ITEMS = 6           # cap per column to force real clustering
+_THESIS_CALLOUTS = ("core_tension", "key_intuition", "central_question")
+
+# Slugify helper (page slugs, concept tags). The pattern stays the same; future
+# phases will reuse it.
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
-# Wikilink syntax: [[Paper Title]] resolved at render time to the matching page.
+# Wikilink syntax: [[Page Name]]. Used by future phases (belief cross-refs).
 _WIKILINK_PAGE_RE = re.compile(r"\[\[([^\]\|]+)(?:\|[^\]]+)?\]\]")
 
 
-def _starter_dir(slug: str) -> Path:
-    return _wikidir(slug) / "starter"
+def _sections_dir(slug: str) -> Path:
+    return _wikidir(slug) / "sections"
 
 
-def _starter_papers_dir(slug: str) -> Path:
-    return _starter_dir(slug) / "papers"
+def _thesis_path(slug: str) -> Path:
+    return _sections_dir(slug) / "thesis.md"
 
 
-def _starter_index_path(slug: str) -> Path:
-    return _starter_dir(slug) / "index.md"
+def _landscape_path(slug: str) -> Path:
+    return _sections_dir(slug) / "landscape.md"
 
 
+def _has_field_model(slug: str) -> bool:
+    """True iff the new wiki/sections/ tree exists with at least the two Stage 0
+    pages. Drives the regen-button vs migration-banner branching."""
+    return _thesis_path(slug).is_file() and _landscape_path(slug).is_file()
+
+
+# Legacy detector kept here for the migration banner. Removed once we've burned
+# off all old collections (or earlier — the banner is cheap).
 def _has_starter_wiki(slug: str) -> bool:
-    """True iff the new starter tree exists with at least an index. Drives the
-    regen-button vs migration-banner branching."""
-    return _starter_index_path(slug).is_file()
+    return (_wikidir(slug) / "starter" / "index.md").is_file()
 
 
-def _paper_slug(title: str, ref: str) -> str:
-    """Slug for a paper page filename. Falls back to the ref if the title is
-    empty (an unusual Zotero entry)."""
-    base = _SLUG_RE.sub("-", (title or "").lower()).strip("-")
-    return (base or _SLUG_RE.sub("-", (ref or "").lower()).strip("-"))[:80]
-
-
-def _ref_to_slug_map(picks: list[dict]) -> dict[str, str]:
-    """Build the ref -> on-disk slug map for the picks set. Used by the per-page
-    generator and by the wikilink resolver."""
-    return {p["ref"]: _paper_slug(p["title"], p["ref"]) for p in picks}
-
-
-def _validate_analysis(data: dict, valid: set, pdf_refs: set) -> dict:
-    """Validate the analyze-step output: pick 3–7 top picks + a reading order +
-    a 1–2-paragraph field intro. Drops hallucinated refs; clamps the picks list
-    to [_STARTER_TOP_PICKS_MIN, _STARTER_TOP_PICKS_MAX]; returns a dict the
-    per-paper generate step can iterate over."""
-    def text(s):
-        return (s or "").strip()
-
-    intro = text(data.get("field_intro"))
-    raw_picks = data.get("top_picks") if isinstance(data.get("top_picks"), list) else []
-    # Dedupe and keep only refs we actually supplied.
-    picks, seen = [], set()
-    for pick in raw_picks:
-        if not isinstance(pick, dict):
-            continue
-        ref = pick.get("paper")
-        if ref not in valid or ref in seen:
-            continue
-        seen.add(ref)
-        picks.append({
-            "paper": ref,
-            "why_now": text(pick.get("why_now")),
-            "focus_on": text(pick.get("focus_on")),
-            "skip": text(pick.get("skip")),
-        })
-        if len(picks) >= _STARTER_TOP_PICKS_MAX:
-            break
-    # Reading order: respect agent ordering, but only refs in `picks` survive.
-    raw_order = data.get("reading_order") if isinstance(data.get("reading_order"), list) else []
-    picks_by_ref = {p["paper"]: p for p in picks}
-    ordered = []
-    for ref in raw_order:
-        if ref in picks_by_ref and ref not in {o["paper"] for o in ordered}:
-            ordered.append(picks_by_ref[ref])
-    # Any picks the agent forgot to put in reading_order fall to the end.
-    for p in picks:
-        if p["paper"] not in {o["paper"] for o in ordered}:
-            ordered.append(p)
-    return {"field_intro": intro, "top_picks": ordered, "pdf_refs": pdf_refs}
-
-
-# Section-parser regex: splits a page body by `## <Heading>` lines, capturing the
-# heading and the content until the next `##` (or end of file). Used by
-# _clean_paper_page_body to enforce the abstract-only blanking rule server-side.
+# Section-parser regex: splits a markdown body by `## <Heading>` lines, capturing
+# the heading and content to next `##`. Used to round-trip the Thesis page's
+# callout sections (Core tension / Key intuition / Central question) back into
+# fielded data at load time.
 _SECTION_RE = re.compile(r"(?m)^##\s+(?P<title>[^\n]+?)\s*\n(?P<body>.*?)(?=^##\s+|\Z)", re.DOTALL)
 
 
-def _clean_paper_page_body(body: str, abstract_only: bool, valid_page_slugs: set[str]) -> str:
-    """Server-side enforcement on the per-paper page markdown the LLM emits:
+def _validate_field_model(data: dict) -> dict:
+    """Validate the field-model LLM output and clamp it.
 
-    * If ``abstract_only=True``, the Mechanism/Evidence/Limitation sections are
-      stripped entirely (the agent shouldn't claim things it couldn't read).
-    * ``[[wikilinks]]`` pointing at a page slug not in ``valid_page_slugs`` are
-      collapsed to plain text (no broken links left rendering).
+    Thesis: one paragraph + three single-sentence callouts. Empty fields stay
+    empty (we never invent content to fill them).
 
-    Other sections — Problem / Key idea / Why read / Connected — pass through;
-    they're defensible from abstracts."""
-    # 1) Strip PDF-only sections if abstract_only.
-    if abstract_only:
-        def section_filter(m):
-            title = m.group("title").strip()
-            return "" if title in _PAGE_PDF_ONLY_SECTIONS else m.group(0)
-        body = _SECTION_RE.sub(section_filter, body)
-    # 2) Validate wikilinks. Drop unknown targets to plain text.
-    def fix_link(m):
-        target = m.group(1).strip()
-        target_slug = _SLUG_RE.sub("-", target.lower()).strip("-")
-        if target_slug in valid_page_slugs:
-            return f"[[{target}]]"
-        return target  # collapse to plain text
-    body = _WIKILINK_PAGE_RE.sub(fix_link, body)
-    # 3) Tidy: trim double blank lines left by removed sections.
-    body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"
-    return body
+    Landscape: four lists of short items (problems, methods, debates,
+    open_questions). Each list capped at _LANDSCAPE_MAX_ITEMS so the agent
+    can't dump a 17-method bibliography. Items shorter than 3 chars or empty
+    are dropped."""
+    def text(s):
+        return (s or "").strip() if isinstance(s, str) else ""
+
+    th = data.get("thesis") if isinstance(data.get("thesis"), dict) else {}
+    thesis = {"one_paragraph": text(th.get("one_paragraph"))}
+    for k in _THESIS_CALLOUTS:
+        thesis[k] = text(th.get(k))
+
+    ls = data.get("landscape") if isinstance(data.get("landscape"), dict) else {}
+    def items(key: str) -> list[str]:
+        raw = ls.get(key) or []
+        if not isinstance(raw, list):
+            return []
+        out, seen = [], set()
+        for x in raw:
+            s = text(x)
+            if len(s) < 3 or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            out.append(s)
+            if len(out) >= _LANDSCAPE_MAX_ITEMS:
+                break
+        return out
+
+    landscape = {
+        "problems":       items("problems"),
+        "methods":        items("methods"),
+        "debates":        items("debates"),
+        "open_questions": items("open_questions"),
+    }
+    return {"thesis": thesis, "landscape": landscape}
 
 
 def _flag_underread(slug: str, limit: int = 10) -> list[dict]:
@@ -1203,81 +1179,73 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
 
-def _analyze_step(digest: str, included_refs: set, pdf_refs: set) -> dict | None:
-    """LLM call #1: pick 3-7 top picks + reading order + 1-paragraph field intro
-    from the whole-collection digest. The skill is split into TWO sub-skills:
-    `starter-wiki-analyze` prompts only this step. Returns None on LLM/parse
-    failure (caller decides whether that's fatal)."""
-    from . import agent_skills
-    system = (agent_skills.skill_body("starter-wiki-analyze")
-              or "Output JSON: {field_intro, top_picks:[{paper, why_now, focus_on, skip}], reading_order:[paper_ref]}.")
-    try:
-        out = llm.complete([{"role": "system", "content": system},
-                            {"role": "user", "content": "Papers:\n\n" + digest}])
-        data = _extract_json(out)
-    except Exception:  # noqa: BLE001
-        return None
-    return _validate_analysis(data or {}, included_refs, pdf_refs)
-
-
-def _write_paper_page_step(paper: dict, picks: list[dict], field_intro: str,
-                            valid_page_slugs: set[str]) -> str | None:
-    """LLM call #2 (one per pick): write the markdown body for one paper page.
-
-    The agent emits a markdown body with sections (Problem / Key idea / Mechanism
-    / Evidence / Limitation / Why read / Connected) — _clean_paper_page_body
-    blanks PDF-only sections if this paper is abstract-only and drops broken
-    [[wikilinks]]. Returns the cleaned body, or None on LLM/parse failure."""
-    from . import agent_skills
-    system = (agent_skills.skill_body("starter-wiki-page")
-              or "Output markdown for one paper page with sections: Problem, Key idea, Mechanism, Evidence, Limitation, Why read, Connected.")
-    abstract_only = not paper.get("pdf_excerpt")
-    excerpt = paper.get("pdf_excerpt") or ""
-    abstract = (paper.get("abstract") or "")[:_OVERVIEW_ABSTRACT_CHARS]
-    other_picks = "\n".join(f"  - [{p['ref']}] {p['title']}"
-                            for p in picks if p["ref"] != paper["ref"])
-    # The page generator sees the paper + the other picks (so [[wikilinks]] can
-    # reference them) + the field intro for tonal consistency.
-    user = (
-        f"Field intro for context (do not repeat verbatim):\n{field_intro}\n\n"
-        f"This paper:\n[{paper['ref']}] {paper['title']}\n"
-        f"Abstract: {abstract}\n"
-        + (f"PDF excerpt:\n{excerpt}\n" if excerpt else "")
-        + ("(ABSTRACT_ONLY — leave Mechanism / Evidence / Limitation EMPTY for this paper.)\n"
-           if abstract_only else
-           "(HAS_PDF_EXCERPT — Mechanism / Evidence / Limitation are fair game.)\n")
-        + f"\nOther top picks you may [[wikilink]] to (use the paper TITLE as the link target):\n{other_picks}\n"
-    )
-    try:
-        body = llm.complete([{"role": "system", "content": system},
-                             {"role": "user", "content": user}])
-    except Exception:  # noqa: BLE001
-        return None
-    return _clean_paper_page_body(body or "", abstract_only, valid_page_slugs)
-
-
-def _wipe_starter_tree(slug: str) -> None:
-    """Remove the previous starter tree before a regenerate. Only touches
-    wiki/starter/ — the notes-based wiki under wiki/<section>/* is untouched."""
+def _wipe_sections_tree(slug: str) -> None:
+    """Remove the previous Field Model tree before a regenerate. Only touches
+    wiki/sections/ — legacy wiki/starter/ and wiki/<section>/* are not touched
+    (they're deprecated; nothing reads them)."""
     import shutil
-    sdir = _starter_dir(slug)
+    sdir = _sections_dir(slug)
     if sdir.exists():
         shutil.rmtree(sdir)
 
 
+def _write_thesis_page(slug: str, thesis: dict, meta_extra: dict) -> None:
+    """Compose and write wiki/sections/thesis.md. Body = opening paragraph
+    followed by H2 callouts for each non-empty callout field. Frontmatter
+    carries provenance (generated_by/generated_at/paper_count/pdfs_read)."""
+    body_parts = []
+    if thesis["one_paragraph"]:
+        body_parts.append(thesis["one_paragraph"])
+    callout_titles = {"core_tension": "Core tension",
+                      "key_intuition": "Key intuition",
+                      "central_question": "Central question"}
+    for key, title in callout_titles.items():
+        if thesis.get(key):
+            body_parts.append(f"\n## {title}\n{thesis[key]}")
+    meta = {"type": "thesis", "title": f"Collection Thesis: {slug}",
+            "generated_by": "agent", "generator": "field-model",
+            "generated_at": _now(), **meta_extra}
+    _thesis_path(slug).write_text(frontmatter.dump(meta, "\n".join(body_parts)),
+                                   encoding="utf-8")
+
+
+def _write_landscape_page(slug: str, landscape: dict, meta_extra: dict) -> None:
+    """Compose and write wiki/sections/landscape.md. Body = four H2 sections
+    (Problems / Methods / Debates / Open Questions), each a markdown bullet list.
+    Sections with no items are omitted entirely (no empty headings rendered)."""
+    body_parts = []
+    titles = (("problems", "Problems"), ("methods", "Methods"),
+              ("debates", "Debates"), ("open_questions", "Open Questions"))
+    for key, title in titles:
+        items = landscape.get(key) or []
+        if not items:
+            continue
+        body_parts.append(f"## {title}")
+        for it in items:
+            body_parts.append(f"- {it}")
+        body_parts.append("")
+    meta = {"type": "landscape", "title": f"Research Landscape: {slug}",
+            "generated_by": "agent", "generator": "field-model",
+            "generated_at": _now(), **meta_extra}
+    _landscape_path(slug).write_text(frontmatter.dump(meta, "\n".join(body_parts)),
+                                      encoding="utf-8")
+
+
 def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
-    """Generate the starter wiki (llm_wiki pattern, 2026-05-30) from the papers'
-    abstracts + cached PDF excerpts. Two-step pipeline:
+    """Generate the Field Model (Stage 0 of the cognitive-model wiki, 2026-05-31).
 
-      1) ANALYZE — one LLM call picks 3-7 top picks + reading order + field intro
-         from the whole-collection digest.
-      2) WRITE   — one LLM call per pick generates the markdown body for that
-         paper's page. Validator strips PDF-only sections for abstract-only
-         papers and drops broken [[wikilinks]] (in code, not in the prompt).
+    One-shot pipeline:
+      1. gathering    — pull collection abstracts.
+      2. reading_pdfs — extract a first-pages excerpt per cached PDF (real fraction).
+      3. drafting     — one LLM call (`field-model` skill) produces JSON with
+                        a Thesis (one paragraph + 3 callouts) and a Landscape
+                        (Problems / Methods / Debates / Open Questions, each 3-6
+                        items — the validator caps so 'lazy listing' can't happen).
+      4. writing      — write wiki/sections/thesis.md and landscape.md.
 
-    Output: wiki/starter/index.md + wiki/starter/papers/<slug>.md. Direct-write
-    agent seed (CLAUDE.md amendment, broadened 2026-05-30). Non-destructive of
-    the notes-based wiki under wiki/<section>/*. Returns True on success.
+    Direct-write, agent-tagged. Non-destructive of the notes-based wiki (legacy
+    sections under wiki/<phase-5-section>/* are not touched). Public name kept
+    for route stability; the implementation is the cognitive-model wiki now.
 
     ``stage_cb`` is the progress callback used by start_draft_async to publish
     state into the polling endpoint. No-op if None."""
@@ -1288,7 +1256,7 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
             except Exception:  # noqa: BLE001
                 pass
 
-    if _has_starter_wiki(slug) and not force:
+    if _has_field_model(slug) and not force:
         return False
 
     # --- Gather + read PDFs (real progress) -----------------------------------
@@ -1304,96 +1272,36 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     if not digest.strip():
         return False
 
-    # --- Step 1: analyze (one LLM call picks 3-7) -----------------------------
-    stage("analyzing", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
-    analysis = _analyze_step(digest, included_refs, pdf_refs)
-    if not analysis or len(analysis["top_picks"]) < _STARTER_TOP_PICKS_MIN:
-        # Refuse a draft we can't honestly fill — the user gets a clear failure
-        # rather than a 1-pick starter.
+    # --- One LLM call for the whole Field Model ------------------------------
+    stage("drafting", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
+    from . import agent_skills
+    system = (agent_skills.skill_body("field-model")
+              or "Output JSON: {thesis:{one_paragraph,core_tension,key_intuition,central_question}, landscape:{problems[],methods[],debates[],open_questions[]}}.")
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": "Papers:\n\n" + digest}])
+        data = _extract_json(out)
+    except Exception:  # noqa: BLE001
+        return False
+    field = _validate_field_model(data or {})
+    # Refuse drafts where neither the thesis nor any landscape column came back
+    # populated — better to fail visibly than write empty section files.
+    if (not field["thesis"]["one_paragraph"]
+            and not any(field["landscape"].values())):
         return False
 
-    # --- Step 2: per-paper page generation (N LLM calls) ----------------------
-    picks_resolved = []
-    for pick in analysis["top_picks"]:
-        # Stitch the pick info onto its source paper record (abstract, excerpt, title).
-        src = next((p for p in with_abs if p["ref"] == pick["paper"]), None)
-        if src:
-            picks_resolved.append({**src, **pick})
-    # The set of slugs that exist BY THE END OF THIS RUN — used to validate
-    # [[wikilinks]] in each page body. Computed up front so cross-references
-    # between picks resolve regardless of generation order.
-    valid_slugs = {_paper_slug(p["title"], p["ref"]) for p in picks_resolved}
-
-    pages_total = len(picks_resolved)
-    written: list[tuple[dict, str]] = []   # (paper, cleaned_body)
-    for i, paper in enumerate(picks_resolved):
-        stage("writing", pages_done=i, pages_total=pages_total)
-        body = _write_paper_page_step(paper, picks_resolved,
-                                       analysis["field_intro"], valid_slugs)
-        if body and body.strip():
-            written.append((paper, body))
-    stage("writing", pages_done=pages_total, pages_total=pages_total)
-
-    if len(written) < _STARTER_TOP_PICKS_MIN:
-        # The per-page step failed on too many picks. Don't write a half-baked tree.
-        return False
-
-    # --- Step 3: link + write the tree atomically -----------------------------
-    stage("linking")
-    _wipe_starter_tree(slug)
-    pdir = _starter_papers_dir(slug)
-    pdir.mkdir(parents=True, exist_ok=True)
-    now = _now()
-    page_meta_by_ref: dict[str, dict] = {}
-    for paper, body in written:
-        page_slug = _paper_slug(paper["title"], paper["ref"])
-        meta = {
-            "type": "paper",
-            "title": paper["title"],
-            "sources": [paper["ref"]],
-            "abstract_only": not paper.get("pdf_excerpt"),
-            "generated_by": "agent",
-            "generator": "starter-wiki",
-            "generated_at": now,
-            "paper_id": paper["id"],
-        }
-        (pdir / f"{page_slug}.md").write_text(frontmatter.dump(meta, body), encoding="utf-8")
-        page_meta_by_ref[paper["ref"]] = {"slug": page_slug, "title": paper["title"],
-                                           "paper_id": paper["id"]}
-
-    # Index.md — top picks in reading order + the agent's field intro.
-    index_body_lines = [analysis["field_intro"].strip(), "",
-                         "## Top picks (in reading order)", ""]
-    for n, pick in enumerate(analysis["top_picks"], start=1):
-        if pick["paper"] not in page_meta_by_ref:
-            continue
-        title = page_meta_by_ref[pick["paper"]]["title"]
-        suffix_bits = []
-        if pick["why_now"]:
-            suffix_bits.append(f"_{pick['why_now']}_")
-        if pick["focus_on"]:
-            suffix_bits.append(f"focus on _{pick['focus_on']}_")
-        if pick["skip"]:
-            suffix_bits.append(f"skip _{pick['skip']}_")
-        suffix = " — " + " · ".join(suffix_bits) if suffix_bits else ""
-        index_body_lines.append(f"{n}. [[{title}]]{suffix}")
-    index_meta = {
-        "type": "starter-index",
-        "title": f"Where to start in {slug}",
-        "top_picks": [page_meta_by_ref[p["paper"]]["slug"]
-                      for p in analysis["top_picks"]
-                      if p["paper"] in page_meta_by_ref],
-        "generated_by": "agent",
-        "generator": "starter-wiki",
-        "generated_at": now,
-        "paper_count": len(included_refs),
-        "pdfs_read": len(pdf_refs),
-        "pdfs_missing": len(included_refs) - len(pdf_refs),
-    }
-    _starter_index_path(slug).write_text(
-        frontmatter.dump(index_meta, "\n".join(index_body_lines)), encoding="utf-8")
-    _append_log(slug, f"generated starter wiki — {len(written)} top picks "
-                       f"({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
+    # --- Write the two section files atomically ------------------------------
+    stage("writing", pages_done=0, pages_total=2)
+    _wipe_sections_tree(slug)
+    _sections_dir(slug).mkdir(parents=True, exist_ok=True)
+    meta_extra = {"paper_count": len(included_refs),
+                  "pdfs_read": len(pdf_refs),
+                  "pdfs_missing": len(included_refs) - len(pdf_refs)}
+    _write_thesis_page(slug, field["thesis"], meta_extra)
+    stage("writing", pages_done=1, pages_total=2)
+    _write_landscape_page(slug, field["landscape"], meta_extra)
+    stage("writing", pages_done=2, pages_total=2)
+    _append_log(slug, f"generated field model ({len(pdf_refs)}/{len(included_refs)} with PDFs)", digest)
     return True
 
 
@@ -1672,107 +1580,99 @@ def read_and_bump_viewed(slug: str) -> str | None:
         con.close()
 
 
+def _parse_thesis_body(body: str) -> dict:
+    """Reverse of _write_thesis_page. The opening paragraph is everything before
+    the first H2 header; each H2 callout becomes a fielded value."""
+    out = {"one_paragraph": body.split("##", 1)[0].strip()}
+    for k in _THESIS_CALLOUTS:
+        out[k] = ""
+    title_to_key = {"Core tension": "core_tension",
+                    "Key intuition": "key_intuition",
+                    "Central question": "central_question"}
+    for m in _SECTION_RE.finditer(body):
+        key = title_to_key.get(m.group("title").strip())
+        if key:
+            out[key] = m.group("body").strip()
+    return out
+
+
+def _parse_landscape_body(body: str) -> dict:
+    """Reverse of _write_landscape_page. Each H2 section becomes a list of
+    bullet items. Empty/unrecognized sections produce empty lists."""
+    titles = {"Problems": "problems", "Methods": "methods",
+              "Debates": "debates", "Open Questions": "open_questions"}
+    out = {v: [] for v in titles.values()}
+    for m in _SECTION_RE.finditer(body):
+        key = titles.get(m.group("title").strip())
+        if not key:
+            continue
+        for line in m.group("body").splitlines():
+            s = line.strip()
+            if s.startswith("- "):
+                out[key].append(s[2:].strip())
+    return out
+
+
 def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
-    """Read the starter wiki tree at wiki/starter/{index.md, papers/*.md} and
-    return the shape the panel template renders. None if no starter wiki exists.
+    """Read the Field Model from wiki/sections/ and return the panel shape:
 
-    Migration: if a legacy wiki/overview.json (pre-2026-05-30 JSON shape) is on
-    disk but the new tree isn't, return a stub ``{needs_migration: True}`` so
-    the template can show a "schema changed — regenerate?" banner without
-    pretending the old content is still valid.
+      {needs_migration, thesis, landscape, papers, meta}
 
-    Phase C reweighting: each top pick is decorated with attention_score, is_hot
-    (top-tier score floor), and is_new (highlights/notes after ``attention_since``).
-    Picks are stable-sorted by ``-attention_score`` so attended papers float to
-    the top; with all zeros the agent's reading order is preserved exactly."""
-    if not _has_starter_wiki(slug):
-        # Legacy migration banner — no new tree yet, but an old overview.json
-        # may have been generated by the pre-llm_wiki pipeline.
-        if _overview_path(slug).exists():
-            return {"needs_migration": True, "top_picks": [], "meta": {}}
+    where thesis is the fielded callouts dict, landscape is the four-column
+    bullet lists, and papers is the live DB-derived collection list (decorated
+    with attention_score / is_hot / is_new). Returns None when no wiki exists
+    yet (the template shows the empty-state Draft button); returns
+    {needs_migration: True} when a legacy wiki/starter/ or wiki/overview.json
+    is on disk but the new wiki/sections/ tree isn't."""
+    if not _has_field_model(slug):
+        if _has_starter_wiki(slug) or _overview_path(slug).exists():
+            return {"needs_migration": True, "thesis": {}, "landscape": {},
+                    "papers": [], "meta": {}}
         return None
 
-    # --- read the index ----------------------------------------------------------
+    # --- Read the two section files ------------------------------------------
     try:
-        index_text = _starter_index_path(slug).read_text(encoding="utf-8")
+        thesis_meta, thesis_body = frontmatter.parse(
+            _thesis_path(slug).read_text(encoding="utf-8"))
+        landscape_meta, landscape_body = frontmatter.parse(
+            _landscape_path(slug).read_text(encoding="utf-8"))
     except OSError:
         return None
-    idx_meta, idx_body = frontmatter.parse(index_text)
-    pick_slugs = idx_meta.get("top_picks") or []
-    if not isinstance(pick_slugs, list):
-        pick_slugs = []
+    thesis = _parse_thesis_body(thesis_body)
+    landscape = _parse_landscape_body(landscape_body)
 
-    # --- read each paper page in the index's reading order ----------------------
-    pdir = _starter_papers_dir(slug)
-    rmap = _ref_map(slug)
-    pages: list[dict] = []
-    for page_slug in pick_slugs:
-        path = pdir / f"{page_slug}.md"
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        meta, body = frontmatter.parse(text)
-        sources = meta.get("sources") or []
-        if not isinstance(sources, list) or not sources:
-            continue
-        paper = rmap.get(sources[0])
-        if not paper:
-            # The paper was removed from the collection since the draft. Drop
-            # the page from the render (no orphan paper widgets).
-            continue
-        pages.append({
-            "page_slug": page_slug,
-            "paper": paper,
-            "title": meta.get("title") or paper.get("title", ""),
-            "body_md": body,
-            "abstract_only": str(meta.get("abstract_only", "")).lower() == "true",
-        })
-
-    # --- wikilink resolution: [[Paper Title]] -> /c/<slug>/p/<paper-id> --------
-    # Done here (not in the general markdown renderer) because our [[X]] targets
-    # are paper pages, not notes-based wiki pages. Unresolved titles fall back
-    # to plain text — the per-page validator already stripped broken targets.
-    title_to_pid = {pg["title"]: pg["paper"]["id"] for pg in pages}
-    def _resolve(text: str) -> str:
-        def repl(m: re.Match) -> str:
-            title = m.group(1).strip()
-            pid = title_to_pid.get(title)
-            if pid is None:
-                return title
-            return f"[{title}](/c/{slug}/p/{pid})"
-        return _WIKILINK_PAGE_RE.sub(repl, text)
-    for pg in pages:
-        pg["body_md"] = _resolve(pg["body_md"])
-
-    # --- attention decoration (cheap, on every render) --------------------------
+    # --- Papers (live from DB, decorated with attention) ---------------------
+    from . import library
+    raw_papers = library.list_papers(slug)
     scores = attention_scores(slug)
     nonzero = sorted(v for v in scores.values() if v > 0)
     hot_threshold = max(_ATTENTION_HOT_FLOOR, nonzero[len(nonzero) // 2]) if nonzero else None
     changed = attention_changed_since(slug, attention_since)
-    for pg in pages:
-        pid = pg["paper"]["id"]
+    papers: list[dict] = []
+    for p in raw_papers:
+        pid = p["id"]
         score = scores.get(pid, 0)
-        pg["attention_score"] = score
-        pg["is_hot"] = hot_threshold is not None and score >= hot_threshold
-        pg["is_new"] = pid in changed
-    # Stable sort: attended papers float; zeros preserve the agent's reading order.
-    pages.sort(key=lambda p: -p["attention_score"])
+        papers.append({
+            "id": pid, "title": p.get("title", ""),
+            "authors": p.get("authors", ""), "year": p.get("year"),
+            "has_pdf": p.get("has_pdf", False),
+            "arxiv_id": p.get("arxiv_id"),
+            "zotero_key": p.get("zotero_key"),
+            "attention_score": score,
+            "is_hot": hot_threshold is not None and score >= hot_threshold,
+            "is_new": pid in changed,
+        })
+    # Stable sort: attended papers float to the top of the evidence row; zeros
+    # preserve DB order (which is title-sorted from library.list_papers).
+    papers.sort(key=lambda p: -p["attention_score"])
 
-    # --- meta passthrough -------------------------------------------------------
     meta_out = {
-        "generated_at": idx_meta.get("generated_at"),
-        "paper_count": idx_meta.get("paper_count"),
-        "pdfs_read": idx_meta.get("pdfs_read"),
-        "pdfs_missing": idx_meta.get("pdfs_missing"),
-        "generated_by": idx_meta.get("generated_by", "agent"),
+        "generated_at": thesis_meta.get("generated_at"),
+        "paper_count": thesis_meta.get("paper_count"),
+        "pdfs_read": thesis_meta.get("pdfs_read"),
+        "pdfs_missing": thesis_meta.get("pdfs_missing"),
+        "generated_by": thesis_meta.get("generated_by", "agent"),
     }
 
-    return {
-        "needs_migration": False,
-        "field_intro_md": idx_body.split("## Top picks", 1)[0].strip(),
-        "top_picks": pages,
-        "meta": meta_out,
-    }
+    return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
+            "papers": papers, "meta": meta_out}

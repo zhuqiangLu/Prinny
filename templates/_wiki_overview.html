@@ -1,21 +1,25 @@
-{# Starter wiki (llm_wiki pattern, 2026-05-30). Expects:
-     slug, overview (from wiki.load_overview):
-       {field_intro_html, top_picks: [{paper, title, body_html, abstract_only,
-                                       attention_score, is_hot, is_new}],
-        meta: {paper_count, pdfs_read, pdfs_missing, generated_at}}
-   Each top pick renders as a markdown page below the field intro. No tabs —
-   the page is a vertical list: hook → numbered top-picks navigation → each
-   paper's page stacked. #}
+{# Cognitive-model wiki — Phase A (2026-05-31). Stage 0 sections only:
+     1) Collection Thesis  (overview.thesis)
+     2) Research Landscape (overview.landscape: problems / methods / debates / open_questions)
+     5) Papers (Evidence)  (overview.papers, decorated with attention)
+   Stages 2-4 sections (Focus, Understanding, Recommended Reading) come in
+   later phases and don't render here — by design (threshold-gated, empty
+   states don't render).
 
-<div class="space-y-4">
+   Color classes are hardcoded per column rather than interpolated, so the
+   Tailwind CDN JIT can pick them up reliably even when this template arrives
+   via an HTMX swap (we hit JIT races with dynamic classes before). #}
 
-  {# Provenance banner. The pdfs_read/paper_count line is honesty about
-     what the agent could see — same role as the per-card chips in the old
-     starter wiki. #}
+{% macro section_badge(n) %}
+  <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-violet-100 text-violet-700 text-sm font-semibold tabular-nums">{{ n }}</span>
+{% endmacro %}
+
+<div class="space-y-6">
+  {# --- Provenance banner. Agent-tagged + paper/PDF honesty. --- #}
   <div class="flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
     <span>✦</span>
-    <span>AI-drafted starter wiki — {{ overview.top_picks|length }} top pick(s) the agent thinks you should start with, <b>not</b> a comprehensive list. The full collection lives in the Papers tab.
-      {% if overview.meta and overview.meta.pdfs_read is defined %}
+    <span>AI-drafted Field Model — the orientation layer of your wiki.
+      {% if overview.meta and overview.meta.pdfs_read is defined and overview.meta.paper_count is defined %}
       <span class="text-violet-500">(from {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts.)</span>
       {% endif %}
     </span>
@@ -26,71 +30,158 @@
     </form>
   </div>
 
-  {# Field intro — the agent's hook for the whole collection. One paragraph,
-     no headings; lives at the top of wiki/starter/index.md. #}
-  {% if overview.field_intro_html %}
-  <div class="prose prose-sm max-w-none rounded-xl border border-slate-200 bg-white p-4">
-    {{ overview.field_intro_html|safe }}
-  </div>
+  {# =================================================================
+     Section 1 — Collection Thesis (Stage 0)
+     ================================================================= #}
+  {% if overview.thesis and (overview.thesis.one_paragraph
+                              or overview.thesis.core_tension
+                              or overview.thesis.key_intuition
+                              or overview.thesis.central_question) %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-center gap-2 mb-3">
+      {{ section_badge(1) }}
+      <h2 class="text-lg font-semibold text-slate-900">Collection Thesis</h2>
+    </div>
+    {% if overview.thesis.one_paragraph %}
+    <p class="text-sm text-slate-700 leading-relaxed mb-3">{{ overview.thesis.one_paragraph }}</p>
+    {% endif %}
+
+    {% if overview.thesis.core_tension or overview.thesis.key_intuition or overview.thesis.central_question %}
+    <div class="flex flex-wrap gap-2">
+      {% if overview.thesis.core_tension %}
+      <div class="flex-1 min-w-[200px] rounded-lg border border-sky-100 bg-sky-50 px-3 py-2.5">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-sky-800 mb-1">
+          <span>📦</span><span>Core tension</span>
+        </div>
+        <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.core_tension }}</p>
+      </div>
+      {% endif %}
+      {% if overview.thesis.key_intuition %}
+      <div class="flex-1 min-w-[200px] rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-amber-800 mb-1">
+          <span>💡</span><span>Key intuition</span>
+        </div>
+        <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.key_intuition }}</p>
+      </div>
+      {% endif %}
+      {% if overview.thesis.central_question %}
+      <div class="flex-1 min-w-[200px] rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-emerald-800 mb-1">
+          <span>🎯</span><span>Central question</span>
+        </div>
+        <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.central_question }}</p>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
   {% endif %}
 
-  {# Top picks — numbered navigation. Click jumps to the paper's stacked page
-     section below. Each row carries the agent's why_now / focus / skip hints
-     baked into the title-line, plus the attention chips when applicable. #}
-  {% if overview.top_picks %}
-  <div class="rounded-xl border border-slate-200 bg-white p-4">
-    <div class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Top picks · click to jump</div>
-    <ol class="space-y-1.5">
-      {% for pg in overview.top_picks %}
-      <li class="flex items-start gap-2.5">
-        <span class="flex-none mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full bg-violet-100 text-violet-700 text-xs font-medium">{{ loop.index }}</span>
-        <div class="min-w-0 flex-1">
-          <a href="#pick-{{ pg.page_slug }}" class="font-medium text-slate-900 hover:underline">{{ pg.title }}</a>
-          {# Attention badges and provenance chip, inline #}
-          {% if pg.is_hot %}<span class="ml-1 text-[10px] rounded px-1.5 py-0.5 bg-orange-100 text-orange-700"
-            title="{{ pg.attention_score }} attention points (highlights + notes) — your active focus">🔥</span>{% endif %}
-          {% if pg.is_new %}<span class="ml-1 text-[10px] rounded px-1.5 py-0.5 bg-sky-100 text-sky-700"
-            title="You added a highlight or note here since you last opened the wiki">✨</span>{% endif %}
-          <span class="ml-1 text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-amber-100 text-amber-700' if pg.abstract_only else 'bg-violet-100 text-violet-700' }}"
-                title="{{ 'Drafted from abstract only' if pg.abstract_only else 'Drafted from abstract + PDF excerpt' }}">
-            ✦ {{ 'abstract' if pg.abstract_only else 'abstract+PDF' }}
-          </span>
+  {# =================================================================
+     Section 2 — Research Landscape (Stage 0)
+     ================================================================= #}
+  {% if overview.landscape.problems or overview.landscape.methods
+        or overview.landscape.debates or overview.landscape.open_questions %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-center gap-2 mb-3">
+      {{ section_badge(2) }}
+      <h2 class="text-lg font-semibold text-slate-900">Research Landscape</h2>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      {% if overview.landscape.problems %}
+      <div class="flex-1 min-w-[220px] rounded-lg border border-rose-100 bg-rose-50/40 p-3">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-rose-100">
+          <span>🚩</span><h3 class="text-sm font-semibold text-rose-900">Problems</h3>
         </div>
-      </li>
-      {% endfor %}
-    </ol>
-  </div>
-
-  {# Each pick rendered as its own page-card. Anchor id matches the nav above
-     so the numbered list can jump. The paper title links to the actual PDF
-     reader at /c/<slug>/p/<id>. #}
-  <div class="space-y-3">
-    {% for pg in overview.top_picks %}
-    <article id="pick-{{ pg.page_slug }}"
-             class="rounded-xl border-l-4 {{ 'border-amber-300' if pg.abstract_only else 'border-violet-300' }} border-y border-r border-slate-200 bg-white p-4 scroll-mt-4">
-      <header class="flex items-baseline flex-wrap gap-2 mb-3 pb-2 border-b border-slate-100">
-        <span class="text-xs font-medium text-violet-600 tabular-nums">{{ loop.index }}</span>
-        <a href="/c/{{ slug }}/p/{{ pg.paper.id }}" class="text-base font-semibold text-slate-900 hover:underline">
-          {{ pg.title }}
-        </a>
-        {% if pg.is_hot %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-orange-100 text-orange-700">🔥 attention</span>{% endif %}
-        {% if pg.is_new %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-sky-100 text-sky-700">✨ new</span>{% endif %}
-        <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-amber-100 text-amber-700' if pg.abstract_only else 'bg-violet-100 text-violet-700' }}">
-          ✦ {{ 'abstract' if pg.abstract_only else 'abstract+PDF' }}
-        </span>
-        <a href="/c/{{ slug }}/p/{{ pg.paper.id }}" class="ml-auto text-xs text-slate-500 hover:text-slate-900 underline">
-          📖 Open paper →
-        </a>
-      </header>
-      <div class="prose prose-sm max-w-none">{{ pg.body_html|safe }}</div>
-      {% if pg.abstract_only %}
-      <p class="mt-3 pt-2 border-t border-amber-100 text-[11px] text-amber-700 italic">
-        Abstract-only page — Mechanism / Evidence / Limitation sections aren't shown
-        because the agent didn't have the PDF. Cache the paper and ↻ Regenerate to deepen.
-      </p>
+        <ul class="space-y-1 text-sm text-slate-700">
+          {% for item in overview.landscape.problems %}
+          <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span>{{ item }}</span></li>
+          {% endfor %}
+        </ul>
+        <div class="mt-2 pt-1.5 border-t border-rose-100 text-[10px] text-rose-700">
+          {{ overview.landscape.problems|length }} problem{{ 's' if overview.landscape.problems|length != 1 }}
+        </div>
+      </div>
       {% endif %}
-    </article>
-    {% endfor %}
-  </div>
+
+      {% if overview.landscape.methods %}
+      <div class="flex-1 min-w-[220px] rounded-lg border border-sky-100 bg-sky-50/40 p-3">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-sky-100">
+          <span>🔧</span><h3 class="text-sm font-semibold text-sky-900">Methods</h3>
+        </div>
+        <ul class="space-y-1 text-sm text-slate-700">
+          {% for item in overview.landscape.methods %}
+          <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span>{{ item }}</span></li>
+          {% endfor %}
+        </ul>
+        <div class="mt-2 pt-1.5 border-t border-sky-100 text-[10px] text-sky-700">
+          {{ overview.landscape.methods|length }} method famil{{ 'ies' if overview.landscape.methods|length != 1 else 'y' }}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if overview.landscape.debates %}
+      <div class="flex-1 min-w-[220px] rounded-lg border border-amber-100 bg-amber-50/40 p-3">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-amber-100">
+          <span>💬</span><h3 class="text-sm font-semibold text-amber-900">Debates</h3>
+        </div>
+        <ul class="space-y-1 text-sm text-slate-700">
+          {% for item in overview.landscape.debates %}
+          <li class="flex items-start gap-1.5"><span class="text-amber-400 mt-1">•</span><span>{{ item }}</span></li>
+          {% endfor %}
+        </ul>
+        <div class="mt-2 pt-1.5 border-t border-amber-100 text-[10px] text-amber-700">
+          {{ overview.landscape.debates|length }} active debate{{ 's' if overview.landscape.debates|length != 1 }}
+        </div>
+      </div>
+      {% endif %}
+
+      {% if overview.landscape.open_questions %}
+      <div class="flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-violet-100">
+          <span>❓</span><h3 class="text-sm font-semibold text-violet-900">Open questions</h3>
+        </div>
+        <ul class="space-y-1 text-sm text-slate-700">
+          {% for item in overview.landscape.open_questions %}
+          <li class="flex items-start gap-1.5"><span class="text-violet-400 mt-1">•</span><span>{{ item }}</span></li>
+          {% endfor %}
+        </ul>
+        <div class="mt-2 pt-1.5 border-t border-violet-100 text-[10px] text-violet-700">
+          {{ overview.landscape.open_questions|length }} open question{{ 's' if overview.landscape.open_questions|length != 1 }}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# =================================================================
+     Section 5 — Papers (Evidence)  (Stage 0)
+     ================================================================= #}
+  {% if overview.papers %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-baseline gap-2 mb-3">
+      {{ section_badge(5) }}
+      <h2 class="text-lg font-semibold text-slate-900">Papers</h2>
+      <span class="text-xs text-slate-500">(Evidence)</span>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      {% for p in overview.papers %}
+      <a href="/c/{{ slug }}/p/{{ p.id }}"
+         class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition relative">
+        <div class="flex items-center gap-1 mb-2">
+          <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
+          {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
+          {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
+        </div>
+        <p class="text-sm font-medium text-slate-900 leading-snug line-clamp-3 group-hover:text-slate-950">{{ p.title }}</p>
+        <div class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+          {% if p.arxiv_id %}<span>arXiv</span>{% endif %}
+          {% if p.year %}{% if p.arxiv_id %}<span>·</span>{% endif %}<span>{{ p.year }}</span>{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
   {% endif %}
 </div>
