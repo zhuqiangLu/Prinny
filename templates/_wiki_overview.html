@@ -466,14 +466,25 @@
     </div>
     <div class="flex flex-wrap gap-3">
       {% for p in overview.papers %}
-      <a href="/c/{{ slug }}/p/{{ p.id }}"
-         class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition relative">
+      {# Card is a <div> (not <a>) so the read-toggle form can sit alongside the
+         title link without nesting interactive elements. #}
+      <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}">
         <div class="flex items-center gap-1 mb-2">
           <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
           {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
           {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
+          {# Read toggle: ✓ when read, ○ when unread. Opening the paper also marks it read. #}
+          <form hx-post="/c/{{ slug }}/wiki/paper/{{ p.id }}/toggle-read" hx-target="#left-panel" hx-swap="innerHTML"
+                hx-disabled-elt="find button" class="ml-auto">
+            {% if p.read %}
+            <button class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700" title="Read — click to mark unread">✓ read</button>
+            {% else %}
+            <button class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700" title="Mark read">○</button>
+            {% endif %}
+          </form>
         </div>
-        <p class="text-sm font-medium text-slate-900 leading-snug line-clamp-3 group-hover:text-slate-950">{{ p.title }}</p>
+        <a href="/c/{{ slug }}/p/{{ p.id }}"
+           class="block text-sm font-medium text-slate-900 leading-snug line-clamp-3 hover:underline">{{ p.title }}</a>
         {# Concept tags — each paper's place in the Field Model's concept space
            (deterministic synonym match over title+abstract; no LLM). This is the
            "evidence node" link that makes the row a map, not a bibliography. #}
@@ -489,7 +500,7 @@
           {% if p.arxiv_id %}<span>arXiv</span>{% endif %}
           {% if p.year %}{% if p.arxiv_id %}<span>·</span>{% endif %}<span>{{ p.year }}</span>{% endif %}
         </div>
-      </a>
+      </div>
       {% endfor %}
     </div>
   </section>

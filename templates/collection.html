@@ -4,7 +4,7 @@
 {% block main_pad %}pt-3 pb-2{% endblock %}
 {% block main_inner %}h-full{% endblock %}
 {% block content %}
-<div x-data='collectionView({{ read_map|tojson }})' class="flex flex-col h-full min-h-0">
+<div x-data='collectionView()' class="flex flex-col h-full min-h-0">
 
   <!-- header: collection name + source actions (icon-only, label on hover) -->
   <div class="shrink-0">
@@ -53,26 +53,6 @@
       <div id="sync-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
     </div>
   </div>
-
-  <!-- Move-to-collection popup -->
-  {% if others %}
-  <div x-show="moveOpen" x-cloak @keydown.escape.window="moveOpen = false" @click.self="moveOpen = false"
-       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24 overflow-auto">
-    <div class="bg-white rounded-lg shadow-xl w-[min(420px,92vw)] p-5">
-      <div class="flex items-center justify-between mb-1">
-        <h2 class="font-semibold">Move <span x-text="selected.length"></span> paper(s) to…</h2>
-        <button type="button" @click="moveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
-      </div>
-      <p class="text-sm text-slate-500 mb-3">Choose the destination collection.</p>
-      <div class="space-y-1 max-h-72 overflow-auto">
-        {% for o in others %}
-        <button type="button" @click="movePapers('{{ o.slug }}')"
-                class="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 hover:border-slate-300 text-sm">{{ o.name }}</button>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   <!-- Graveyard: recently removed papers (staged, not yet synced) — restore here -->
   <div x-show="graveOpen" x-cloak @keydown.escape.window="graveOpen = false" @click.self="graveOpen = false"
@@ -149,28 +129,16 @@
 
   <!-- split: paper list | divider | right pane (Chat / Thoughts) -->
   <div class="flex flex-1 min-h-0 mt-3" x-ref="split">
-    <!-- left column: tabbed Papers | Wiki (+ Triage), with an inline panel -->
+    <!-- left column: the wiki (the collection's single surface; papers live in it) -->
     <div class="min-w-0 flex-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <!-- left tab bar -->
+      <!-- left header: the collection's single surface is the wiki (papers live
+           inside it, in the Evidence section). Add + Duplicates are page-level
+           actions; there's no separate Papers tab. -->
       <div class="shrink-0 flex items-center gap-1 border-b border-slate-200 px-2 py-1.5 text-sm">
-        <button @click="switchLeft('papers')" :class="leftTabCls('papers')">Papers</button>
-        <button @click="switchLeft('wiki')" :class="leftTabCls('wiki')">Wiki
-          <span x-show="triageCount" x-text="triageCount"
-                class="ml-0.5 rounded-full bg-sky-200 text-sky-900 text-xs px-1.5"
-                :title="triageCount + ' triage'"></span>
-        </button>
-        {# Triage tab dropped — surfaced inline on the Wiki panel instead. #}
+        <span class="font-semibold text-slate-700 px-1">{{ name }}</span>
         <div class="ml-auto flex items-center gap-1">
-          {% if papers %}
-          <button x-show="leftView === 'papers'" x-cloak @click="toggleTools()"
-                  class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:bg-slate-50"
-                  :title="toolsOpen ? 'Hide selection &amp; sort' : 'Show selection &amp; sort'">
-            <span class="text-base leading-none" x-text="toolsOpen ? '▴' : '▾'"></span>
-          </button>
-          {% endif %}
           {% if dup_count %}
-          <button x-show="leftView === 'papers'" x-cloak
-                  @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
+          <button @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
                   class="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800 hover:bg-amber-100"
                   title="Resolve same-title duplicate papers">⧉ Duplicates
             <span class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5">{{ dup_count }}</span>
@@ -254,63 +222,10 @@
         </div>
       </div>
 
-      <!-- content area (scrolls) -->
+      <!-- content area (scrolls): the wiki is the collection's single surface.
+           Papers live inside it (Evidence section). Loaded via HTMX on init. -->
       <div class="flex-1 min-h-0 overflow-auto">
-      <!-- PAPERS view -->
-      <div x-show="leftView === 'papers'">
-      <!-- selection + bulk-action bar (collapsed by default; the ▾ toggle by Add reveals it) -->
-      {% if papers %}
-      <div x-show="toolsOpen" x-cloak
-           class="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50/95 backdrop-blur px-3 py-1.5 text-sm">
-          <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
-            <input type="checkbox" class="rounded border-slate-300 cursor-pointer"
-                   :checked="allSelected()" @change="toggleAll($event)"
-                   :indeterminate.camel="selected.length > 0 && !allSelected()">
-            <span x-text="selected.length ? `${selected.length} selected` : 'Select all'"></span>
-          </label>
-          <template x-if="selected.length">
-          <div class="flex flex-wrap items-center gap-2">
-          <button @click="selected = []" class="text-slate-500 hover:text-slate-800">Clear</button>
-          <span class="mx-1 text-slate-300">|</span>
-          <div class="flex items-center gap-1">
-            <span class="text-slate-500">Mark</span>
-            <button @click="markRead(true)" class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">read</button>
-            <button @click="markRead(false)" class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">unread</button>
-          </div>
-          <button @click="removePapers()"
-                  class="rounded border border-rose-200 bg-white px-2 py-1 text-rose-600 hover:bg-rose-50"
-                  title="Remove from the collection now; deleted from the source on the next Sync">🗑 Remove</button>
-          {% if others %}
-          <button @click="moveOpen = true"
-                  class="rounded border border-slate-300 bg-white px-2 py-1 hover:bg-slate-50">Move to…</button>
-          {% endif %}
-          </div>
-          </template>
-          <div class="ml-auto flex items-center gap-1 text-xs text-slate-500">
-            <span>Sort</span>
-            <select x-model="sortBy" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs bg-white">
-              <option value="title">Title A–Z</option>
-              <option value="-title">Title Z–A</option>
-              <option value="-added">Added (newest)</option>
-              <option value="added">Added (oldest)</option>
-              <option value="-year">Year (newest)</option>
-              <option value="year">Year (oldest)</option>
-              <option value="authors">Authors A–Z</option>
-            </select>
-          </div>
-        </div>
-      {% endif %}
-      {% if not papers %}
-      <p class="p-4 text-slate-500">No papers in this collection.</p>
-      {% else %}
-      <ul id="paper-list" class="divide-y divide-slate-200">
-        {% for p in papers %}{% include "_paper_row.html" %}{% endfor %}
-      </ul>
-      {% endif %}
-      </div><!-- /PAPERS view -->
-
-      <!-- WIKI / TRIAGE / PROPOSED panel (loaded via HTMX) -->
-      <div x-show="leftView !== 'papers'" x-cloak id="left-panel">
+      <div id="left-panel">
         <span class="block p-3 text-sm text-slate-400">Loading…</span>
       </div>
       </div><!-- /content area -->
@@ -367,65 +282,26 @@
     };
   }
 
-  function collectionView(readMap) {
+  function collectionView() {
     return {
       tab: localStorage.getItem("cc.tab") || "chat",
       paneOpen: localStorage.getItem("cc.open") !== "0",
       paneW: parseInt(localStorage.getItem("cc.w") || "420", 10),
       thoughtsLoaded: false,
-      read: readMap || {},          // {paperId: bool} — reactive read state (no reload)
-      selected: [],
-      allIds: {{ papers|map(attribute='id')|list|tojson }}.map(String),
-      leftView: (function(){ const v = localStorage.getItem("cc.left") || "papers";
-                              return (v === "triage" || v === "debt") ? "wiki" : v; })(),
+      // Page-level modals (tab-independent).
       addOpen: false,
       syncOpen: false,
-      syncWith: false,
-      moveOpen: false,
+      syncWith: false,     // ⇅ Pull-from-Zotero sync-preview modal
       graveOpen: false,
       dupOpen: false,
-      toolsOpen: false,
-      sortBy: localStorage.getItem("cc.sort") || "title",
-      triageCount: {{ triage_count|default(0) }},
       init() {
         this.$watch("tab", (v) => { localStorage.setItem("cc.tab", v); if (v === "thoughts") this.loadThoughts(); });
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));
         this.$watch("paneW", (v) => localStorage.setItem("cc.w", v));
-        this.$watch("sortBy", (v) => { localStorage.setItem("cc.sort", v); this.sortPapers(); });
         if (this.tab === "thoughts") this.loadThoughts();
-        if (this.leftView !== "papers") this.openLeft(this.leftView);
-        this.sortPapers();   // apply the persisted sort to the server-rendered list
-      },
-      sortPapers() {
-        const ul = document.getElementById("paper-list");
-        if (!ul) return;
-        const desc = this.sortBy.startsWith("-");
-        const key = desc ? this.sortBy.slice(1) : this.sortBy;   // dataset key
-        const items = [...ul.querySelectorAll(":scope > li")];
-        items.sort((a, b) => {
-          let av = a.dataset[key] || "", bv = b.dataset[key] || "";
-          if (key === "year") { av = parseInt(av) || 0; bv = parseInt(bv) || 0; }
-          else { av = av.toLowerCase(); bv = bv.toLowerCase(); }
-          const c = av < bv ? -1 : av > bv ? 1 : 0;
-          return desc ? -c : c;
-        });
-        items.forEach((li) => ul.appendChild(li));   // re-order (moves nodes, keeps state)
-      },
-      leftTabCls(t) {
-        return "rounded px-2.5 py-1 " + (this.leftView === t
-          ? "bg-slate-900 text-white"
-          : "text-slate-600 hover:bg-slate-100");
-      },
-      openLeft(v) {
-        // Triage + Debt tabs were folded into the Wiki panel.
-        if (v === "triage" || v === "debt") v = "wiki";
-        const url = v === "wiki" ? "/c/{{ slug }}/wiki/panel" : null;
-        if (url) this.loadPanel(url);
-      },
-      switchLeft(v) {
-        this.leftView = v;
-        localStorage.setItem("cc.left", v);
-        if (v !== "papers") this.openLeft(v);
+        // The collection's single left surface is the wiki (papers live inside
+        // it). Load it on init.
+        this.loadPanel("/c/{{ slug }}/wiki/panel");
       },
       loadPanel(url) {
         window.htmx && htmx.ajax("GET", url, { target: "#left-panel", swap: "innerHTML" });
@@ -439,43 +315,6 @@
         return "px-3 py-2 border-b-2 " + (this.tab === t
           ? "border-slate-800 text-slate-900 font-medium"
           : "border-transparent text-slate-500 hover:text-slate-800");
-      },
-      toggleTools() { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.selected = []; },
-      allSelected() { return this.allIds.length > 0 && this.selected.length === this.allIds.length; },
-      toggleAll(e) { this.selected = e.target.checked ? [...this.allIds] : []; },
-      toggleOne(id) {                                   // row click in selection mode
-        const i = this.selected.indexOf(id);
-        if (i < 0) this.selected.push(id); else this.selected.splice(i, 1);
-      },
-      async markRead(read) {
-        if (!this.selected.length) return;
-        const body = new URLSearchParams();
-        if (read) body.append("read", "true");
-        this.selected.forEach((id) => body.append("paper_ids", id));
-        await fetch("/c/{{ slug }}/papers/mark-read", {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
-        });
-        this.selected.forEach((id) => { this.read[id] = read; });   // in-place; no reload
-      },
-      async removePapers() {
-        if (!this.selected.length) return;
-        if (!await window.paConfirm(`Remove ${this.selected.length} paper(s) from this collection?\n\n• They disappear from the collection now and their cached PDFs are dropped.\n• The removal is staged — it's applied to the source on your next Sync, which DELETES the item from Zotero (affects every collection it's in).\n• Until you Sync, nothing changes in Zotero.`, { danger: true })) return;
-        const body = new URLSearchParams();
-        this.selected.forEach((id) => body.append("paper_ids", id));
-        await fetch("/c/{{ slug }}/papers/remove", {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
-        });
-        window.location.reload();
-      },
-      async movePapers(target) {
-        if (!this.selected.length || !target) return;
-        const body = new URLSearchParams();
-        body.append("target", target);
-        this.selected.forEach((id) => body.append("paper_ids", id));
-        await fetch("/c/{{ slug }}/papers/move", {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
-        });
-        window.location.href = "/c/" + target;
       },
       startDrag(e) {
         const split = this.$refs.split.getBoundingClientRect();

@@ -1599,6 +1599,17 @@ def wiki_add_dismiss(request: Request, slug: str, tid: int) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+@app.post("/c/{slug}/wiki/paper/{pid}/toggle-read", response_class=HTMLResponse)
+def wiki_paper_toggle_read(request: Request, slug: str, pid: int) -> HTMLResponse:
+    """Flip a paper's read state from the wiki's Evidence section (papers live
+    in the wiki now). Opening a paper auto-marks it read; this is the manual
+    toggle. Re-renders the panel."""
+    _require_collection(slug)
+    cur = library.get_collection_paper(slug, pid)
+    library.mark_read(slug, [pid], read=not bool(cur and cur.get("read")))
+    return _wiki_panel(request, slug)
+
+
 @app.post("/c/{slug}/wiki/gaps", response_class=HTMLResponse)
 def wiki_gaps(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)

@@ -1331,6 +1331,7 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
             "attention_score": score,
             "is_hot": hot_threshold is not None and score >= hot_threshold,
             "is_new": pid in changed,
+            "read": bool(p.get("read")),
             "tags": paper_tags.get(pid, []),
         })
     # Stable sort: attended papers float to the top of the evidence row; zeros
