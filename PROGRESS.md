@@ -2239,3 +2239,30 @@ Triage and Debt tabs from the collection nav. The wiki page is now the single hu
   doesn't clobber the panel.
 - Verified in-browser: `/c/<slug>/wiki` 200 with new layout; collection nav only has Papers +
   Wiki; inline panel shows ✦ Update wiki + Open full hub link; **164 pass, 0 console errors.**
+
+## 2026-05-31 — Compile Tailwind (drop the Play CDN)
+
+**What & why:** Safari rendered the HTMX-swapped wiki panel with white-on-white
+buttons, invisible legend dots, and oversized text. Root cause: the Tailwind
+**Play CDN** (`cdn.tailwindcss.com`) only generates CSS for classes present in
+the DOM at initial load; classes unique to a later HTMX `innerHTML` swap (colors,
+sizes, arbitrary values like `text-[9px]`) were never generated — reliably on
+Chromium, not on Safari/WebKit. Confirmed via real Safari: `.bg-emerald-600`,
+`.w-2`, `.text-[9px]` had no CSS rule while page-load classes did.
+
+**Fix:** compile Tailwind to a static stylesheet (the CDN is dev-only by design).
+- `tailwind.config.js` (v3, darkMode:class, typography) scans templates/static/app.
+- `static/src/app.css` → `static/app.css` (committed; served via `<link>` in base.html).
+- `scripts/build_css.sh` / `make css` fetch the **Tailwind v3.4.17 standalone CLI**
+  (no npm/node project) and rebuild. Binary is gitignored (`bin/tailwindcss`, 76MB).
+- Pinned v3 (not v4) to match the old CDN exactly — delivery change only, no
+  version bump / visual drift.
+- Removed the interim color backstop (`static/tw-accent.css`, `scripts/gen_accent_css.py`,
+  `tests/test_accent_css.py`) — superseded by the full compiled sheet.
+
+**Workflow change:** run `make css` after editing templates (or `make css-watch`
+while developing). Generated `static/app.css` is committed so the app runs without
+the build tool; rebuild only when classes change.
+
+**Verified:** real Safari now renders the legend dots (8×8px), `text-[9px]` (9px),
+and the emerald button (visible); page loads `/static/app.css`, CDN gone. 161 tests pass.

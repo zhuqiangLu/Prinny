@@ -20,3 +20,6 @@ node_modules/
 # External components (their own histories; not part of this repo)
 llm_wiki/
 zotero-arxiv-daily-local/
+
+# Vendored Tailwind standalone binary (76MB; fetched by scripts/build_css.sh)
+bin/tailwindcss
