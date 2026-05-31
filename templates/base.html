@@ -23,6 +23,17 @@
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <script>tailwind.config = { darkMode: "class" };</script>
+  <!-- Accent-utility backstop: the Tailwind Play CDN generates only classes it
+       sees in the DOM at scan time, so accent utilities that appear ONLY inside a
+       later HTMX innerHTML swap (e.g. the wiki panel's bg-emerald-600 button) can
+       be missed — worst on Safari/WebKit, which then renders white-on-white. This
+       static stylesheet defines them unconditionally. Regenerate with
+       scripts/gen_accent_css.py; tests/test_accent_css.py guards against drift. -->
+  <link rel="stylesheet" href="/static/tw-accent.css">
+  <!-- Covers only the non-slate accent palette (violet/sky/rose/emerald/amber/
+       indigo/orange), which is NOT remapped in dark mode, so it never collides
+       with the slate !important overrides below. -->
+
   <!-- KaTeX: render LaTeX in chat + note previews -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
