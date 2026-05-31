@@ -394,33 +394,113 @@
             title="Structural map of the collection — which concepts/methods/problems cluster, and which papers aren't connected yet. Derived from shared papers; no LLM.">How? ⓘ</span>
     </div>
 
-    {# Force-directed graph (Cytoscape.js). Nodes colored by kind; click a paper
-       node to open its reader. Data embedded as JSON; the init script runs on
-       HTMX swap (cytoscape is loaded once in base.html). #}
-    {% if overview.connections.graph and overview.connections.graph.nodes %}
-    <div class="mb-3">
-      <div class="flex items-center gap-2 mb-1.5">
-        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Knowledge graph</div>
-        <div class="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
-          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
-          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
-          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
-          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
-          <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#94a3b8"></span>paper</span>
+    {# Cards first, graph second. Per-kind chip styling (problem/method/concept/
+       belief) reused across themes and co-occurrences. #}
+    {% set KIND_STYLE = {
+      'problem': {'dot': '#f43f5e', 'cls': 'bg-rose-50 text-rose-700 border-rose-200', 'name': 'Problem'},
+      'method':  {'dot': '#0ea5e9', 'cls': 'bg-sky-50 text-sky-700 border-sky-200', 'name': 'Method'},
+      'concept': {'dot': '#7c3aed', 'cls': 'bg-violet-50 text-violet-700 border-violet-200', 'name': 'Concept'},
+      'belief':  {'dot': '#f59e0b', 'cls': 'bg-amber-50 text-amber-800 border-amber-200', 'name': 'Belief'}
+    } %}
+
+    {# --- Theme cards: clusters of co-occurring entities. The "why grouped" line
+       is COMPUTED cohesion (shared papers + concept links), never asserted. --- #}
+    {% if overview.connections.themes %}
+    <div class="space-y-2.5 mb-4">
+      {% for t in overview.connections.themes %}
+      <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="text-sm font-semibold text-slate-900">Theme {{ loop.index }}</span>
+          <span class="text-[11px] text-slate-500">{{ t.entities|length }} idea{{ 's' if t.entities|length != 1 }} · {{ t.n_papers }} paper{{ 's' if t.n_papers != 1 }}</span>
         </div>
+        <div class="flex flex-wrap gap-1.5">
+          {% for kind in ['problem', 'method', 'concept', 'belief'] %}
+            {% for e in t.entities if e.kind == kind %}
+            <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[kind].cls }}">
+              <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[kind].dot }}"></span>{{ e.label|truncate(48) }}
+            </span>
+            {% endfor %}
+          {% endfor %}
+        </div>
+        <p class="mt-2 text-[11px] text-slate-500">
+          Why grouped: connected through
+          <b class="font-medium text-slate-700">{{ t.cohesion.shared_papers }}</b> shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} and <b class="font-medium text-slate-700">{{ t.cohesion.links }}</b> concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}{% if t.cohesion.shared_paper_labels %} — {% for l in t.cohesion.shared_paper_labels %}<i>{{ l|truncate(40) }}</i>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}.
+        </p>
       </div>
-      <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-slate-50/40"
-           style="height: 360px;"
-           data-graph='{{ overview.connections.graph | tojson }}'
-           data-slug="{{ slug }}"></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# --- Strong co-occurrences: entity pairs sharing >= 2 papers. --- #}
+    {% if overview.connections.co_occurrences %}
+    <div class="mb-4">
+      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Strong co-occurrences</div>
+      <ul class="space-y-1">
+        {% for c in overview.connections.co_occurrences %}
+        <li class="text-[12px] text-slate-700 flex items-center gap-1.5">
+          <span class="font-medium">{{ c.a|truncate(36) }}</span>
+          <span class="text-slate-400">↔</span>
+          <span class="font-medium">{{ c.b|truncate(36) }}</span>
+          <span class="text-[10px] text-slate-400">co-occur in {{ c.shared }} papers</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# --- Unmapped papers: evidence not yet tied to any concept/method/problem.
+       A feature, not a failure — these mark where the map is incomplete. --- #}
+    {% if overview.connections.orphans %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3 mb-3">
+      <div class="text-xs font-semibold text-amber-900 mb-1.5">
+        Unmapped papers
+        <span class="font-normal text-amber-700">— {{ overview.connections.orphans|length }} paper{{ 's' if overview.connections.orphans|length != 1 }} not yet connected to any concept, method, or problem</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        {% for o in overview.connections.orphans %}
+        <a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100" title="Open to read">{{ o.label|truncate(40) }}</a>
+        {% endfor %}
+      </div>
+      <p class="mt-1.5 text-[10px] text-amber-700">Read these, then ↻ Regenerate so the agent can map them into the field model.</p>
+    </div>
+    {% endif %}
+
+    {# --- Interactive graph: secondary, lazily rendered on open (a hidden
+       Cytoscape container has 0 size and lays out wrong, so we only build it
+       when the user expands it). Drag/zoom/pan are Cytoscape built-ins. --- #}
+    {% if overview.connections.graph and overview.connections.graph.nodes %}
+    <div x-data="{ kgOpen: false }">
+      <button type="button"
+              @click="kgOpen = !kgOpen; if (kgOpen) $nextTick(() => window.kgRender && window.kgRender())"
+              class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
+        <span x-text="kgOpen ? '▾' : '▸'"></span>
+        <span x-text="kgOpen ? 'Hide interactive graph' : 'Open interactive graph'"></span>
+        <span class="text-slate-400">({{ overview.connections.graph.nodes|length }} nodes)</span>
+      </button>
+      <div x-show="kgOpen" x-cloak class="mt-2">
+        <div class="flex items-center gap-2 mb-1.5">
+          <div class="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
+            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
+            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
+            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
+            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
+            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#94a3b8"></span>paper</span>
+          </div>
+        </div>
+        <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-slate-50/40"
+             style="height: 360px;"
+             data-graph='{{ overview.connections.graph | tojson }}'
+             data-slug="{{ slug }}"></div>
+        <p class="mt-1 text-[10px] text-slate-400">Drag to pan · scroll to zoom · drag a node to move it · click a paper to open it.</p>
+      </div>
     </div>
     <script>
-      (function () {
+      window.kgRender = function () {
         var el = document.getElementById("kg-cyto");
         if (!el || typeof cytoscape !== "function" || el.dataset.kgInit) return;
-        el.dataset.kgInit = "1";
         var data;
         try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
+        el.dataset.kgInit = "1";
         var slug = el.getAttribute("data-slug");
         var COLOR = {concept:"#7c3aed", method:"#0ea5e9", problem:"#f43f5e",
                      belief:"#f59e0b", paper:"#94a3b8"};
@@ -449,22 +529,9 @@
           var pid = evt.target.data("pid");
           if (pid) window.location.href = "/c/" + slug + "/p/" + pid;
         });
-      })();
+        cy.resize(); cy.fit(undefined, 20);
+      };
     </script>
-    {% endif %}
-
-    {% if overview.connections.orphans %}
-    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-      <div class="text-xs font-medium text-amber-900 mb-1.5">
-        {{ overview.connections.orphans|length }} paper{{ 's' if overview.connections.orphans|length != 1 }} not yet connected to any concept, method, or problem
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        {% for o in overview.connections.orphans %}
-        <a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100">{{ o.label|truncate(40) }}</a>
-        {% endfor %}
-      </div>
-      <p class="mt-1.5 text-[10px] text-amber-700">Tip: ↻ Regenerate after reading to let the agent map these into the field model.</p>
-    </div>
     {% endif %}
   </section>
   {% endif %}

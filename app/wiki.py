@@ -24,7 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1520,10 +1520,39 @@ def connection_view(slug: str) -> dict | None:
 
     themes = []
     for members in _graph.clusters(g):
+        member_set = set(members)
         ents = [{"label": label(m), "kind": kind(m)} for m in members if kind(m) != "paper"]
         n_papers = sum(1 for m in members if kind(m) == "paper")
-        if len(ents) >= 2:   # a theme is a cluster of related ENTITIES, not just papers
-            themes.append({"entities": ents, "n_papers": n_papers})
+        if len(ents) < 2:   # a theme is a cluster of related ENTITIES, not just papers
+            continue
+        # Honest cohesion — what actually binds this cluster, computed (not asserted):
+        #   shared_papers : papers anchoring >=2 of the cluster's entities (the
+        #                   connective evidence). The label-propagation membership
+        #                   doesn't yield this, so we derive it directly.
+        #   links         : intra-cluster entity<->entity edges (belief->concept).
+        paper_count: Counter = Counter()
+        for m in members:
+            if kind(m) != "paper":
+                for pid in nodes[m]["papers"]:
+                    paper_count[pid] += 1
+        shared_pids = [pid for pid, c in paper_count.most_common() if c >= 2]
+        shared_labels = [label(f"paper:{pid}") for pid in shared_pids
+                         if f"paper:{pid}" in nodes]
+        seen_pairs: set = set()
+        n_links = 0
+        for m in members:
+            if kind(m) == "paper":
+                continue
+            for nb in g["adj"].get(m, {}):
+                if nb in member_set and kind(nb) != "paper":
+                    pair = tuple(sorted((m, nb)))
+                    if pair not in seen_pairs:
+                        seen_pairs.add(pair)
+                        n_links += 1
+        themes.append({"entities": ents, "n_papers": n_papers,
+                       "cohesion": {"shared_papers": len(shared_pids),
+                                    "links": n_links,
+                                    "shared_paper_labels": shared_labels[:3]}})
 
     ins = _graph.insights(g)
     orphans = [{"id": int(nid.split(":", 1)[1]), "label": label(nid)}

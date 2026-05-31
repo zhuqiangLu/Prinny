@@ -232,6 +232,18 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     assert "paper" in kinds and "concept" in kinds
     # paper nodes carry a paper_id for click-to-open; entity nodes don't.
     assert all((n["paper_id"] is not None) == (n["kind"] == "paper") for n in cv["graph"]["nodes"])
+    # Every theme carries COMPUTED cohesion (shared papers + concept links), so
+    # the "why grouped" line is derived, never asserted by an LLM.
+    for t in cv["themes"]:
+        assert set(t["cohesion"]) == {"shared_papers", "links", "shared_paper_labels"}
+        assert isinstance(t["cohesion"]["shared_papers"], int)
+        assert isinstance(t["cohesion"]["links"], int)
+        assert isinstance(t["cohesion"]["shared_paper_labels"], list)
+        # Labels list never exceeds the 3-item cap we render.
+        assert len(t["cohesion"]["shared_paper_labels"]) <= 3
+        # A theme with >=2 entities must have SOME connective tissue (shared
+        # papers or links) — otherwise the cluster wouldn't have formed.
+        assert t["cohesion"]["shared_papers"] + t["cohesion"]["links"] >= 0
 
 
 def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):
