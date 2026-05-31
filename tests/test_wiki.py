@@ -224,7 +224,8 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     # The fixture wires concepts + methods to shared papers, so SOMETHING surfaces.
     assert cv is not None
     assert set(cv) == {"themes", "overview", "insights", "bridges", "orphans",
-                       "co_occurrences", "paper_themes", "graph", "needs_naming"}
+                       "co_occurrences", "paper_themes", "entity_themes", "graph",
+                       "needs_naming"}
     # Overview dashboard stats are all present and numeric.
     assert set(cv["overview"]) == {"papers", "ideas", "themes", "connections",
                                     "orphans", "density"}
@@ -289,6 +290,51 @@ def test_name_themes_caches_and_is_idempotent(tmp_path, monkeypatch):
     monkeypatch.setattr("app.llm.complete", _llm_stub(field_json=None))
     assert wiki.name_themes("vlms")["named"] == 0
     assert wiki.themes_need_naming("vlms") is False
+
+
+def test_rename_theme_overrides_agent_and_sticks(tmp_path, monkeypatch):
+    """rename_theme sets a user name + user_named flag; connection_view reflects
+    it and name_themes won't overwrite it (sig already cached)."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    cv = wiki.connection_view("vlms")
+    sig = cv["themes"][0]["sig"]
+    assert wiki.rename_theme("vlms", sig, "My Custom Theme") is True
+    cv2 = wiki.connection_view("vlms")
+    t = next(t for t in cv2["themes"] if t["sig"] == sig)
+    assert t["name"] == "My Custom Theme"
+    assert t["user_named"] is True
+    # Empty name is ignored.
+    assert wiki.rename_theme("vlms", sig, "  ") is False
+
+
+def test_connection_view_links_and_insight_papers(tmp_path, monkeypatch):
+    """entity_themes maps entity node-keys to their theme; insight call-outs carry
+    real paper lists for the click-to-expand popups."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    cv = wiki.connection_view("vlms")
+    # entity_themes keys look like 'concept:...'/'method:...'; values carry index+name.
+    assert all(":" in k for k in cv["entity_themes"])
+    assert all({"index", "name"} <= set(v) for v in cv["entity_themes"].values())
+    # If there's a strongest link, it carries the shared papers (id+title).
+    if cv["insights"]["strongest"]:
+        for p in cv["insights"]["strongest"]["papers"]:
+            assert "id" in p and "title" in p
+
+
+def test_load_overview_links_landscape_to_graph(tmp_path, monkeypatch):
+    """Section-2 problems/methods get node_key (matching a graph node, or None)
+    and an optional theme — the §2↔§5 link."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    loaded = wiki.load_overview("vlms")
+    for kind in ("problems", "methods"):
+        for item in loaded["landscape"].get(kind, []):
+            assert "node_key" in item and "theme" in item
+            # node_key is either None or the kind-prefixed slug.
+            if item["node_key"]:
+                assert item["node_key"].startswith(kind[:-1] + ":")
 
 
 def test_load_overview_tags_papers_with_themes(tmp_path, monkeypatch):

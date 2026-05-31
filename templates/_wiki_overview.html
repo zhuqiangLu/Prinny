@@ -133,7 +133,13 @@
         </div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.problems %}
-          <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span>{{ item.text }}</span></li>
+          <li class="flex items-start gap-1.5">
+            <span class="text-rose-400 mt-1">•</span>
+            <span class="flex-1 min-w-0">
+              {% if item.node_key %}<button type="button" onclick="window.kgJump && window.kgJump('{{ item.node_key }}')" class="text-left hover:underline" title="Show in the collection map (Section 5)">{{ item.text }}</button>{% else %}{{ item.text }}{% endif %}
+              {% if item.theme %}<button type="button" onclick="window.kgJump && window.kgJump('{{ item.node_key }}')" class="ml-1 align-middle text-[10px] rounded px-1 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" title="In “{{ item.theme.name }}” — show in map">◆ {{ item.theme.name|truncate(16) }}</button>{% endif %}
+            </span>
+          </li>
           {% endfor %}
         </ul>
         <div class="mt-2 pt-1.5 border-t border-rose-100 text-[10px] text-rose-700">
@@ -149,7 +155,13 @@
         </div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.methods %}
-          <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span>{{ item.text }}</span></li>
+          <li class="flex items-start gap-1.5">
+            <span class="text-sky-400 mt-1">•</span>
+            <span class="flex-1 min-w-0">
+              {% if item.node_key %}<button type="button" onclick="window.kgJump && window.kgJump('{{ item.node_key }}')" class="text-left hover:underline" title="Show in the collection map (Section 5)">{{ item.text }}</button>{% else %}{{ item.text }}{% endif %}
+              {% if item.theme %}<button type="button" onclick="window.kgJump && window.kgJump('{{ item.node_key }}')" class="ml-1 align-middle text-[10px] rounded px-1 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100" title="In “{{ item.theme.name }}” — show in map">◆ {{ item.theme.name|truncate(16) }}</button>{% endif %}
+            </span>
+          </li>
           {% endfor %}
         </ul>
         <div class="mt-2 pt-1.5 border-t border-sky-100 text-[10px] text-sky-700">
@@ -404,7 +416,7 @@
     'bg-rose-100 text-rose-700', 'bg-emerald-100 text-emerald-700',
     'bg-amber-100 text-amber-700', 'bg-indigo-100 text-indigo-700'
   ] %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ showPapers: true }">
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ showPapers: true, insight: null }">
     <div class="flex items-baseline gap-2 mb-1">
       {{ section_badge(5) }}
       <h2 class="text-lg font-semibold text-slate-900">Connections &amp; themes</h2>
@@ -431,16 +443,17 @@
       #theme-name-form .tn-busy { display: none; }
       #theme-name-form.htmx-request .tn-busy { display: inline-flex; }
       #theme-name-form.htmx-request .tn-idle { display: none; }
-      /* Layout in PLAIN CSS — these grid classes are novel to this HTMX-swapped
-         fragment, so Tailwind's CDN JIT may not generate them before paint
-         (verified: WebKit stacked them). Plain CSS is engine/timing-independent. */
+      /* Section-5 layout in plain CSS (self-contained, no utility-class deps). */
       .kg-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .5rem; }
       .kg-2col { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; }
       .kg-2col-main { display: flex; flex-direction: column; gap: .75rem; }
       .kg-ins { display: grid; grid-template-columns: 1fr; gap: .5rem; }
+      /* Themes get their own bounded scroll pane (the map stays put). */
+      .kg-theme-scroll { display: flex; flex-direction: column; gap: .75rem;
+        max-height: 540px; overflow-y: auto; padding-right: 4px; }
       @media (min-width: 640px) {
         .kg-stats { grid-template-columns: repeat(6, minmax(0,1fr)); }
-        .kg-ins { grid-template-columns: repeat(3, minmax(0,1fr)); }
+        .kg-ins { grid-template-columns: repeat(2, minmax(0,1fr)); }
       }
       @media (min-width: 1024px) {
         .kg-2col { grid-template-columns: 7fr 5fr; }
@@ -470,77 +483,121 @@
     <div class="kg-2col mb-4">
       {# ---- LEFT: theme hero cards ---- #}
       <div class="kg-2col-main">
+        {# Themes get their own scroll pane so the list stays bounded while the
+           map (right) stays put. #}
+        <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition p-4" x-data="{ ideasOpen: false }">
-          <div class="flex items-start gap-3">
-            <div class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums shrink-0 {{ PALETTE[loop.index0 % 6] }}">{{ t.index }}</div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <h3 class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
-                <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
+        <div class="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition" x-data="{ detail: false, editing: false }">
+          {# Header: click anywhere here toggles the detail panel; inner controls
+             (rename, top-paper link) stop propagation. #}
+          <div class="p-4 cursor-pointer" @click="detail = !detail">
+            <div class="flex items-start gap-3">
+              <div class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums shrink-0 {{ PALETTE[loop.index0 % 6] }}">{{ t.index }}</div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
+                  {# Rename form (user owns the name; overrides the agent's). #}
+                  <form x-show="editing" x-cloak @click.stop hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename"
+                        hx-target="#left-panel" hx-swap="innerHTML" class="flex items-center gap-1">
+                    <input name="name" value="{{ t.name or '' }}" placeholder="Theme name" maxlength="48"
+                           class="text-[14px] border border-slate-300 rounded px-1.5 py-0.5 w-44"
+                           @keydown.enter.prevent="$el.closest('form').requestSubmit()" x-init="$nextTick(() => $el.focus())">
+                    <button class="text-[11px] rounded px-2 py-0.5 bg-violet-600 text-white hover:bg-violet-700">Save</button>
+                    <button type="button" @click.stop="editing = false" class="text-[11px] text-slate-400 hover:text-slate-600">Cancel</button>
+                  </form>
+                  <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
+                  <button type="button" x-show="!editing" @click.stop="editing = true" title="Rename theme"
+                          class="text-[12px] text-slate-300 hover:text-violet-600">✎</button>
+                  {% if t.user_named %}<span class="text-[9px] text-slate-300" title="You named this theme">· yours</span>{% endif %}
+                  <span class="ml-auto text-[11px] text-slate-400" x-text="detail ? '▾' : '▸'"></span>
+                </div>
+                {% if t.description %}
+                <p class="text-[12.5px] text-slate-600 mt-1 leading-snug">{{ t.description }}</p>
+                {% else %}
+                <p class="text-[12px] text-slate-400 mt-1 leading-snug italic">Unnamed cluster — click <span class="text-violet-500 not-italic">✦ Name themes</span> for a title &amp; summary.</p>
+                {% endif %}
+
+                {# Teaser chips: first 4 + a plain +N (full list is in the detail). #}
+                <div class="flex flex-wrap gap-1.5 mt-2.5">
+                  {% for e in t.entities[:4] %}
+                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[e.kind].cls }}">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[e.kind].dot }}"></span>{{ e.label|truncate(40) }}
+                  </span>
+                  {% endfor %}
+                  {% if t.entities|length > 4 %}
+                  <span class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">+{{ t.entities|length - 4 }}</span>
+                  {% endif %}
+                </div>
+
+                <div class="flex items-center flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
+                  <span><b class="text-slate-700 tabular-nums">{{ t.n_ideas }}</b> ideas</span>
+                  <span><b class="text-slate-700 tabular-nums">{{ t.n_papers }}</b> papers</span>
+                  {% if t.key_papers %}
+                  <span class="inline-flex items-center gap-1 min-w-0">
+                    <span class="text-slate-400 shrink-0">Top paper:</span>
+                    <a @click.stop href="/c/{{ slug }}/p/{{ t.key_papers[0].id }}" class="text-violet-700 hover:underline truncate">{{ t.key_papers[0].title|truncate(34) }}</a>
+                  </span>
+                  {% endif %}
+                </div>
               </div>
-              {% if t.description %}
-              <p class="text-[12.5px] text-slate-600 mt-1 leading-snug">{{ t.description }}</p>
+            </div>
+          </div>
+
+          {# Detail panel (inline expand): agent explanation + all ideas + papers. #}
+          <div x-show="detail" x-cloak class="px-4 pb-4 -mt-1">
+            <div class="border-t border-slate-100 pt-3">
+              {% if t.explanation %}
+              <p class="text-[12.5px] text-slate-600 leading-relaxed mb-3">{{ t.explanation }}</p>
               {% else %}
-              <p class="text-[12px] text-slate-400 mt-1 leading-snug italic">Unnamed cluster — click <span class="text-violet-500 not-italic">✦ Name themes</span> for a title &amp; summary.</p>
+              <p class="text-[11px] text-slate-400 italic mb-3">No agent explanation yet — click <span class="not-italic text-violet-500">✦ Name themes</span> above to generate one.</p>
               {% endif %}
-
-              {# Idea chips: first 4 inline, rest behind +N (Image-91 style). #}
-              <div class="flex flex-wrap gap-1.5 mt-2.5">
-                {% for e in t.entities %}
-                <span {% if loop.index > 4 %}x-show="ideasOpen" x-cloak {% endif %}class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[e.kind].cls }}">
-                  <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[e.kind].dot }}"></span>{{ e.label|truncate(40) }}
-                </span>
+              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">All ideas ({{ t.n_ideas }})</div>
+              <div class="flex flex-wrap gap-1.5 mb-3">
+                {% for kind in ['problem', 'method', 'concept', 'belief'] %}
+                  {% for e in t.entities if e.kind == kind %}
+                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[kind].cls }}">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[kind].dot }}"></span>{{ e.label|truncate(48) }}
+                  </span>
+                  {% endfor %}
                 {% endfor %}
-                {% if t.entities|length > 4 %}
-                <button type="button" @click="ideasOpen = !ideasOpen"
-                        class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500 hover:bg-slate-200">
-                  <span x-text="ideasOpen ? '− less' : '+{{ t.entities|length - 4 }}'"></span>
-                </button>
-                {% endif %}
               </div>
-
-              <div class="flex items-center flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
-                <span><b class="text-slate-700 tabular-nums">{{ t.n_ideas }}</b> ideas</span>
-                <span><b class="text-slate-700 tabular-nums">{{ t.n_papers }}</b> papers</span>
-                {% if t.key_papers %}
-                <span class="inline-flex items-center gap-1 min-w-0">
-                  <span class="text-slate-400 shrink-0">Top paper:</span>
-                  <a href="/c/{{ slug }}/p/{{ t.key_papers[0].id }}" class="text-violet-700 hover:underline truncate">{{ t.key_papers[0].title|truncate(34) }}</a>
-                </span>
-                {% endif %}
-              </div>
-              <p class="mt-1 text-[10px] text-slate-400">
+              {% if t.key_papers %}
+              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Binding papers</div>
+              <ul class="space-y-1 mb-2">
+                {% for k in t.key_papers %}
+                <li><a href="/c/{{ slug }}/p/{{ k.id }}" class="text-[12px] text-violet-700 hover:underline">{{ k.title|truncate(60) }}</a></li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+              <p class="text-[10px] text-slate-400">
                 Connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.
               </p>
             </div>
           </div>
         </div>
         {% endfor %}
+        </div>{# /kg-theme-scroll #}
 
-        {# Key Insights — three honest call-outs, under the theme cards. #}
-        {% if cx.insights and (cx.insights.strongest or cx.insights.bridge or cx.insights.orphans) %}
+        {# Key Insights — click a card to pop up the underlying papers/themes. #}
+        {% if cx.insights and (cx.insights.strongest or cx.insights.bridge) %}
         <div class="kg-ins pt-1">
           {% if cx.insights.strongest %}
-          <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-2.5">
+          <button type="button" @click="insight = 'strongest'"
+                  class="text-left rounded-lg border border-slate-200 bg-slate-50/40 hover:bg-slate-100 hover:border-slate-300 transition p-2.5">
             <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 Strongest link</div>
             <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.strongest.a|truncate(24) }}</b> ↔ <b>{{ cx.insights.strongest.b|truncate(24) }}</b></div>
-            <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers</div>
-          </div>
+            <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers · view →</div>
+          </button>
           {% endif %}
           {% if cx.insights.bridge %}
-          <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-2.5">
+          <button type="button" @click="insight = 'bridge'"
+                  class="text-left rounded-lg border border-slate-200 bg-slate-50/40 hover:bg-slate-100 hover:border-slate-300 transition p-2.5">
             <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge idea</div>
             <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(28) }}</b></div>
-            <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes</div>
-          </div>
+            <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes · view →</div>
+          </button>
           {% endif %}
-          <div class="rounded-lg border {% if cx.insights.orphans %}border-amber-200 bg-amber-50/40{% else %}border-slate-200 bg-slate-50/40{% endif %} p-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🧩 Unmapped</div>
-            <div class="text-[12px] {% if cx.insights.orphans %}text-amber-800{% else %}text-slate-700{% endif %} leading-snug"><b class="text-base tabular-nums">{{ cx.insights.orphans }}</b> paper{{ 's' if cx.insights.orphans != 1 }}</div>
-            <div class="text-[10px] text-slate-400 mt-0.5">{% if cx.insights.orphans %}not in any theme yet{% else %}all mapped 🎉{% endif %}</div>
-          </div>
         </div>
         {% endif %}
       </div>
@@ -619,9 +676,67 @@
           var papers = cy.nodes('[kind = "paper"]');
           if (show) papers.removeClass("kg-hide"); else papers.addClass("kg-hide");
         };
+        // Focus a node by id (used by Section 2 → 5 jump): select, center, dim rest.
+        window.kgFocus = function (id) {
+          var cy = window.__kgCy; if (!cy) return false;
+          var n = cy.getElementById(id);
+          if (!n || n.empty()) return false;
+          var keep = n.closedNeighborhood();
+          cy.elements().addClass("kg-dim"); keep.removeClass("kg-dim");
+          cy.elements("node").unselect(); n.select();
+          cy.animate({ fit: { eles: keep, padding: 60 } }, { duration: 350 });
+          return true;
+        };
+        // Scroll the map into view, then focus the node (used from Section 2).
+        window.kgJump = function (id) {
+          var el = document.getElementById("kg-cyto");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(function () { window.kgFocus && window.kgFocus(id); }, 380);
+        };
         requestAnimationFrame(window.kgRender);
       </script>
       {% endif %}
+    </div>
+
+    {# --- Insight detail modal (Strongest link / Bridge idea → real papers). --- #}
+    <div x-show="insight" x-cloak @keydown.escape.window="insight = null"
+         @click.self="insight = null"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(15,23,42,.45)">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-5" @click.stop>
+        {% if cx.insights and cx.insights.strongest %}
+        <div x-show="insight === 'strongest'">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 Strongest connection</div>
+          <p class="text-sm text-slate-800 mb-1"><b>{{ cx.insights.strongest.a }}</b> ↔ <b>{{ cx.insights.strongest.b }}</b></p>
+          <p class="text-[12px] text-slate-500 mb-3">These two ideas co-occur in {{ cx.insights.strongest.shared }} papers — the strongest shared-evidence tie in the collection.</p>
+          {% if cx.insights.strongest.papers %}
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Shared papers</div>
+          <ul class="space-y-1 max-h-60 overflow-y-auto">
+            {% for p in cx.insights.strongest.papers %}
+            <li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[12px] text-violet-700 hover:underline">{{ p.title|truncate(70) }}</a></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if cx.insights and cx.insights.bridge %}
+        <div x-show="insight === 'bridge'">
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge idea</div>
+          <p class="text-sm text-slate-800 mb-1"><b>{{ cx.insights.bridge.label }}</b></p>
+          <p class="text-[12px] text-slate-500 mb-3">Connects {{ cx.insights.bridge.n_themes }} themes — {{ cx.insights.bridge.themes|join(', ') }} — so it ties otherwise-separate parts of the collection together.</p>
+          {% if cx.insights.bridge.papers %}
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Appears in</div>
+          <ul class="space-y-1 max-h-60 overflow-y-auto">
+            {% for p in cx.insights.bridge.papers %}
+            <li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[12px] text-violet-700 hover:underline">{{ p.title|truncate(70) }}</a></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+        {% endif %}
+        <div class="mt-4 text-right">
+          <button type="button" @click="insight = null" class="text-xs rounded-md border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-100">Close</button>
+        </div>
+      </div>
     </div>
 
     {# --- Unmapped papers (actionable list, full width). --- #}

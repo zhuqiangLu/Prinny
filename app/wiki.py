@@ -1449,6 +1449,19 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
             idxs = ptheme_map.get(p["id"], [])
             p["themes"] = [{"index": i, "name": theme_name.get(i, f"Theme {i}")}
                            for i in idxs]
+        # Link Section 2 ↔ Section 5: tag each landscape problem/method with the
+        # graph node it maps to (same slug the graph uses) + its theme, so the
+        # template can show a theme badge and jump-to-highlight in the map. Only
+        # paper-anchored items become graph nodes; others get node_key=None.
+        graph_ids = {n["id"] for n in connections.get("graph", {}).get("nodes", [])}
+        entity_themes = connections.get("entity_themes", {})
+        for _kind in ("problem", "method"):
+            for item in landscape.get(_kind + "s") or []:
+                if not isinstance(item, dict):
+                    continue
+                key = f"{_kind}:" + (_SLUG_RE.sub("-", item["text"].lower()).strip("-")[:60] or _kind)
+                item["node_key"] = key if key in graph_ids else None
+                item["theme"] = entity_themes.get(key)
     else:
         for p in papers:
             p["themes"] = []
@@ -1637,8 +1650,9 @@ def name_themes(slug: str) -> dict:
             continue
         name = (t.get("name") or "").strip()[:48]
         desc = (t.get("description") or "").strip()[:200]
+        expl = (t.get("explanation") or "").strip()[:600]
         if name:
-            by_ref[ref] = {"name": name, "description": desc}
+            by_ref[ref] = {"name": name, "description": desc, "explanation": expl}
 
     named = 0
     seen_names = {v.get("name", "").lower() for v in cached.values()}
@@ -1652,6 +1666,7 @@ def name_themes(slug: str) -> dict:
             nm = f"{nm} ({i + 1})"
         seen_names.add(nm.lower())
         cached[sig] = {"name": nm, "description": lab["description"],
+                       "explanation": lab.get("explanation", ""),
                        "generated_by": "agent", "generator": "theme-name"}
         named += 1
 
@@ -1659,6 +1674,25 @@ def name_themes(slug: str) -> dict:
         _save_theme_names(slug, cached)
         _append_log(slug, f"named {named} theme(s)", "theme-name")
     return {"named": named}
+
+
+def rename_theme(slug: str, sig: str, name: str) -> bool:
+    """User-edit a theme's name (the hybrid contract: agent suggests, user owns).
+    Keyed by the cluster's membership signature; stamps user_named so a future
+    name_themes() run won't touch it. Empty name is ignored. NOTE: the name is
+    tied to the cluster's exact membership — if the cluster later reshuffles
+    (new papers/ideas), its signature changes and this name no longer applies."""
+    name = (name or "").strip()[:48]
+    if not name:
+        return False
+    cached = _load_theme_names(slug)
+    entry = cached.get(sig, {})
+    entry.update({"name": name, "user_named": True})
+    entry.setdefault("description", "")
+    cached[sig] = entry
+    _save_theme_names(slug, cached)
+    _append_log(slug, f"renamed theme to “{name}”", "user")
+    return True
 
 
 def connection_view(slug: str) -> dict | None:
@@ -1720,6 +1754,7 @@ def connection_view(slug: str) -> dict | None:
         themes.append({
             "index": idx, "sig": sig,
             "name": nm.get("name"), "description": nm.get("description"),
+            "explanation": nm.get("explanation"), "user_named": nm.get("user_named", False),
             "strength": _theme_strength(cohesion),
             "entities": ents, "n_papers": n_papers, "n_ideas": len(ents),
             "cohesion": cohesion, "key_papers": key_papers})
@@ -1732,11 +1767,20 @@ def connection_view(slug: str) -> dict | None:
                     paper_themes[pid].append(idx)
 
     name_by_idx = {t["index"]: (t["name"] or f"Theme {t['index']}") for t in themes}
+    # entity node-key → its theme (so Section 2's problems/methods can show + jump
+    # to their theme; same node keys the graph uses).
+    entity_themes = {nid: {"index": idx, "name": name_by_idx.get(idx, f"Theme {idx}")}
+                     for nid, idx in node_theme.items() if kind(nid) != "paper"}
+
+    def _papers_of(nid):
+        return [{"id": pid, "title": label(f"paper:{pid}")}
+                for pid in sorted(nodes[nid]["papers"]) if f"paper:{pid}" in nodes]
 
     ins = _graph.insights(g)
     orphans = [{"id": int(nid.split(":", 1)[1]), "label": label(nid)}
                for nid in ins["orphans"]]
-    co = [{"a": label(a), "b": label(b), "shared": n}
+    # co-occurrences keep their entity keys so the popup can list shared papers.
+    co = [{"a": label(a), "b": label(b), "shared": n, "a_key": a, "b_key": b}
           for a, b, n in ins["co_occurrences"][:6]]
 
     # --- Bridges: entities/papers that touch >=2 distinct themes -------------
@@ -1749,9 +1793,9 @@ def connection_view(slug: str) -> dict | None:
         nbr_themes = sorted({node_theme[m] for m in g["adj"].get(nid, {})
                              if m in node_theme})
         if len(nbr_themes) >= 2:
-            bridges.append({"label": label(nid), "kind": kind(nid),
+            bridges.append({"label": label(nid), "kind": kind(nid), "node_key": nid,
                             "themes": [name_by_idx.get(i, f"Theme {i}") for i in nbr_themes],
-                            "n_themes": len(nbr_themes)})
+                            "n_themes": len(nbr_themes), "papers": _papers_of(nid)[:6]})
     bridges.sort(key=lambda b: (-b["n_themes"], b["label"]))
 
     # --- Overview dashboard stats (all cheap, all honest) -------------------
@@ -1768,9 +1812,15 @@ def connection_view(slug: str) -> dict | None:
     overview = {"papers": n_papers_total, "ideas": n_ideas, "themes": len(themes),
                 "connections": n_edges, "orphans": len(orphans), "density": density}
 
-    # --- Key Insights (the dashboard's three honest call-outs) --------------
+    # --- Key Insights (call-outs carry real data for the click-to-expand) ----
+    strongest = None
+    if co:
+        top = co[0]
+        pids = nodes[top["a_key"]]["papers"] & nodes[top["b_key"]]["papers"]
+        strongest = {**top, "papers": [{"id": pid, "title": label(f"paper:{pid}")}
+                                       for pid in sorted(pids) if f"paper:{pid}" in nodes]}
     insights_out = {
-        "strongest": (co[0] if co else None),
+        "strongest": strongest,
         "bridge": (bridges[0] if bridges else None),
         "orphans": len(orphans),
     }
@@ -1787,5 +1837,6 @@ def connection_view(slug: str) -> dict | None:
     return {"themes": themes, "overview": overview, "insights": insights_out,
             "bridges": bridges, "orphans": orphans, "co_occurrences": co,
             "paper_themes": {pid: idxs for pid, idxs in paper_themes.items()},
+            "entity_themes": entity_themes,
             "graph": {"nodes": viz_nodes, "edges": viz_edges},
             "needs_naming": any(t["name"] is None for t in themes)}

@@ -19,6 +19,10 @@ already-formed cluster a short, honest name and a one-sentence description.
   ideas together. Neutral, descriptive — not a claim, not a sales pitch.
   e.g. "How long-context limits, memory banks, and persistent storage shape
   video understanding."
+- **Explanation = 2-4 sentences.** A short paragraph shown when the reader
+  expands the theme: what these ideas have in common and how they relate via the
+  shared papers. Grounded in the listed ideas + binding papers; describe the
+  grouping, don't editorialize or rank.
 - **No direction, no causality.** The ideas co-occur in papers; they are not a
   pipeline. Don't write "X leads to Y" or "A is solved by B."
 - **Distinct names.** Each theme gets a different name. Don't reuse a word as
@@ -32,9 +36,11 @@ already-formed cluster a short, honest name and a one-sentence description.
 {
   "themes": [
     {"ref": 0, "name": "Context & Memory Constraints",
-     "description": "How long-context limits, memory banks, and persistent storage shape video understanding."},
+     "description": "How long-context limits, memory banks, and persistent storage shape video understanding.",
+     "explanation": "These ideas all turn on the cost of holding long video context in memory. The binding papers explore memory banks and persistent stores as ways around fixed context windows, which is why context-length limits, memory banks, and streaming inference keep appearing together."},
     {"ref": 1, "name": "Real-time Video Processing",
-     "description": "Streaming and dual-model architectures for reasoning over continuous video in near real-time."}
+     "description": "Streaming and dual-model architectures for reasoning over continuous video in near real-time.",
+     "explanation": "This cluster gathers approaches to reasoning over video as it arrives. The shared papers pair streaming inference with dual-model and incremental-reasoning designs, so these ideas co-occur as variations on the same real-time constraint."}
   ]
 }
 ```

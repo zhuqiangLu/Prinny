@@ -1567,6 +1567,15 @@ def wiki_themes_name(request: Request, slug: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+@app.post("/c/{slug}/wiki/themes/{sig}/rename", response_class=HTMLResponse)
+def wiki_theme_rename(request: Request, slug: str, sig: str,
+                      name: str = Form("")) -> HTMLResponse:
+    """User-edit a theme's name (overrides the agent's). Re-renders the panel."""
+    _require_collection(slug)
+    wiki.rename_theme(slug, sig, name)
+    return _wiki_panel(request, slug)
+
+
 @app.post("/c/{slug}/wiki/beliefs/{cid}/accept", response_class=HTMLResponse)
 def wiki_belief_accept(request: Request, slug: str, cid: str) -> HTMLResponse:
     """Promote a candidate to accepted (file move). Re-render the panel."""
