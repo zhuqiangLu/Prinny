@@ -223,7 +223,19 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     cv = wiki.connection_view("vlms")
     # The fixture wires concepts + methods to shared papers, so SOMETHING surfaces.
     assert cv is not None
-    assert set(cv) == {"themes", "orphans", "co_occurrences", "graph"}
+    assert set(cv) == {"themes", "overview", "insights", "bridges", "orphans",
+                       "co_occurrences", "paper_themes", "graph", "needs_naming"}
+    # Overview dashboard stats are all present and numeric.
+    assert set(cv["overview"]) == {"papers", "ideas", "themes", "connections",
+                                    "orphans", "density"}
+    # Themes carry index/sig/strength/key_papers; name is None until named.
+    for t in cv["themes"]:
+        assert t["index"] >= 1 and isinstance(t["sig"], str)
+        assert t["strength"] in {"strong", "medium", "emerging"}
+        assert t["name"] is None  # no themes.json cache in this fixture
+        assert all("id" in k and "title" in k for k in t["key_papers"])
+    # Unnamed themes => needs_naming True.
+    assert cv["needs_naming"] is (len(cv["themes"]) > 0)
     # Orphans carry a resolvable paper id + label for linking.
     assert all("id" in o and "label" in o for o in cv["orphans"])
     # The Cytoscape payload has nodes (papers + entities) and undirected edges.
@@ -244,6 +256,54 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
         # A theme with >=2 entities must have SOME connective tissue (shared
         # papers or links) — otherwise the cluster wouldn't have formed.
         assert t["cohesion"]["shared_papers"] + t["cohesion"]["links"] >= 0
+
+
+def test_name_themes_caches_and_is_idempotent(tmp_path, monkeypatch):
+    """name_themes() fills missing cluster names via ONE LLM call, caches them
+    in themes.json, and is a no-op (no LLM) on re-run. connection_view reads the
+    cache with no LLM in the render path."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    cv = wiki.connection_view("vlms")
+    n_themes = len(cv["themes"])
+    assert n_themes >= 1
+    assert cv["needs_naming"] is True
+    assert wiki.themes_need_naming("vlms") is True
+
+    def theme_stub(messages, model=None):
+        return json.dumps({"themes": [
+            {"ref": i, "name": f"Named Theme {i}", "description": f"Desc {i}."}
+            for i in range(n_themes)]})
+    monkeypatch.setattr("app.llm.complete", theme_stub)
+
+    res = wiki.name_themes("vlms")
+    assert res["named"] == n_themes
+    # The cache now drives render: names present, no more naming needed.
+    cv2 = wiki.connection_view("vlms")
+    assert cv2["needs_naming"] is False
+    assert all(t["name"] and t["name"].startswith("Named Theme") for t in cv2["themes"])
+    assert all(t["description"].startswith("Desc") for t in cv2["themes"])
+
+    # Idempotent: re-run names nothing new even though the LLM would now FAIL —
+    # proving the render/refresh path doesn't re-call the model on a cache hit.
+    monkeypatch.setattr("app.llm.complete", _llm_stub(field_json=None))
+    assert wiki.name_themes("vlms")["named"] == 0
+    assert wiki.themes_need_naming("vlms") is False
+
+
+def test_load_overview_tags_papers_with_themes(tmp_path, monkeypatch):
+    """Each paper in load_overview carries the theme(s) it sits in (for the
+    Papers section's theme chips + filter). At least one paper is mapped given
+    the fixture wires concepts/methods to shared papers."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    loaded = wiki.load_overview("vlms")
+    assert all("themes" in p for p in loaded["papers"])
+    assert all(isinstance(p["themes"], list) for p in loaded["papers"])
+    # Theme chips carry index + name.
+    for p in loaded["papers"]:
+        for t in p["themes"]:
+            assert "index" in t and "name" in t
 
 
 def test_load_overview_returns_field_model_shape(tmp_path, monkeypatch):

@@ -120,9 +120,10 @@ def test_per_agent_skills_homes_are_scoped(tmp_path, monkeypatch):
     # Single-skill home stays scoped to exactly its skill.
     h = ag.ensure_skills_home("chat")
     assert {p.name for p in (h / ".claude" / "skills").iterdir()} == {"answer-from-collection"}
-    # Multi-skill home carries exactly its set (the wiki drafter's two skills).
+    # Multi-skill home carries exactly its set (the wiki drafter's skills).
     w = ag.ensure_skills_home("wiki")
-    assert {p.name for p in (w / ".claude" / "skills").iterdir()} == {"field-model", "belief-draft"}
+    assert {p.name for p in (w / ".claude" / "skills").iterdir()} == {
+        "field-model", "belief-draft", "theme-name"}
     # Paper home has its reading skills and none of the others'.
     paper = ag.ensure_skills_home("paper")
     pnames = {p.name for p in (paper / ".claude" / "skills").iterdir()}

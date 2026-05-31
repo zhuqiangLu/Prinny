@@ -231,6 +231,13 @@ def _concepts_path(slug: str) -> Path:
     return _sections_dir(slug) / "concepts.json"
 
 
+def _themes_path(slug: str) -> Path:
+    """Cached theme names+descriptions, keyed by cluster signature. Filled on
+    demand by name_themes() (one LLM call); read live by connection_view().
+    Clusters are computed deterministically — only the LABELS live here."""
+    return _sections_dir(slug) / "themes.json"
+
+
 # Phase C: beliefs tree.
 #   wiki/sections/beliefs/                — accepted beliefs (the wiki content)
 #   wiki/sections/beliefs/_candidates/    — agent-drafted candidates (the tray)
@@ -1432,6 +1439,20 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
     # --- Knowledge-graph connections & themes (structural; no LLM) ----------
     connections = connection_view(slug)
 
+    # Tag each paper with the theme(s) it sits in (its anchored entities'
+    # clusters) so the Papers section can show theme chips + filter by theme.
+    if connections:
+        theme_name = {t["index"]: (t["name"] or f"Theme {t['index']}")
+                      for t in connections.get("themes", [])}
+        ptheme_map = connections.get("paper_themes", {})
+        for p in papers:
+            idxs = ptheme_map.get(p["id"], [])
+            p["themes"] = [{"index": i, "name": theme_name.get(i, f"Theme {i}")}
+                           for i in idxs]
+    else:
+        for p in papers:
+            p["themes"] = []
+
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
             "papers": papers, "focus": focus, "add_candidates": add_candidates,
             "belief_candidates": belief_candidates, "beliefs": beliefs,
@@ -1505,11 +1526,153 @@ def build_collection_graph(slug: str) -> dict:
     return _graph.build_graph(papers_min, entities)
 
 
+# --- Theme naming (cached LLM labels over deterministic clusters) -------------
+# Section 5's structure is computed live with no LLM. The only LLM-touched part
+# is the human-readable NAME of each cluster, which is cached by the cluster's
+# membership signature and refreshed only on demand (the "Name themes" button)
+# or when membership changes. The render path never calls the LLM.
+
+def _theme_sig(entity_keys) -> str:
+    """Stable signature for a cluster = hash of its sorted entity keys. Same
+    members → same name, regardless of run order. Papers are excluded (they
+    drift in/out as the collection grows; the idea-set defines the theme)."""
+    return hashlib.sha1("|".join(sorted(entity_keys)).encode("utf-8")).hexdigest()[:16]
+
+
+def _theme_strength(cohesion: dict) -> str:
+    """Qualitative binding strength from the COMPUTED cohesion (shared papers +
+    intra-cluster concept links). Honest label, not a guess."""
+    score = (cohesion.get("shared_papers", 0) or 0) + (cohesion.get("links", 0) or 0)
+    if score >= 5:
+        return "strong"
+    if score >= 3:
+        return "medium"
+    return "emerging"
+
+
+def _load_theme_names(slug: str) -> dict:
+    """{sig: {name, description}} from themes.json; {} if missing/unreadable."""
+    p = _themes_path(slug)
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("names", {}) or {}
+    except (ValueError, OSError):
+        return {}
+
+
+def _save_theme_names(slug: str, names: dict) -> None:
+    _sections_dir(slug).mkdir(parents=True, exist_ok=True)
+    _themes_path(slug).write_text(
+        json.dumps({"names": names}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _cluster_entities(slug: str):
+    """The deterministic clusters as ``[(sig, [entity_keys], [paper_titles])]``,
+    entity-only (the unit a theme names), ordered like connection_view's themes
+    (size desc). Shared by name_themes (write) and connection_view (read)."""
+    from . import graph as _graph
+    g = build_collection_graph(slug)
+    nodes = g["nodes"]
+    out = []
+    for members in _graph.clusters(g):
+        ent_keys = [m for m in members if nodes[m]["kind"] != "paper"]
+        if len(ent_keys) < 2:
+            continue
+        # binding papers: anchoring >=2 of the cluster's entities
+        pc: Counter = Counter()
+        for m in ent_keys:
+            for pid in nodes[m]["papers"]:
+                pc[pid] += 1
+        titles = [nodes[f"paper:{pid}"]["label"] for pid, c in pc.most_common()
+                  if c >= 2 and f"paper:{pid}" in nodes][:5]
+        out.append((_theme_sig(ent_keys), ent_keys, titles, nodes))
+    return out
+
+
+def themes_need_naming(slug: str) -> bool:
+    """True iff at least one current cluster has no cached name — drives the
+    'Name themes' button (only offered when there's work for it)."""
+    cached = _load_theme_names(slug)
+    return any(sig not in cached for sig, _e, _t, _n in _cluster_entities(slug))
+
+
+def name_themes(slug: str) -> dict:
+    """One LLM call → names + one-sentence descriptions for every currently-
+    unnamed cluster, merged into the themes.json cache. Already-named clusters
+    are untouched. Returns ``{named, error}``."""
+    clusters = _cluster_entities(slug)
+    if not clusters:
+        return {"named": 0, "error": "No themes to name yet."}
+    cached = _load_theme_names(slug)
+    unnamed = [(sig, ekeys, titles, nodes) for sig, ekeys, titles, nodes in clusters
+               if sig not in cached]
+    if not unnamed:
+        return {"named": 0}
+
+    # Build the LLM input: one block per unnamed cluster, referenced by index.
+    blocks = []
+    for i, (_sig, ekeys, titles, nodes) in enumerate(unnamed):
+        ideas = "\n".join(f"  - [{nodes[k]['kind']}] {nodes[k]['label']}" for k in ekeys)
+        papers = "\n".join(f"  - {t}" for t in titles) or "  (none)"
+        blocks.append(f"CLUSTER ref={i}:\n IDEAS:\n{ideas}\n BINDING PAPERS:\n{papers}")
+    user = ("Name each cluster below. Echo each ref exactly.\n\n"
+            + "\n\n".join(blocks))
+
+    from . import agent_skills
+    system = (agent_skills.skill_body("theme-name")
+              or 'Output JSON: {themes:[{ref, name, description}]}.')
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": user}])
+        data = _extract_json(out)
+    except Exception:  # noqa: BLE001
+        return {"named": 0, "error": "The LLM call failed."}
+
+    by_ref = {}
+    for t in (data or {}).get("themes", []):
+        try:
+            ref = int(t.get("ref"))
+        except (TypeError, ValueError):
+            continue
+        name = (t.get("name") or "").strip()[:48]
+        desc = (t.get("description") or "").strip()[:200]
+        if name:
+            by_ref[ref] = {"name": name, "description": desc}
+
+    named = 0
+    seen_names = {v.get("name", "").lower() for v in cached.values()}
+    for i, (sig, _e, _t, _n) in enumerate(unnamed):
+        lab = by_ref.get(i)
+        if not lab:
+            continue
+        # keep names distinct
+        nm = lab["name"]
+        if nm.lower() in seen_names:
+            nm = f"{nm} ({i + 1})"
+        seen_names.add(nm.lower())
+        cached[sig] = {"name": nm, "description": lab["description"],
+                       "generated_by": "agent", "generator": "theme-name"}
+        named += 1
+
+    if named:
+        _save_theme_names(slug, cached)
+        _append_log(slug, f"named {named} theme(s)", "theme-name")
+    return {"named": named}
+
+
 def connection_view(slug: str) -> dict | None:
-    """Render-ready knowledge-graph view: themes (clusters of ≥2 entities, with
-    their paper count), orphan papers (tied to nothing), and strong concept/
-    problem/method co-occurrences. Returns None when the graph is too sparse to
-    say anything (no theme, no orphan, no co-occurrence) — no empty section."""
+    """Render-ready knowledge-graph view for Section 5. Returns:
+
+      {themes, overview, insights, orphans, co_occurrences, paper_themes, graph,
+       needs_naming}
+
+    Themes are deterministic clusters decorated with a CACHED LLM name +
+    description (or None when unnamed), a computed strength, cohesion, and key
+    papers. overview/insights are cheap graph stats (the right-rail dashboard +
+    Key Insights). paper_themes maps paper id → the theme indices it sits in (so
+    the Papers section can show theme chips + filter). Returns None when the
+    graph is too sparse to say anything."""
     from . import graph as _graph
     g = build_collection_graph(slug)
     nodes = g["nodes"]
@@ -1517,42 +1680,58 @@ def connection_view(slug: str) -> dict | None:
         return None
     label = lambda nid: nodes[nid]["label"] if nid in nodes else nid
     kind = lambda nid: nodes[nid]["kind"] if nid in nodes else ""
+    cached_names = _load_theme_names(slug)
 
     themes = []
-    for members in _graph.clusters(g):
+    paper_themes: dict[int, list[int]] = defaultdict(list)
+    node_theme: dict[str, int] = {}   # node id → theme index (for graph grouping)
+    clusters_list = _graph.clusters(g)
+    for members in clusters_list:
         member_set = set(members)
-        ents = [{"label": label(m), "kind": kind(m)} for m in members if kind(m) != "paper"]
-        n_papers = sum(1 for m in members if kind(m) == "paper")
-        if len(ents) < 2:   # a theme is a cluster of related ENTITIES, not just papers
+        ent_keys = [m for m in members if kind(m) != "paper"]
+        if len(ent_keys) < 2:   # a theme is a cluster of related ENTITIES
             continue
-        # Honest cohesion — what actually binds this cluster, computed (not asserted):
-        #   shared_papers : papers anchoring >=2 of the cluster's entities (the
-        #                   connective evidence). The label-propagation membership
-        #                   doesn't yield this, so we derive it directly.
+        idx = len(themes) + 1   # 1-based, matches render order (size desc)
+        ents = [{"label": label(m), "kind": kind(m)} for m in ent_keys]
+        n_papers = sum(1 for m in members if kind(m) == "paper")
+        # Honest cohesion — what actually binds this cluster, computed:
+        #   shared_papers : papers anchoring >=2 of the cluster's entities.
         #   links         : intra-cluster entity<->entity edges (belief->concept).
         paper_count: Counter = Counter()
-        for m in members:
-            if kind(m) != "paper":
-                for pid in nodes[m]["papers"]:
-                    paper_count[pid] += 1
+        for m in ent_keys:
+            for pid in nodes[m]["papers"]:
+                paper_count[pid] += 1
         shared_pids = [pid for pid, c in paper_count.most_common() if c >= 2]
-        shared_labels = [label(f"paper:{pid}") for pid in shared_pids
-                         if f"paper:{pid}" in nodes]
+        key_papers = [{"id": pid, "title": label(f"paper:{pid}")}
+                      for pid in shared_pids if f"paper:{pid}" in nodes][:3]
         seen_pairs: set = set()
         n_links = 0
-        for m in members:
-            if kind(m) == "paper":
-                continue
+        for m in ent_keys:
             for nb in g["adj"].get(m, {}):
                 if nb in member_set and kind(nb) != "paper":
                     pair = tuple(sorted((m, nb)))
                     if pair not in seen_pairs:
                         seen_pairs.add(pair)
                         n_links += 1
-        themes.append({"entities": ents, "n_papers": n_papers,
-                       "cohesion": {"shared_papers": len(shared_pids),
-                                    "links": n_links,
-                                    "shared_paper_labels": shared_labels[:3]}})
+        cohesion = {"shared_papers": len(shared_pids), "links": n_links,
+                    "shared_paper_labels": [k["title"] for k in key_papers]}
+        sig = _theme_sig(ent_keys)
+        nm = cached_names.get(sig) or {}
+        themes.append({
+            "index": idx, "sig": sig,
+            "name": nm.get("name"), "description": nm.get("description"),
+            "strength": _theme_strength(cohesion),
+            "entities": ents, "n_papers": n_papers, "n_ideas": len(ents),
+            "cohesion": cohesion, "key_papers": key_papers})
+        # node→theme + paper→themes from this cluster's entity papers
+        for m in members:
+            node_theme[m] = idx
+        for m in ent_keys:
+            for pid in nodes[m]["papers"]:
+                if idx not in paper_themes[pid]:
+                    paper_themes[pid].append(idx)
+
+    name_by_idx = {t["index"]: (t["name"] or f"Theme {t['index']}") for t in themes}
 
     ins = _graph.insights(g)
     orphans = [{"id": int(nid.split(":", 1)[1]), "label": label(nid)}
@@ -1560,25 +1739,53 @@ def connection_view(slug: str) -> dict | None:
     co = [{"a": label(a), "b": label(b), "shared": n}
           for a, b, n in ins["co_occurrences"][:6]]
 
-    # Cytoscape payload for the force-directed view. Every node (incl. orphan
-    # papers, which render as floating dots — Obsidian-style); undirected unique
-    # edges from the adjacency. paper_id lets the client link a node to its reader.
-    viz_nodes = [{"id": nid,
-                  "label": n["label"],
-                  "kind": n["kind"],
-                  "paper_id": (int(nid.split(":", 1)[1]) if n["kind"] == "paper" else None)}
-                 for nid, n in nodes.items()]
-    seen_e: set = set()
-    viz_edges = []
+    # --- Bridges: entities/papers that touch >=2 distinct themes -------------
+    bridges = []
+    for nid, theme_ids in ins["bridges"]:
+        if nid not in nodes:
+            continue
+        # ins["bridges"] cluster ids index into ALL clusters; re-derive the
+        # distinct THEME indices this node's neighbors sit in (themes only).
+        nbr_themes = sorted({node_theme[m] for m in g["adj"].get(nid, {})
+                             if m in node_theme})
+        if len(nbr_themes) >= 2:
+            bridges.append({"label": label(nid), "kind": kind(nid),
+                            "themes": [name_by_idx.get(i, f"Theme {i}") for i in nbr_themes],
+                            "n_themes": len(nbr_themes)})
+    bridges.sort(key=lambda b: (-b["n_themes"], b["label"]))
+
+    # --- Overview dashboard stats (all cheap, all honest) -------------------
+    n_nodes = len(nodes)
+    n_ideas = sum(1 for n in nodes.values() if n["kind"] != "paper")
+    n_papers_total = n_nodes - n_ideas
+    edge_set = set()
     for a, nbrs in g["adj"].items():
         for b in nbrs:
-            key = tuple(sorted((a, b)))
-            if key in seen_e:
-                continue
-            seen_e.add(key)
-            viz_edges.append({"source": a, "target": b})
+            edge_set.add(tuple(sorted((a, b))))
+    n_edges = len(edge_set)
+    max_edges = n_nodes * (n_nodes - 1) / 2 if n_nodes > 1 else 0
+    density = round(n_edges / max_edges, 2) if max_edges else 0.0
+    overview = {"papers": n_papers_total, "ideas": n_ideas, "themes": len(themes),
+                "connections": n_edges, "orphans": len(orphans), "density": density}
+
+    # --- Key Insights (the dashboard's three honest call-outs) --------------
+    insights_out = {
+        "strongest": (co[0] if co else None),
+        "bridge": (bridges[0] if bridges else None),
+        "orphans": len(orphans),
+    }
+
+    # --- Cytoscape payload (theme index tags entities for grouping/coloring) -
+    viz_nodes = [{"id": nid, "label": n["label"], "kind": n["kind"],
+                  "theme": node_theme.get(nid),
+                  "paper_id": (int(nid.split(":", 1)[1]) if n["kind"] == "paper" else None)}
+                 for nid, n in nodes.items()]
+    viz_edges = [{"source": a, "target": b} for a, b in sorted(edge_set)]
 
     if not viz_nodes and not orphans:
         return None
-    return {"themes": themes, "orphans": orphans, "co_occurrences": co,
-            "graph": {"nodes": viz_nodes, "edges": viz_edges}}
+    return {"themes": themes, "overview": overview, "insights": insights_out,
+            "bridges": bridges, "orphans": orphans, "co_occurrences": co,
+            "paper_themes": {pid: idxs for pid, idxs in paper_themes.items()},
+            "graph": {"nodes": viz_nodes, "edges": viz_edges},
+            "needs_naming": any(t["name"] is None for t in themes)}

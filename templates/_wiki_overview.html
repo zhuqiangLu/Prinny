@@ -386,34 +386,87 @@
      something to say.
      ================================================================= #}
   {% if overview.connections %}
+  {% set cx = overview.connections %}
+  {% set ov = cx.overview %}
+  {% set KIND_STYLE = {
+    'problem': {'dot': '#f43f5e', 'cls': 'bg-rose-50 text-rose-700 border-rose-200'},
+    'method':  {'dot': '#0ea5e9', 'cls': 'bg-sky-50 text-sky-700 border-sky-200'},
+    'concept': {'dot': '#7c3aed', 'cls': 'bg-violet-50 text-violet-700 border-violet-200'},
+    'belief':  {'dot': '#f59e0b', 'cls': 'bg-amber-50 text-amber-800 border-amber-200'}
+  } %}
+  {% set STRENGTH = {
+    'strong':   {'cls': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'icon': '↗', 'label': 'Strong'},
+    'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': 'Medium'},
+    'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': 'Emerging'}
+  } %}
   <section class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="flex items-baseline gap-2 mb-3">
+    <div class="flex items-baseline gap-2 mb-1">
       {{ section_badge(5) }}
       <h2 class="text-lg font-semibold text-slate-900">Connections &amp; themes</h2>
-      <span class="ml-auto text-xs text-slate-400 cursor-help"
-            title="Structural map of the collection — which concepts/methods/problems cluster, and which papers aren't connected yet. Derived from shared papers; no LLM.">How? ⓘ</span>
+      {% if cx.needs_naming %}
+      <form id="theme-name-form" hx-post="/c/{{ slug }}/wiki/themes/name" hx-target="#left-panel"
+            hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
+        <button class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-70"
+                title="Name + describe the themes (one LLM call, cached)">
+          <span class="tn-idle">✦ Name themes</span>
+          <span class="tn-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Naming…</span>
+        </button>
+      </form>
+      <span class="ml-1 text-xs text-slate-400 cursor-help" title="Structural map — which ideas cluster by shared papers, and which papers aren't connected yet. Clustering is deterministic (no LLM); only the theme names come from the agent.">How? ⓘ</span>
+      {% else %}
+      <span class="ml-auto text-xs text-slate-400 cursor-help" title="Structural map — which ideas cluster by shared papers, and which papers aren't connected yet. Clustering is deterministic (no LLM); only the theme names come from the agent.">How? ⓘ</span>
+      {% endif %}
+    </div>
+    <p class="text-xs text-slate-500 mb-3">
+      The collection forms <b class="text-slate-700">{{ ov.themes }}</b> theme{{ 's' if ov.themes != 1 }}
+      across <b class="text-slate-700">{{ ov.ideas }}</b> idea{{ 's' if ov.ideas != 1 }}
+      and <b class="text-slate-700">{{ ov.papers }}</b> paper{{ 's' if ov.papers != 1 }}.
+    </p>
+    <style>
+      #theme-name-form .tn-busy { display: none; }
+      #theme-name-form.htmx-request .tn-busy { display: inline-flex; }
+      #theme-name-form.htmx-request .tn-idle { display: none; }
+    </style>
+
+    {# --- Overview stat strip (cheap honest graph metrics) --- #}
+    <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 mb-4 pb-3 border-b border-slate-100">
+      <span><b class="text-slate-800 tabular-nums">{{ ov.papers }}</b> papers</span>
+      <span><b class="text-slate-800 tabular-nums">{{ ov.ideas }}</b> ideas</span>
+      <span><b class="text-slate-800 tabular-nums">{{ ov.themes }}</b> themes</span>
+      <span><b class="text-slate-800 tabular-nums">{{ ov.connections }}</b> connections</span>
+      <span><b class="text-slate-800 tabular-nums">{{ ov.orphans }}</b> unmapped</span>
+      <span title="Graph density: actual connections ÷ all possible. Higher = more interlinked."><b class="text-emerald-600 tabular-nums">{{ ov.density }}</b> density</span>
     </div>
 
-    {# Cards first, graph second. Per-kind chip styling (problem/method/concept/
-       belief) reused across themes and co-occurrences. #}
-    {% set KIND_STYLE = {
-      'problem': {'dot': '#f43f5e', 'cls': 'bg-rose-50 text-rose-700 border-rose-200', 'name': 'Problem'},
-      'method':  {'dot': '#0ea5e9', 'cls': 'bg-sky-50 text-sky-700 border-sky-200', 'name': 'Method'},
-      'concept': {'dot': '#7c3aed', 'cls': 'bg-violet-50 text-violet-700 border-violet-200', 'name': 'Concept'},
-      'belief':  {'dot': '#f59e0b', 'cls': 'bg-amber-50 text-amber-800 border-amber-200', 'name': 'Belief'}
-    } %}
-
-    {# --- Theme cards: clusters of co-occurring entities. The "why grouped" line
-       is COMPUTED cohesion (shared papers + concept links), never asserted. --- #}
-    {% if overview.connections.themes %}
+    {# --- Theme cards: name + one-sentence description lead; chips demoted to a
+       click-to-expand so the honest membership is always one tap away. --- #}
+    {% if cx.themes %}
     <div class="space-y-2.5 mb-4">
-      {% for t in overview.connections.themes %}
-      <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-        <div class="flex items-baseline gap-2 mb-2">
-          <span class="text-sm font-semibold text-slate-900">Theme {{ loop.index }}</span>
-          <span class="text-[11px] text-slate-500">{{ t.entities|length }} idea{{ 's' if t.entities|length != 1 }} · {{ t.n_papers }} paper{{ 's' if t.n_papers != 1 }}</span>
+      {% for t in cx.themes %}
+      {% set st = STRENGTH[t.strength] %}
+      <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3" x-data="{ ideasOpen: false }">
+        <div class="flex items-start gap-2 mb-1">
+          <span class="inline-flex items-center justify-center w-5 h-5 mt-0.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold tabular-nums shrink-0">{{ t.index }}</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm font-semibold text-slate-900">{{ t.name or ('Theme ' ~ t.index) }}</span>
+              <span class="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
+            </div>
+            {% if t.description %}
+            <p class="text-[12px] text-slate-600 mt-0.5 leading-snug">{{ t.description }}</p>
+            {% endif %}
+          </div>
         </div>
-        <div class="flex flex-wrap gap-1.5">
+        <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-1.5 ml-7">
+          <button type="button" @click="ideasOpen = !ideasOpen"
+                  class="inline-flex items-center gap-0.5 hover:text-slate-800">
+            <span x-text="ideasOpen ? '▾' : '▸'"></span>{{ t.n_ideas }} idea{{ 's' if t.n_ideas != 1 }}
+          </button>
+          <span class="text-slate-300">·</span>
+          <span>{{ t.n_papers }} paper{{ 's' if t.n_papers != 1 }}</span>
+        </div>
+        {# Chips (the honest membership) — collapsed by default. #}
+        <div x-show="ideasOpen" x-cloak class="flex flex-wrap gap-1.5 mt-2 ml-7">
           {% for kind in ['problem', 'method', 'concept', 'belief'] %}
             {% for e in t.entities if e.kind == kind %}
             <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[kind].cls }}">
@@ -422,42 +475,54 @@
             {% endfor %}
           {% endfor %}
         </div>
-        <p class="mt-2 text-[11px] text-slate-500">
-          Why grouped: connected through
-          <b class="font-medium text-slate-700">{{ t.cohesion.shared_papers }}</b> shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} and <b class="font-medium text-slate-700">{{ t.cohesion.links }}</b> concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}{% if t.cohesion.shared_paper_labels %} — {% for l in t.cohesion.shared_paper_labels %}<i>{{ l|truncate(40) }}</i>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}.
+        {# Representative papers + computed cohesion (the provenance). #}
+        {% if t.key_papers %}
+        <div class="mt-2 ml-7 text-[11px] text-slate-500">
+          <span class="text-slate-400">Key papers:</span>
+          {% for k in t.key_papers %}<a href="/c/{{ slug }}/p/{{ k.id }}" class="text-violet-700 hover:underline">{{ k.title|truncate(36) }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        <p class="mt-1 ml-7 text-[10px] text-slate-400">
+          Connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.
         </p>
       </div>
       {% endfor %}
     </div>
     {% endif %}
 
-    {# --- Strong co-occurrences: entity pairs sharing >= 2 papers. --- #}
-    {% if overview.connections.co_occurrences %}
-    <div class="mb-4">
-      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Strong co-occurrences</div>
-      <ul class="space-y-1">
-        {% for c in overview.connections.co_occurrences %}
-        <li class="text-[12px] text-slate-700 flex items-center gap-1.5">
-          <span class="font-medium">{{ c.a|truncate(36) }}</span>
-          <span class="text-slate-400">↔</span>
-          <span class="font-medium">{{ c.b|truncate(36) }}</span>
-          <span class="text-[10px] text-slate-400">co-occur in {{ c.shared }} papers</span>
-        </li>
-        {% endfor %}
-      </ul>
+    {# --- Key Insights: three honest call-outs from the graph. --- #}
+    {% if cx.insights and (cx.insights.strongest or cx.insights.bridge or cx.insights.orphans) %}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+      {% if cx.insights.strongest %}
+      <div class="rounded-lg border border-slate-200 p-2.5">
+        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Strongest connection</div>
+        <div class="text-[12px] text-slate-700 leading-snug">
+          <b>{{ cx.insights.strongest.a|truncate(28) }}</b> ↔ <b>{{ cx.insights.strongest.b|truncate(28) }}</b>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers</div>
+      </div>
+      {% endif %}
+      {% if cx.insights.bridge %}
+      <div class="rounded-lg border border-slate-200 p-2.5">
+        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Bridge idea</div>
+        <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(32) }}</b></div>
+        <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes: {{ cx.insights.bridge.themes|join(', ')|truncate(50) }}</div>
+      </div>
+      {% endif %}
+      <div class="rounded-lg border {% if cx.insights.orphans %}border-amber-200 bg-amber-50/40{% else %}border-slate-200{% endif %} p-2.5">
+        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Unmapped papers</div>
+        <div class="text-[12px] {% if cx.insights.orphans %}text-amber-800{% else %}text-slate-700{% endif %} leading-snug"><b class="text-base tabular-nums">{{ cx.insights.orphans }}</b> paper{{ 's' if cx.insights.orphans != 1 }}</div>
+        <div class="text-[10px] text-slate-400 mt-0.5">{% if cx.insights.orphans %}not connected to any theme yet{% else %}all papers are mapped 🎉{% endif %}</div>
+      </div>
     </div>
     {% endif %}
 
-    {# --- Unmapped papers: evidence not yet tied to any concept/method/problem.
-       A feature, not a failure — these mark where the map is incomplete. --- #}
-    {% if overview.connections.orphans %}
+    {# --- Unmapped papers (the actionable list). --- #}
+    {% if cx.orphans %}
     <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3 mb-3">
-      <div class="text-xs font-semibold text-amber-900 mb-1.5">
-        Unmapped papers
-        <span class="font-normal text-amber-700">— {{ overview.connections.orphans|length }} paper{{ 's' if overview.connections.orphans|length != 1 }} not yet connected to any concept, method, or problem</span>
-      </div>
+      <div class="text-xs font-semibold text-amber-900 mb-1.5">Unmapped papers <span class="font-normal text-amber-700">— read these to grow the map</span></div>
       <div class="flex flex-wrap gap-1.5">
-        {% for o in overview.connections.orphans %}
+        {% for o in cx.orphans %}
         <a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100" title="Open to read">{{ o.label|truncate(40) }}</a>
         {% endfor %}
       </div>
@@ -466,19 +531,22 @@
     {% endif %}
 
     {# --- Interactive graph: secondary, lazily rendered on open (a hidden
-       Cytoscape container has 0 size and lays out wrong, so we only build it
-       when the user expands it). Drag/zoom/pan are Cytoscape built-ins. --- #}
-    {% if overview.connections.graph and overview.connections.graph.nodes %}
-    <div x-data="{ kgOpen: false }">
+       Cytoscape container has 0 size and lays out wrong). Show-papers toggle
+       collapses the paper leaves so the idea structure reads cleanly. --- #}
+    {% if cx.graph and cx.graph.nodes %}
+    <div x-data="{ kgOpen: false, showPapers: true }">
       <button type="button"
               @click="kgOpen = !kgOpen; if (kgOpen) $nextTick(() => window.kgRender && window.kgRender())"
               class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
         <span x-text="kgOpen ? '▾' : '▸'"></span>
-        <span x-text="kgOpen ? 'Hide interactive graph' : 'Open interactive graph'"></span>
-        <span class="text-slate-400">({{ overview.connections.graph.nodes|length }} nodes)</span>
+        <span x-text="kgOpen ? 'Hide collection map' : 'Open collection map'"></span>
+        <span class="text-slate-400">({{ cx.graph.nodes|length }} nodes)</span>
       </button>
       <div x-show="kgOpen" x-cloak class="mt-2">
         <div class="flex items-center gap-2 mb-1.5">
+          <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
+            <input type="checkbox" x-model="showPapers" @change="window.kgShowPapers && window.kgShowPapers(showPapers)" class="rounded border-slate-300"> Show papers
+          </label>
           <div class="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
             <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
             <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
@@ -489,9 +557,9 @@
         </div>
         <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-slate-50/40"
              style="height: 360px;"
-             data-graph='{{ overview.connections.graph | tojson }}'
+             data-graph='{{ cx.graph | tojson }}'
              data-slug="{{ slug }}"></div>
-        <p class="mt-1 text-[10px] text-slate-400">Drag to pan · scroll to zoom · drag a node to move it · click a paper to open it.</p>
+        <p class="mt-1 text-[10px] text-slate-400">Drag to pan · scroll to zoom · drag a node to move it · click a paper to open it · hover a node to focus its neighbors.</p>
       </div>
     </div>
     <script>
@@ -522,14 +590,29 @@
             {selector: "node[kind = 'paper']", style: {"width": 9, "height": 9, "shape": "round-rectangle"}},
             {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
             {selector: "node:selected", style: {"border-width": 2, "border-color": "#0f172a"}},
+            {selector: ".kg-dim", style: {"opacity": 0.12}},
+            {selector: ".kg-hide", style: {"display": "none"}},
           ],
           layout: {name: "cose", animate: false, padding: 12, nodeRepulsion: 6000, idealEdgeLength: 50},
         });
+        window.__kgCy = cy;
         cy.on("tap", "node", function (evt) {
           var pid = evt.target.data("pid");
           if (pid) window.location.href = "/c/" + slug + "/p/" + pid;
         });
+        // Hover-to-focus: dim everything except the hovered node + its neighbors.
+        cy.on("mouseover", "node", function (evt) {
+          var n = evt.target, keep = n.closedNeighborhood();
+          cy.elements().not(keep).addClass("kg-dim");
+        });
+        cy.on("mouseout", "node", function () { cy.elements().removeClass("kg-dim"); });
         cy.resize(); cy.fit(undefined, 20);
+      };
+      // Show/hide paper leaves without rebuilding the graph.
+      window.kgShowPapers = function (show) {
+        var cy = window.__kgCy; if (!cy) return;
+        var papers = cy.nodes('[kind = "paper"]');
+        if (show) papers.removeClass("kg-hide"); else papers.addClass("kg-hide");
       };
     </script>
     {% endif %}
@@ -540,17 +623,40 @@
      Section 6 — Papers (Evidence)  (Stage 0)
      ================================================================= #}
   {% if overview.papers %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5">
+  {% set themelist = (overview.connections.themes if overview.connections else []) %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ themeFilter: 0 }">
     <div class="flex items-baseline gap-2 mb-3">
       {{ section_badge(6) }}
       <h2 class="text-lg font-semibold text-slate-900">Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
     </div>
+
+    {# --- Filter by theme (client-side; themes come from the knowledge graph). --- #}
+    {% if themelist %}
+    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-[11px]">
+      <span class="text-slate-400 mr-0.5">Filter:</span>
+      <button type="button" @click="themeFilter = 0"
+              :class="themeFilter === 0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+              class="rounded px-2 py-0.5">All</button>
+      {% for t in themelist %}
+      <button type="button" @click="themeFilter = {{ t.index }}"
+              :class="themeFilter === {{ t.index }} ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'"
+              class="rounded px-2 py-0.5">{{ (t.name or ('Theme ' ~ t.index))|truncate(28) }}</button>
+      {% endfor %}
+      <button type="button" @click="themeFilter = -1"
+              :class="themeFilter === -1 ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'"
+              class="rounded px-2 py-0.5">Unmapped</button>
+    </div>
+    {% endif %}
+
     <div class="flex flex-wrap gap-3">
       {% for p in overview.papers %}
+      {% set pthemes = p.themes|map(attribute='index')|list %}
       {# Card is a <div> (not <a>) so the read-toggle form can sit alongside the
-         title link without nesting interactive elements. #}
-      <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}">
+         title link without nesting interactive elements. x-show drives the
+         client-side theme filter (0=all, -1=unmapped, N=theme index). #}
+      <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
+           x-show="themeFilter === 0 || (themeFilter === -1 && {{ pthemes|length }} === 0) || {{ pthemes|tojson }}.includes(themeFilter)">
         <div class="flex items-center gap-1 mb-2">
           <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
           {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
@@ -567,11 +673,19 @@
         </div>
         <a href="/c/{{ slug }}/p/{{ p.id }}"
            class="block text-sm font-medium text-slate-900 leading-snug line-clamp-3 hover:underline">{{ p.title }}</a>
-        {# Concept tags — each paper's place in the Field Model's concept space
-           (deterministic synonym match over title+abstract; no LLM). This is the
-           "evidence node" link that makes the row a map, not a bibliography. #}
-        {% if p.tags %}
+        {# Theme chips — which structural theme(s) this paper sits in. #}
+        {% if p.themes %}
         <div class="mt-2 flex flex-wrap gap-1">
+          {% for t in p.themes %}
+          <span class="text-[10px] rounded px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200"
+                title="In theme “{{ t.name }}”">◆ {{ t.name|truncate(22) }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {# Concept tags — each paper's place in the Field Model's concept space
+           (deterministic synonym match over title+abstract; no LLM). #}
+        {% if p.tags %}
+        <div class="mt-1.5 flex flex-wrap gap-1">
           {% for t in p.tags %}
           <span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700"
                 title="Maps to the concept “{{ t.name }}”">{{ t.name }}</span>
