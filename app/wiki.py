@@ -889,6 +889,14 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     _append_log(slug, f"generated field model "
                        f"({len(pdf_refs)}/{len(included_refs)} PDFs, "
                        f"{len(field['concepts'])} concepts)", digest)
+    # Name the structural themes now (one extra LLM call, folded into this
+    # already-explicit regen) so they're labelled by default — no separate
+    # "Name themes" button. Failure here doesn't fail the regen.
+    stage("naming")
+    try:
+        name_themes(slug)
+    except Exception:  # noqa: BLE001
+        pass
     return True
 
 
@@ -1826,12 +1834,13 @@ def connection_view(slug: str) -> dict | None:
         "orphans": len(orphans),
     }
 
-    # --- Cytoscape payload (theme index tags entities for grouping/coloring) -
+    # --- Cytoscape payload: IDEAS ONLY (no paper nodes), connected by the idea
+    # projection (shared-paper edges). Papers are deliberately excluded — they
+    # only dilute the idea structure and, when hidden, leave orphan dots. --------
     viz_nodes = [{"id": nid, "label": n["label"], "kind": n["kind"],
-                  "theme": node_theme.get(nid),
-                  "paper_id": (int(nid.split(":", 1)[1]) if n["kind"] == "paper" else None)}
-                 for nid, n in nodes.items()]
-    viz_edges = [{"source": a, "target": b} for a, b in sorted(edge_set)]
+                  "theme": node_theme.get(nid)}
+                 for nid, n in nodes.items() if n["kind"] != "paper"]
+    viz_edges = _graph.projection_edges(g)
 
     if not viz_nodes and not orphans:
         return None

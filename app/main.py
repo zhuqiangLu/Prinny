@@ -1555,18 +1555,6 @@ def wiki_beliefs_suggest(request: Request, slug: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
-@app.post("/c/{slug}/wiki/themes/name", response_class=HTMLResponse)
-def wiki_themes_name(request: Request, slug: str) -> HTMLResponse:
-    """Name + describe the currently-unnamed structural themes (one LLM call,
-    cached). Re-renders the panel."""
-    _require_collection(slug)
-    try:
-        wiki.name_themes(slug)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("paper_agent.wiki").exception("name_themes failed")
-    return _wiki_panel(request, slug)
-
-
 @app.post("/c/{slug}/wiki/themes/{sig}/rename", response_class=HTMLResponse)
 def wiki_theme_rename(request: Request, slug: str, sig: str,
                       name: str = Form("")) -> HTMLResponse:

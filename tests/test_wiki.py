@@ -239,12 +239,13 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     assert cv["needs_naming"] is (len(cv["themes"]) > 0)
     # Orphans carry a resolvable paper id + label for linking.
     assert all("id" in o and "label" in o for o in cv["orphans"])
-    # The Cytoscape payload has nodes (papers + entities) and undirected edges.
+    # The Cytoscape payload is IDEAS-ONLY now (no paper nodes); edges are the
+    # idea projection (ideas linked by shared papers).
     assert cv["graph"]["nodes"]
     kinds = {n["kind"] for n in cv["graph"]["nodes"]}
-    assert "paper" in kinds and "concept" in kinds
-    # paper nodes carry a paper_id for click-to-open; entity nodes don't.
-    assert all((n["paper_id"] is not None) == (n["kind"] == "paper") for n in cv["graph"]["nodes"])
+    assert "paper" not in kinds and "concept" in kinds
+    assert all("paper_id" not in n for n in cv["graph"]["nodes"])
+    assert all("source" in e and "target" in e for e in cv["graph"]["edges"])
     # Every theme carries COMPUTED cohesion (shared papers + concept links), so
     # the "why grouped" line is derived, never asserted by an LLM.
     for t in cv["themes"]:

@@ -136,6 +136,23 @@ def _idea_projection(graph: dict) -> tuple[list[str], dict[str, dict[str, float]
     return ents, proj
 
 
+def projection_edges(graph: dict) -> list[dict]:
+    """Unique idea↔idea edges (weight = #shared papers + direct link). These are
+    the edges to draw when papers are projected out of the view — without them,
+    ideas (which connect only *through* papers) render as disconnected dots."""
+    _ents, proj = _idea_projection(graph)
+    seen: set = set()
+    out: list[dict] = []
+    for a in sorted(proj):
+        for b, w in proj[a].items():
+            key = tuple(sorted((a, b)))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"source": a, "target": b, "weight": w})
+    return out
+
+
 def clusters(graph: dict) -> list[list[str]]:
     """Community detection over the idea projection (Louvain modularity local-
     moving), returning groups of ≥2 ENTITIES. Deterministic (sorted iteration,
