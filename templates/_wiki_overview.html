@@ -593,9 +593,9 @@
           {% if cx.insights.bridge %}
           <button type="button" @click="insight = 'bridge'"
                   class="text-left rounded-lg border border-slate-200 bg-slate-50/40 hover:bg-slate-100 hover:border-slate-300 transition p-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge idea</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge paper</div>
             <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(28) }}</b></div>
-            <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes · view →</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">spans {{ cx.insights.bridge.n_themes }} themes · view →</div>
           </button>
           {% endif %}
         </div>
@@ -720,11 +720,11 @@
         {% endif %}
         {% if cx.insights and cx.insights.bridge %}
         <div x-show="insight === 'bridge'">
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge idea</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge paper</div>
           <p class="text-sm text-slate-800 mb-1"><b>{{ cx.insights.bridge.label }}</b></p>
-          <p class="text-[12px] text-slate-500 mb-3">Connects {{ cx.insights.bridge.n_themes }} themes — {{ cx.insights.bridge.themes|join(', ') }} — so it ties otherwise-separate parts of the collection together.</p>
+          <p class="text-[12px] text-slate-500 mb-3">This paper's ideas span {{ cx.insights.bridge.n_themes }} themes — {{ cx.insights.bridge.themes|join(', ') }} — so it ties otherwise-separate parts of the collection together.</p>
           {% if cx.insights.bridge.papers %}
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Appears in</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Open</div>
           <ul class="space-y-1 max-h-60 overflow-y-auto">
             {% for p in cx.insights.bridge.papers %}
             <li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[12px] text-violet-700 hover:underline">{{ p.title|truncate(70) }}</a></li>

@@ -113,34 +113,71 @@ def related(graph: dict, node_id: str, k: int = 5) -> list[tuple[str, float]]:
     return scored[:k]
 
 
+# Modularity resolution for community detection. >1 → more, smaller communities.
+_RESOLUTION = 1.0
+
+
+def _idea_projection(graph: dict) -> tuple[list[str], dict[str, dict[str, float]]]:
+    """Project papers out: weight between two ENTITIES = #shared papers (+1 for a
+    direct entity↔entity link). Themes are groups of co-occurring *ideas*; leaving
+    paper nodes in the clustering lets a few hub papers (cited by everything)
+    collapse the whole collection into one giant community — which is exactly the
+    failure label propagation hit on dense graphs."""
+    nodes, adj = graph["nodes"], graph["adj"]
+    ents = [n for n in nodes if nodes[n]["kind"] != "paper"]
+    proj: dict[str, dict[str, float]] = defaultdict(dict)
+    for i, a in enumerate(ents):
+        pa = nodes[a]["papers"]
+        for b in ents[i + 1:]:
+            w = len(pa & nodes[b]["papers"]) + (1.0 if b in adj.get(a, {}) else 0.0)
+            if w > 0:
+                proj[a][b] = w
+                proj[b][a] = w
+    return ents, proj
+
+
 def clusters(graph: dict) -> list[list[str]]:
-    """Deterministic label-propagation communities ("themes"). Each node adopts
-    the highest-weighted label among its neighbors; ties break by label id;
-    nodes iterate in sorted order so the result is stable across runs. Returns
-    clusters of ≥2 nodes (singletons aren't themes), each sorted, outer list
-    ordered by size desc then first member."""
-    adj = graph["adj"]
-    order = sorted(graph["nodes"])
-    label = {n: n for n in order}
-    for _ in range(50):
-        changed = False
+    """Community detection over the idea projection (Louvain modularity local-
+    moving), returning groups of ≥2 ENTITIES. Deterministic (sorted iteration,
+    stable tie-breaks) and — unlike label propagation — it resists the single-
+    giant-community collapse on dense graphs. Papers are not cluster members;
+    a paper belongs to the themes of its ideas (resolved by callers). Each group
+    is sorted; outer list ordered by size desc then first member."""
+    ents, proj = _idea_projection(graph)
+    order = sorted(ents)
+    m = sum(sum(d.values()) for d in proj.values()) / 2.0
+    if not order or m == 0:
+        return []
+    comm = {n: i for i, n in enumerate(order)}
+    k = {n: sum(proj[n].values()) for n in order}
+    sigtot: dict[int, float] = defaultdict(float)   # Σ degree per community
+    for n in order:
+        sigtot[comm[n]] += k[n]
+    twom = 2.0 * m
+    for _ in range(100):
+        improved = False
         for n in order:
-            nbrs = adj.get(n, {})
-            if not nbrs:
-                continue
-            tally: dict[str, float] = defaultdict(float)
-            for m, w in nbrs.items():
-                tally[label[m]] += w
-            # Highest weight; tie-break by label id for determinism.
-            best = min(tally, key=lambda lab: (-tally[lab], lab))
-            if label[n] != best:
-                label[n] = best
-                changed = True
-        if not changed:
+            cn = comm[n]
+            w_to: dict[int, float] = defaultdict(float)
+            for o, w in proj[n].items():
+                w_to[comm[o]] += w
+            sigtot[cn] -= k[n]                       # tentatively remove n
+            # Score each candidate community (incl. staying) on the SAME basis —
+            # edges into it minus expected. Net leave/join falls out correctly.
+            best, best_score = cn, w_to.get(cn, 0.0) - _RESOLUTION * k[n] * sigtot[cn] / twom
+            for c in sorted(set(w_to) | {cn}):       # deterministic; ties keep lower id
+                score = w_to.get(c, 0.0) - _RESOLUTION * k[n] * sigtot[c] / twom
+                if score > best_score + 1e-12:
+                    best_score, best = score, c
+            sigtot[best] += k[n]
+            if best != cn:
+                comm[n] = best
+                improved = True
+        if not improved:
             break
-    groups: dict[str, list[str]] = defaultdict(list)
-    for n, lab in label.items():
-        groups[lab].append(n)
+    groups: dict[int, list[str]] = defaultdict(list)
+    for n in order:
+        groups[comm[n]].append(n)
     out = [sorted(v) for v in groups.values() if len(v) > 1]
     out.sort(key=lambda g: (-len(g), g[0]))
     return out

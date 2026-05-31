@@ -69,6 +69,34 @@ def test_clusters_are_deterministic_and_drop_singletons():
     assert all("paper:4" not in c for c in c1)
 
 
+def test_clusters_do_not_collapse_dense_graph():
+    """Regression: two internally-dense idea groups joined by one weak cross-link
+    must split into >=2 communities, not collapse into one giant theme (the bug
+    label propagation hit). Modularity on the idea projection keeps them apart."""
+    papers = [{"id": i, "title": f"P{i}"} for i in range(1, 8)]
+    entities = [
+        # Group A: three ideas all sharing papers 1,2,3.
+        {"key": "concept:a1", "kind": "concept", "label": "A1", "paper_ids": [1, 2, 3]},
+        {"key": "concept:a2", "kind": "concept", "label": "A2", "paper_ids": [1, 2, 3]},
+        {"key": "method:a3", "kind": "method", "label": "A3", "paper_ids": [1, 2, 3]},
+        # Group B: three ideas all sharing papers 4,5,6.
+        {"key": "concept:b1", "kind": "concept", "label": "B1", "paper_ids": [4, 5, 6]},
+        {"key": "concept:b2", "kind": "concept", "label": "B2", "paper_ids": [4, 5, 6]},
+        {"key": "method:b3", "kind": "method", "label": "B3", "paper_ids": [4, 5, 6]},
+    ]
+    # one weak cross-link via a shared paper 7
+    entities[0]["paper_ids"] = [1, 2, 3, 7]
+    entities[3]["paper_ids"] = [4, 5, 6, 7]
+    g = graph.build_graph(papers, entities)
+    cl = graph.clusters(g)
+    assert len(cl) >= 2, f"dense graph collapsed into {len(cl)} community: {cl}"
+    # A-group and B-group land in different communities.
+    comm_of = {n: i for i, c in enumerate(cl) for n in c}
+    assert comm_of["concept:a2"] == comm_of["method:a3"]
+    assert comm_of["concept:b2"] == comm_of["method:b3"]
+    assert comm_of["concept:a2"] != comm_of["concept:b2"]
+
+
 def test_insights_orphans_and_cooccurrence():
     g = _toy()
     ins = graph.insights(g)

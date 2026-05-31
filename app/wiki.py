@@ -1727,7 +1727,6 @@ def connection_view(slug: str) -> dict | None:
             continue
         idx = len(themes) + 1   # 1-based, matches render order (size desc)
         ents = [{"label": label(m), "kind": kind(m)} for m in ent_keys]
-        n_papers = sum(1 for m in members if kind(m) == "paper")
         # Honest cohesion — what actually binds this cluster, computed:
         #   shared_papers : papers anchoring >=2 of the cluster's entities.
         #   links         : intra-cluster entity<->entity edges (belief->concept).
@@ -1735,6 +1734,8 @@ def connection_view(slug: str) -> dict | None:
         for m in ent_keys:
             for pid in nodes[m]["papers"]:
                 paper_count[pid] += 1
+        # Clusters are entity-only now; a theme's papers = those its ideas touch.
+        n_papers = len(paper_count)
         shared_pids = [pid for pid, c in paper_count.most_common() if c >= 2]
         key_papers = [{"id": pid, "title": label(f"paper:{pid}")}
                       for pid in shared_pids if f"paper:{pid}" in nodes][:3]
