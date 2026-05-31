@@ -403,7 +403,7 @@ def test_suggest_papers_to_add_enqueues_arxiv_candidates(tmp_path, monkeypatch):
     wiki.generate_overview("vlms")
     # Stub the network discovery: two candidates, one a dupe title of an existing paper.
     monkeypatch.setattr(discover, "find_related_papers",
-                        lambda seed, exclude_titles=None: [
+                        lambda seed, exclude_titles=None, limit=10: [
                             {"arxiv_id": "2501.11111", "title": "Brand New Paper",
                              "summary": "x", "note": "fills the eval gap"},
                             {"arxiv_id": "2501.22222", "title": "Another New One",
@@ -423,6 +423,40 @@ def test_suggest_papers_to_add_needs_a_field_model(tmp_path, monkeypatch):
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())   # no generate_overview
     res = wiki.suggest_papers_to_add("vlms")
     assert res["added"] == 0 and res["error"]
+
+
+def test_suggest_papers_to_add_passes_configured_limit(tmp_path, monkeypatch):
+    """The configured recommend_count is passed through to discovery as `limit`."""
+    import app.discover as discover, app.config as config, app.triage as triage
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    monkeypatch.setattr(triage, "connect", lambda: connect(tmp_path / "app.sqlite"))
+    monkeypatch.setattr(config, "load_config", lambda: {"recommend_count": "7"})
+    wiki.generate_overview("vlms")
+    seen = {}
+    def _capture(seed, exclude_titles=None, limit=10):
+        seen["limit"] = limit
+        return []
+    monkeypatch.setattr(discover, "find_related_papers", _capture)
+    wiki.suggest_papers_to_add("vlms")
+    assert seen["limit"] == 7
+
+
+def test_find_related_papers_caps_picks_at_limit(monkeypatch):
+    """find_related_papers fetches a wider pool but returns at most `limit` picks."""
+    import app.discover as discover
+    # 5 fake arXiv results; LLM picks all 5; limit=3 → only 3 returned.
+    monkeypatch.setattr(discover, "_arxiv_search",
+                        lambda q, max_results=10: [{"arxiv_id": f"id{i}", "title": f"T{i}",
+                                                    "summary": "s", "authors": "a"} for i in range(5)])
+    calls = iter([
+        "kv cache compression",   # step 1: query string
+        '{"picks": [{"index":0,"note":"r0"},{"index":1,"note":"r1"},{"index":2,"note":"r2"},'
+        '{"index":3,"note":"r3"},{"index":4,"note":"r4"}]}',  # step 2: 5 picks
+    ])
+    monkeypatch.setattr("app.llm.complete", lambda m, model=None: next(calls))
+    out = discover.find_related_papers("some focus", limit=3)
+    assert len(out) == 3
+    assert all(p["note"] for p in out)        # every rec carries a reason
 
 
 # --- Phase C: beliefs (candidates tray + accepted) --------------------------

@@ -33,6 +33,8 @@ DEFAULTS: dict[str, str] = {
     # Per-collection reading log size (powers "Previous paper" walk-back).
     "reading_log_cap": "100",
     "show_highlight_legend": "true",
+    # Wiki "Recommended to add": how many arXiv papers the discovery suggests per run.
+    "recommend_count": "10",
     "zotero_sqlite_path": str(Path.home() / "Zotero" / "zotero.sqlite"),
     "zotero_api_base": "http://localhost:23119",
     # Local-first store (ADR 0001): the app's own PDF store + Zotero write-back creds.

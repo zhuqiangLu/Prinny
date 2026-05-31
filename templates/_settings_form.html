@@ -255,6 +255,13 @@
               <input type="number" name="reading_log_cap" min="1" value="{{ config.reading_log_cap or '100' }}"
                      class="w-28 rounded border border-slate-300 px-3 py-2 text-sm" />
             </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Recommended papers per run
+                <span class="text-xs font-normal text-slate-400">· how many arXiv papers the wiki's “✦ Suggest papers” proposes</span>
+              </label>
+              <input type="number" name="recommend_count" min="1" max="50" value="{{ config.recommend_count or '10' }}"
+                     class="w-28 rounded border border-slate-300 px-3 py-2 text-sm" />
+            </div>
           </div>
           <div class="{{ sect }}">
             <h3 class="text-sm font-semibold text-slate-700">Highlight scheme</h3>

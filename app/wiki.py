@@ -779,14 +779,19 @@ def suggest_papers_to_add(slug: str) -> dict:
     enqueued into triage as 'pending'. Network action — gated behind an explicit
     button. Returns ``{added, error}``."""
     from . import discover, library, triage
+    from .config import load_config
     seed = _add_seed(slug)
     if not seed:
         return {"added": 0, "error": "Draft the Field Model first — there's no focus to search from."}
+    try:
+        limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
+    except (TypeError, ValueError):
+        limit = 10
     have_titles = {(p.get("title") or "").lower() for p in library.list_papers(slug)}
     have_arxiv = {p.get("arxiv_id") for p in library.list_papers(slug) if p.get("arxiv_id")}
     pending_arxiv = {c.get("arxiv_id") for c in triage.list_triage(slug, "pending") if c.get("arxiv_id")}
     try:
-        cands = discover.find_related_papers(seed, exclude_titles=have_titles)
+        cands = discover.find_related_papers(seed, exclude_titles=have_titles, limit=limit)
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     added = 0

@@ -200,18 +200,29 @@
      collection. On-demand (network); Accept imports into the collection,
      Dismiss rejects. Always available once a Field Model exists.
      ================================================================= #}
-  <section class="rounded-xl border border-slate-200 bg-white p-5">
-    <div class="flex items-baseline gap-2 mb-3">
+  <section id="rec-add-section" class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-center gap-2 mb-3">
       {{ section_badge(3) }}
       <h2 class="text-lg font-semibold text-slate-900">Recommended to add</h2>
-      <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML"
-            hx-disabled-elt="find button" class="ml-auto">
-        <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
+      {# In-section busy state: the button swaps to a spinning "Searching arXiv…"
+         while the request is in flight. The request targets #left-panel (async),
+         so the page isn't frozen — other sections stay clickable; only this
+         section shows it's working. Toggle keys off the form's htmx-request
+         class (reliable) rather than the htmx-indicator opacity hack. #}
+      <form id="rec-add-form" hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel"
+            hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
+        <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs disabled:opacity-70"
                 title="Search arXiv (seeded by this collection's concepts + open questions) for papers worth adding. Network call; results land below for you to accept or dismiss.">
-          ✦ Suggest papers <span class="htmx-indicator text-violet-400">…</span>
+          <span class="rec-idle">✦ Suggest papers</span>
+          <span class="rec-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Searching arXiv…</span>
         </button>
       </form>
     </div>
+    <style>
+      #rec-add-form .rec-busy { display: none; }
+      #rec-add-form.htmx-request .rec-busy { display: inline-flex; }
+      #rec-add-form.htmx-request .rec-idle { display: none; }
+    </style>
 
     {% if not overview.add_candidates %}
     <p class="text-sm text-slate-500">No pending recommendations. Click <b>✦ Suggest papers</b> — the agent searches arXiv for papers that extend this collection. Accept to add one; Dismiss to drop it.</p>
@@ -224,7 +235,11 @@
           {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener"
             class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }}</a>{% endif %}
         </div>
-        {% if c.llm_relevance_note %}<p class="mt-1 text-xs text-slate-500 leading-snug">{{ c.llm_relevance_note }}</p>{% endif %}
+        {% if c.llm_relevance_note %}
+        <p class="mt-1.5 text-xs text-slate-600 leading-snug">
+          <span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}
+        </p>
+        {% endif %}
         <div class="mt-2 flex items-center gap-1.5">
           <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML"
                 hx-disabled-elt="find button">

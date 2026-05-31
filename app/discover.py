@@ -226,18 +226,21 @@ def find_gaps(slug: str) -> list[dict]:
     return out
 
 
-def find_related_papers(seed: str, exclude_titles: set[str] | None = None) -> list[dict]:
+def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
+                        limit: int = 10) -> list[dict]:
     """Recommend arXiv papers to ADD to a collection, seeded by a free-text
     description of what the collection is about (the cognitive-model field
     model — thesis + concepts + open questions). Two LLM steps: build an arXiv
-    query from the seed, then pick the most relevant results with a one-line
-    'why add it' note. Results already in the collection (by title) are dropped.
+    query from the seed, then pick up to ``limit`` of the most relevant results,
+    each with a CONCRETE reason it fits this collection. Results already in the
+    collection (by title) are dropped.
 
-    Returns ``[{arxiv_id, title, summary, authors, note}]``. Network action
-    (arXiv) — callers gate it behind an explicit user click."""
+    Returns ``[{arxiv_id, title, summary, authors, note}]`` (note = the reason).
+    Network action (arXiv) — callers gate it behind an explicit user click."""
     seed = (seed or "").strip()
     if not seed:
         return []
+    limit = max(1, int(limit))
     exclude = {t.lower() for t in (exclude_titles or set())}
     try:
         query_resp = llm.complete([
@@ -249,7 +252,11 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None) -> li
     except Exception:  # noqa: BLE001
         return []
     query = f"all:{query_resp}" if ":" not in query_resp else query_resp
-    results = [r for r in _arxiv_search(query) if r["title"].lower() not in exclude]
+    # Fetch a wider candidate pool than `limit` so the LLM has room to pick the
+    # best `limit` after dropping papers already in the collection.
+    pool = max(limit * 2, 20)
+    results = [r for r in _arxiv_search(query, max_results=pool)
+               if r["title"].lower() not in exclude]
     if not results:
         return []
     listing = "\n".join(f"{i}. [{r['arxiv_id']}] {r['title']}: {r['summary'][:300]}"
@@ -259,18 +266,24 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None) -> li
             {"role": "system", "content": "You output only valid JSON."},
             {"role": "user", "content": (
                 f"COLLECTION FOCUS:\n{seed}\n\nCANDIDATES:\n{listing}\n\n"
-                'Which candidates best extend or fill gaps in this collection? '
-                'Respond JSON: {"picks": [{"index": 0, "note": "why add it"}]}')},
+                f"Pick up to {limit} candidates that best extend or fill gaps in this "
+                "collection. For EACH, give a concrete one-sentence reason it fits "
+                "THIS collection (what it adds / which gap or concept it speaks to) — "
+                "not a generic summary. Respond JSON: "
+                '{"picks": [{"index": 0, "note": "why it fits this collection"}]}')},
         ])
         import json
         data = json.loads(pick[pick.find("{"): pick.rfind("}") + 1])
     except (ValueError, Exception):  # noqa: BLE001
         return []
-    out = []
+    out, seen = [], set()
     for p in data.get("picks", []):
         idx = p.get("index")
-        if isinstance(idx, int) and 0 <= idx < len(results):
-            out.append({**results[idx], "note": p.get("note", "")})
+        if isinstance(idx, int) and 0 <= idx < len(results) and idx not in seen:
+            seen.add(idx)
+            out.append({**results[idx], "note": (p.get("note") or "").strip()})
+        if len(out) >= limit:
+            break
     return out
 
 
