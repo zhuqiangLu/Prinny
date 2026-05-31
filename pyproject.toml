@@ -15,6 +15,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# Manual real-Safari smoke test only (tests/manual/safari_smoke.py). Not an app
+# or unit-test dependency — install with `pip install -e '.[safari]'` when you
+# want to verify rendering in Safari.app via safaridriver/WebDriver.
+safari = ["selenium"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
