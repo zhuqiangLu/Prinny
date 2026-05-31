@@ -399,14 +399,19 @@
     'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': 'Medium'},
     'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': 'Emerging'}
   } %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5">
+  {% set PALETTE = [
+    'bg-violet-100 text-violet-700', 'bg-sky-100 text-sky-700',
+    'bg-rose-100 text-rose-700', 'bg-emerald-100 text-emerald-700',
+    'bg-amber-100 text-amber-700', 'bg-indigo-100 text-indigo-700'
+  ] %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ showPapers: true }">
     <div class="flex items-baseline gap-2 mb-1">
       {{ section_badge(5) }}
       <h2 class="text-lg font-semibold text-slate-900">Connections &amp; themes</h2>
       {% if cx.needs_naming %}
       <form id="theme-name-form" hx-post="/c/{{ slug }}/wiki/themes/name" hx-target="#left-panel"
             hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
-        <button class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-70"
+        <button class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-70"
                 title="Name + describe the themes (one LLM call, cached)">
           <span class="tn-idle">✦ Name themes</span>
           <span class="tn-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Naming…</span>
@@ -426,100 +431,202 @@
       #theme-name-form .tn-busy { display: none; }
       #theme-name-form.htmx-request .tn-busy { display: inline-flex; }
       #theme-name-form.htmx-request .tn-idle { display: none; }
+      /* Layout in PLAIN CSS — these grid classes are novel to this HTMX-swapped
+         fragment, so Tailwind's CDN JIT may not generate them before paint
+         (verified: WebKit stacked them). Plain CSS is engine/timing-independent. */
+      .kg-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .5rem; }
+      .kg-2col { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; }
+      .kg-2col-main { display: flex; flex-direction: column; gap: .75rem; }
+      .kg-ins { display: grid; grid-template-columns: 1fr; gap: .5rem; }
+      @media (min-width: 640px) {
+        .kg-stats { grid-template-columns: repeat(6, minmax(0,1fr)); }
+        .kg-ins { grid-template-columns: repeat(3, minmax(0,1fr)); }
+      }
+      @media (min-width: 1024px) {
+        .kg-2col { grid-template-columns: 7fr 5fr; }
+        .kg-2col-side { position: sticky; top: 1rem; }
+      }
     </style>
 
-    {# --- Overview stat strip (cheap honest graph metrics) --- #}
-    <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 mb-4 pb-3 border-b border-slate-100">
-      <span><b class="text-slate-800 tabular-nums">{{ ov.papers }}</b> papers</span>
-      <span><b class="text-slate-800 tabular-nums">{{ ov.ideas }}</b> ideas</span>
-      <span><b class="text-slate-800 tabular-nums">{{ ov.themes }}</b> themes</span>
-      <span><b class="text-slate-800 tabular-nums">{{ ov.connections }}</b> connections</span>
-      <span><b class="text-slate-800 tabular-nums">{{ ov.orphans }}</b> unmapped</span>
-      <span title="Graph density: actual connections ÷ all possible. Higher = more interlinked."><b class="text-emerald-600 tabular-nums">{{ ov.density }}</b> density</span>
-    </div>
-
-    {# --- Theme cards: name + one-sentence description lead; chips demoted to a
-       click-to-expand so the honest membership is always one tap away. --- #}
-    {% if cx.themes %}
-    <div class="space-y-2.5 mb-4">
-      {% for t in cx.themes %}
-      {% set st = STRENGTH[t.strength] %}
-      <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-3" x-data="{ ideasOpen: false }">
-        <div class="flex items-start gap-2 mb-1">
-          <span class="inline-flex items-center justify-center w-5 h-5 mt-0.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold tabular-nums shrink-0">{{ t.index }}</span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-sm font-semibold text-slate-900">{{ t.name or ('Theme ' ~ t.index) }}</span>
-              <span class="inline-flex items-center gap-0.5 text-[10px] rounded px-1.5 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
-            </div>
-            {% if t.description %}
-            <p class="text-[12px] text-slate-600 mt-0.5 leading-snug">{{ t.description }}</p>
-            {% endif %}
-          </div>
-        </div>
-        <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-1.5 ml-7">
-          <button type="button" @click="ideasOpen = !ideasOpen"
-                  class="inline-flex items-center gap-0.5 hover:text-slate-800">
-            <span x-text="ideasOpen ? '▾' : '▸'"></span>{{ t.n_ideas }} idea{{ 's' if t.n_ideas != 1 }}
-          </button>
-          <span class="text-slate-300">·</span>
-          <span>{{ t.n_papers }} paper{{ 's' if t.n_papers != 1 }}</span>
-        </div>
-        {# Chips (the honest membership) — collapsed by default. #}
-        <div x-show="ideasOpen" x-cloak class="flex flex-wrap gap-1.5 mt-2 ml-7">
-          {% for kind in ['problem', 'method', 'concept', 'belief'] %}
-            {% for e in t.entities if e.kind == kind %}
-            <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[kind].cls }}">
-              <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[kind].dot }}"></span>{{ e.label|truncate(48) }}
-            </span>
-            {% endfor %}
-          {% endfor %}
-        </div>
-        {# Representative papers + computed cohesion (the provenance). #}
-        {% if t.key_papers %}
-        <div class="mt-2 ml-7 text-[11px] text-slate-500">
-          <span class="text-slate-400">Key papers:</span>
-          {% for k in t.key_papers %}<a href="/c/{{ slug }}/p/{{ k.id }}" class="text-violet-700 hover:underline">{{ k.title|truncate(36) }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-        </div>
-        {% endif %}
-        <p class="mt-1 ml-7 text-[10px] text-slate-400">
-          Connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.
-        </p>
+    {# --- Overview stat grid (Image-90 Collection Overview, big numbers) --- #}
+    <div class="kg-stats mb-4">
+      {% for stat in [
+        {'n': ov.papers, 'l': 'Papers', 'c': 'text-slate-900'},
+        {'n': ov.ideas, 'l': 'Ideas', 'c': 'text-slate-900'},
+        {'n': ov.themes, 'l': 'Themes', 'c': 'text-violet-600'},
+        {'n': ov.connections, 'l': 'Connections', 'c': 'text-slate-900'},
+        {'n': ov.orphans, 'l': 'Unmapped', 'c': 'text-amber-600'},
+        {'n': ov.density, 'l': 'Density', 'c': 'text-emerald-600'}
+      ] %}
+      <div class="rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-2 text-center">
+        <div class="text-xl font-semibold tabular-nums {{ stat.c }}">{{ stat.n }}</div>
+        <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ stat.l }}</div>
       </div>
       {% endfor %}
     </div>
-    {% endif %}
 
-    {# --- Key Insights: three honest call-outs from the graph. --- #}
-    {% if cx.insights and (cx.insights.strongest or cx.insights.bridge or cx.insights.orphans) %}
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
-      {% if cx.insights.strongest %}
-      <div class="rounded-lg border border-slate-200 p-2.5">
-        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Strongest connection</div>
-        <div class="text-[12px] text-slate-700 leading-snug">
-          <b>{{ cx.insights.strongest.a|truncate(28) }}</b> ↔ <b>{{ cx.insights.strongest.b|truncate(28) }}</b>
+    {# --- Two-column: theme hero cards (left) | live collection map (right).
+       Stacks below lg. The map is ALWAYS visible (init on load) — Image 91. --- #}
+    <div class="kg-2col mb-4">
+      {# ---- LEFT: theme hero cards ---- #}
+      <div class="kg-2col-main">
+        {% for t in cx.themes %}
+        {% set st = STRENGTH[t.strength] %}
+        <div class="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition p-4" x-data="{ ideasOpen: false }">
+          <div class="flex items-start gap-3">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums shrink-0 {{ PALETTE[loop.index0 % 6] }}">{{ t.index }}</div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
+                <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
+              </div>
+              {% if t.description %}
+              <p class="text-[12.5px] text-slate-600 mt-1 leading-snug">{{ t.description }}</p>
+              {% else %}
+              <p class="text-[12px] text-slate-400 mt-1 leading-snug italic">Unnamed cluster — click <span class="text-violet-500 not-italic">✦ Name themes</span> for a title &amp; summary.</p>
+              {% endif %}
+
+              {# Idea chips: first 4 inline, rest behind +N (Image-91 style). #}
+              <div class="flex flex-wrap gap-1.5 mt-2.5">
+                {% for e in t.entities %}
+                <span {% if loop.index > 4 %}x-show="ideasOpen" x-cloak {% endif %}class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[e.kind].cls }}">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[e.kind].dot }}"></span>{{ e.label|truncate(40) }}
+                </span>
+                {% endfor %}
+                {% if t.entities|length > 4 %}
+                <button type="button" @click="ideasOpen = !ideasOpen"
+                        class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500 hover:bg-slate-200">
+                  <span x-text="ideasOpen ? '− less' : '+{{ t.entities|length - 4 }}'"></span>
+                </button>
+                {% endif %}
+              </div>
+
+              <div class="flex items-center flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
+                <span><b class="text-slate-700 tabular-nums">{{ t.n_ideas }}</b> ideas</span>
+                <span><b class="text-slate-700 tabular-nums">{{ t.n_papers }}</b> papers</span>
+                {% if t.key_papers %}
+                <span class="inline-flex items-center gap-1 min-w-0">
+                  <span class="text-slate-400 shrink-0">Top paper:</span>
+                  <a href="/c/{{ slug }}/p/{{ t.key_papers[0].id }}" class="text-violet-700 hover:underline truncate">{{ t.key_papers[0].title|truncate(34) }}</a>
+                </span>
+                {% endif %}
+              </div>
+              <p class="mt-1 text-[10px] text-slate-400">
+                Connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.
+              </p>
+            </div>
+          </div>
         </div>
-        <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers</div>
-      </div>
-      {% endif %}
-      {% if cx.insights.bridge %}
-      <div class="rounded-lg border border-slate-200 p-2.5">
-        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Bridge idea</div>
-        <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(32) }}</b></div>
-        <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes: {{ cx.insights.bridge.themes|join(', ')|truncate(50) }}</div>
-      </div>
-      {% endif %}
-      <div class="rounded-lg border {% if cx.insights.orphans %}border-amber-200 bg-amber-50/40{% else %}border-slate-200{% endif %} p-2.5">
-        <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Unmapped papers</div>
-        <div class="text-[12px] {% if cx.insights.orphans %}text-amber-800{% else %}text-slate-700{% endif %} leading-snug"><b class="text-base tabular-nums">{{ cx.insights.orphans }}</b> paper{{ 's' if cx.insights.orphans != 1 }}</div>
-        <div class="text-[10px] text-slate-400 mt-0.5">{% if cx.insights.orphans %}not connected to any theme yet{% else %}all papers are mapped 🎉{% endif %}</div>
-      </div>
-    </div>
-    {% endif %}
+        {% endfor %}
 
-    {# --- Unmapped papers (the actionable list). --- #}
+        {# Key Insights — three honest call-outs, under the theme cards. #}
+        {% if cx.insights and (cx.insights.strongest or cx.insights.bridge or cx.insights.orphans) %}
+        <div class="kg-ins pt-1">
+          {% if cx.insights.strongest %}
+          <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 Strongest link</div>
+            <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.strongest.a|truncate(24) }}</b> ↔ <b>{{ cx.insights.strongest.b|truncate(24) }}</b></div>
+            <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers</div>
+          </div>
+          {% endif %}
+          {% if cx.insights.bridge %}
+          <div class="rounded-lg border border-slate-200 bg-slate-50/40 p-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge idea</div>
+            <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(28) }}</b></div>
+            <div class="text-[10px] text-slate-400 mt-0.5">connects {{ cx.insights.bridge.n_themes }} themes</div>
+          </div>
+          {% endif %}
+          <div class="rounded-lg border {% if cx.insights.orphans %}border-amber-200 bg-amber-50/40{% else %}border-slate-200 bg-slate-50/40{% endif %} p-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🧩 Unmapped</div>
+            <div class="text-[12px] {% if cx.insights.orphans %}text-amber-800{% else %}text-slate-700{% endif %} leading-snug"><b class="text-base tabular-nums">{{ cx.insights.orphans }}</b> paper{{ 's' if cx.insights.orphans != 1 }}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">{% if cx.insights.orphans %}not in any theme yet{% else %}all mapped 🎉{% endif %}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {# ---- RIGHT: live collection map (always visible) ---- #}
+      {% if cx.graph and cx.graph.nodes %}
+      <div class="kg-2col-side">
+        <div class="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-semibold text-slate-600">Collection map</span>
+            <label class="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer ml-2">
+              <input type="checkbox" x-model="showPapers" @change="window.kgShowPapers && window.kgShowPapers(showPapers)" class="rounded border-slate-300 w-3 h-3"> papers
+            </label>
+            <span class="ml-auto flex items-center gap-1.5 text-[9px] text-slate-500">
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
+            </span>
+          </div>
+          <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-white"
+               style="height: 460px;"
+               data-graph='{{ cx.graph | tojson }}'
+               data-slug="{{ slug }}"></div>
+          <p class="mt-1.5 text-[10px] text-slate-400">Drag to pan · scroll to zoom · hover a node to focus its neighbors · click a paper to open it.</p>
+        </div>
+      </div>
+      <script>
+        window.kgRender = function () {
+          var el = document.getElementById("kg-cyto");
+          if (!el || typeof cytoscape !== "function" || el.dataset.kgInit) return;
+          if (!el.clientWidth) { requestAnimationFrame(window.kgRender); return; }
+          var data;
+          try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
+          el.dataset.kgInit = "1";
+          var slug = el.getAttribute("data-slug");
+          var COLOR = {concept:"#7c3aed", method:"#0ea5e9", problem:"#f43f5e",
+                       belief:"#f59e0b", paper:"#94a3b8"};
+          var els = [];
+          data.nodes.forEach(function (n) {
+            els.push({data: {id: n.id, label: n.label, kind: n.kind, pid: n.paper_id}});
+          });
+          data.edges.forEach(function (e) {
+            els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target}});
+          });
+          var cy = cytoscape({
+            container: el, elements: els,
+            style: [
+              {selector: "node", style: {
+                "background-color": function (n) { return COLOR[n.data("kind")] || "#94a3b8"; },
+                "label": "data(label)", "font-size": 7, "color": "#334155",
+                "text-wrap": "ellipsis", "text-max-width": 80, "width": 13, "height": 13,
+                "text-valign": "bottom", "text-margin-y": 2}},
+              {selector: "node[kind = 'paper']", style: {"width": 9, "height": 9, "shape": "round-rectangle"}},
+              {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
+              {selector: "node:selected", style: {"border-width": 2, "border-color": "#0f172a"}},
+              {selector: ".kg-dim", style: {"opacity": 0.1}},
+              {selector: ".kg-hide", style: {"display": "none"}},
+            ],
+            layout: {name: "cose", animate: false, padding: 12, nodeRepulsion: 7000, idealEdgeLength: 55},
+          });
+          window.__kgCy = cy;
+          cy.on("tap", "node", function (evt) {
+            var pid = evt.target.data("pid");
+            if (pid) window.location.href = "/c/" + slug + "/p/" + pid;
+          });
+          cy.on("mouseover", "node", function (evt) {
+            var keep = evt.target.closedNeighborhood();
+            cy.elements().not(keep).addClass("kg-dim");
+          });
+          cy.on("mouseout", "node", function () { cy.elements().removeClass("kg-dim"); });
+          cy.resize(); cy.fit(undefined, 20);
+        };
+        window.kgShowPapers = function (show) {
+          var cy = window.__kgCy; if (!cy) return;
+          var papers = cy.nodes('[kind = "paper"]');
+          if (show) papers.removeClass("kg-hide"); else papers.addClass("kg-hide");
+        };
+        requestAnimationFrame(window.kgRender);
+      </script>
+      {% endif %}
+    </div>
+
+    {# --- Unmapped papers (actionable list, full width). --- #}
     {% if cx.orphans %}
-    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3 mb-3">
+    <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
       <div class="text-xs font-semibold text-amber-900 mb-1.5">Unmapped papers <span class="font-normal text-amber-700">— read these to grow the map</span></div>
       <div class="flex flex-wrap gap-1.5">
         {% for o in cx.orphans %}
@@ -528,93 +635,6 @@
       </div>
       <p class="mt-1.5 text-[10px] text-amber-700">Read these, then ↻ Regenerate so the agent can map them into the field model.</p>
     </div>
-    {% endif %}
-
-    {# --- Interactive graph: secondary, lazily rendered on open (a hidden
-       Cytoscape container has 0 size and lays out wrong). Show-papers toggle
-       collapses the paper leaves so the idea structure reads cleanly. --- #}
-    {% if cx.graph and cx.graph.nodes %}
-    <div x-data="{ kgOpen: false, showPapers: true }">
-      <button type="button"
-              @click="kgOpen = !kgOpen; if (kgOpen) $nextTick(() => window.kgRender && window.kgRender())"
-              class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
-        <span x-text="kgOpen ? '▾' : '▸'"></span>
-        <span x-text="kgOpen ? 'Hide collection map' : 'Open collection map'"></span>
-        <span class="text-slate-400">({{ cx.graph.nodes|length }} nodes)</span>
-      </button>
-      <div x-show="kgOpen" x-cloak class="mt-2">
-        <div class="flex items-center gap-2 mb-1.5">
-          <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer">
-            <input type="checkbox" x-model="showPapers" @change="window.kgShowPapers && window.kgShowPapers(showPapers)" class="rounded border-slate-300"> Show papers
-          </label>
-          <div class="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
-            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
-            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
-            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
-            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
-            <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#94a3b8"></span>paper</span>
-          </div>
-        </div>
-        <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-slate-50/40"
-             style="height: 360px;"
-             data-graph='{{ cx.graph | tojson }}'
-             data-slug="{{ slug }}"></div>
-        <p class="mt-1 text-[10px] text-slate-400">Drag to pan · scroll to zoom · drag a node to move it · click a paper to open it · hover a node to focus its neighbors.</p>
-      </div>
-    </div>
-    <script>
-      window.kgRender = function () {
-        var el = document.getElementById("kg-cyto");
-        if (!el || typeof cytoscape !== "function" || el.dataset.kgInit) return;
-        var data;
-        try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
-        el.dataset.kgInit = "1";
-        var slug = el.getAttribute("data-slug");
-        var COLOR = {concept:"#7c3aed", method:"#0ea5e9", problem:"#f43f5e",
-                     belief:"#f59e0b", paper:"#94a3b8"};
-        var els = [];
-        data.nodes.forEach(function (n) {
-          els.push({data: {id: n.id, label: n.label, kind: n.kind, pid: n.paper_id}});
-        });
-        data.edges.forEach(function (e) {
-          els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target}});
-        });
-        var cy = cytoscape({
-          container: el, elements: els,
-          style: [
-            {selector: "node", style: {
-              "background-color": function (n) { return COLOR[n.data("kind")] || "#94a3b8"; },
-              "label": "data(label)", "font-size": 7, "color": "#334155",
-              "text-wrap": "ellipsis", "text-max-width": 80, "width": 12, "height": 12,
-              "text-valign": "bottom", "text-margin-y": 2}},
-            {selector: "node[kind = 'paper']", style: {"width": 9, "height": 9, "shape": "round-rectangle"}},
-            {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
-            {selector: "node:selected", style: {"border-width": 2, "border-color": "#0f172a"}},
-            {selector: ".kg-dim", style: {"opacity": 0.12}},
-            {selector: ".kg-hide", style: {"display": "none"}},
-          ],
-          layout: {name: "cose", animate: false, padding: 12, nodeRepulsion: 6000, idealEdgeLength: 50},
-        });
-        window.__kgCy = cy;
-        cy.on("tap", "node", function (evt) {
-          var pid = evt.target.data("pid");
-          if (pid) window.location.href = "/c/" + slug + "/p/" + pid;
-        });
-        // Hover-to-focus: dim everything except the hovered node + its neighbors.
-        cy.on("mouseover", "node", function (evt) {
-          var n = evt.target, keep = n.closedNeighborhood();
-          cy.elements().not(keep).addClass("kg-dim");
-        });
-        cy.on("mouseout", "node", function () { cy.elements().removeClass("kg-dim"); });
-        cy.resize(); cy.fit(undefined, 20);
-      };
-      // Show/hide paper leaves without rebuilding the graph.
-      window.kgShowPapers = function (show) {
-        var cy = window.__kgCy; if (!cy) return;
-        var papers = cy.nodes('[kind = "paper"]');
-        if (show) papers.removeClass("kg-hide"); else papers.addClass("kg-hide");
-      };
-    </script>
     {% endif %}
   </section>
   {% endif %}
