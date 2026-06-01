@@ -8,15 +8,19 @@
   @keyframes pa-bounce{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}
 </style>
 <div class="flex flex-col h-full min-h-0 bg-white">
-  <div class="border-b border-slate-200 px-4 py-2 flex items-center gap-2">
-    <div class="flex items-center gap-2 min-w-0" x-data="modelPicker('{{ model }}')" x-init="load()">
-      <span class="text-sm font-medium text-slate-700">model</span>
-      <span class="text-slate-300">·</span>
+  <div class="border-b border-slate-200 px-3 py-1.5 flex items-center gap-2">
+    <div class="flex items-center gap-1 min-w-0" x-data="modelPicker('{{ model }}')" x-init="load()">
       <select x-model="current" @change="setModel()" title="Model (applies to all chats)"
-              class="max-w-[14rem] truncate rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400">
+              class="max-w-[11rem] truncate rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400">
         <template x-for="m in models" :key="m"><option :value="m" x-text="m"></option></template>
       </select>
-      <span x-show="saving" x-cloak class="text-xs text-slate-400">saved</span>
+      <span x-show="saving" x-cloak class="text-[10px] text-slate-400">saved</span>
+    </div>
+    {# context gauge inline (compact, like the topic assistant) — directional only #}
+    <div class="flex items-center gap-1 text-[10px] text-slate-400 shrink-0" x-data="ctxGauge('{{ model }}')" x-init="init()"
+         title="Rough estimate of context fullness — the CLI manages real context (caching, compaction) invisibly, so this is directional only.">
+      <span class="block w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden"><span class="block h-full" :class="pct < 75 ? 'bg-emerald-400' : pct < 90 ? 'bg-amber-400' : 'bg-rose-500'" :style="`width:${pct}%`"></span></span>
+      <span class="tabular-nums" x-text="`~${pct}%`"></span>
     </div>
     {% if paper_key %}
     {% set threads = threads|default([]) %}
@@ -62,22 +66,6 @@
       </form>
     </div>
     {% endif %}
-  </div>
-
-  <!-- context gauge: a ROUGH estimate of how full this conversation is (transcript chars ÷ 4
-       vs the model's window). The CLI's real usage — caching, compaction, tool output — isn't
-       visible to the app, so treat this as directional only. -->
-  <div class="border-b border-slate-100 px-4 py-1 flex items-center gap-2 text-[11px] text-slate-400"
-       x-data="ctxGauge('{{ model }}')" x-init="init()"
-       title="Rough estimate of how much of the model's context window this conversation fills. The CLI manages real context (caching, compaction, tool output) invisibly, so this is directional only.">
-    <span class="shrink-0">context</span>
-    <span class="relative h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
-      <span class="absolute inset-y-0 left-0 rounded-full transition-all"
-            :class="pct < 75 ? 'bg-emerald-400' : pct < 90 ? 'bg-amber-400' : 'bg-rose-500'"
-            :style="`width:${pct}%`"></span>
-    </span>
-    <span class="shrink-0 tabular-nums" x-text="`~${pct}%`"></span>
-    <span class="shrink-0 text-slate-300">· est.</span>
   </div>
 
   {% if debug and paper_key %}

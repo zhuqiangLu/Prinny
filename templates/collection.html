@@ -220,9 +220,14 @@
     <!-- right pane: Chat / Thoughts -->
     <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
          class="shrink-0 flex flex-col min-h-0 rounded-lg border border-slate-200 bg-white overflow-hidden">
-      <div class="flex items-center border-b border-slate-200 text-sm shrink-0">
-        <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
-        <button @click="tab='thoughts'" :class="tabCls('thoughts')">Thoughts</button>
+      <div class="shrink-0 border-b border-slate-200 px-3 flex items-center gap-2 text-sm">
+        <span class="text-violet-500">✦</span>
+        <span class="font-semibold text-slate-900 shrink-0">Prinny Assistant</span>
+        <div class="ml-2 flex items-center gap-1 text-xs">
+          <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
+          <button @click="tab='thoughts'" :class="tabCls('thoughts')">Thoughts</button>
+        </div>
+        <span class="ml-auto text-[10px] text-slate-400">read-only</span>
       </div>
       <div class="flex-1 min-h-0">
         <div x-show="tab==='chat'" class="h-full">{% include "_chat.html" %}</div>
