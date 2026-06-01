@@ -166,21 +166,6 @@
           <input name="name" x-model="zname" class="w-full rounded border px-3 py-2 text-sm mb-1"
                  :class="nameTaken(zname) ? 'border-rose-400' : 'border-slate-300'">
           <p x-show="nameTaken(zname)" x-cloak class="mb-2 text-xs text-rose-600">That name is already used — pick a different one.</p>
-          <div class="mb-3">
-            <label class="block text-xs text-slate-500 mb-1">Tags <span class="text-slate-400">(optional)</span></label>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <template x-for="(tg, i) in tags" :key="i">
-                <span class="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5" :style="`background:${tg.color}22;color:${tg.color};border:1px solid ${tg.color}55`">
-                  <span x-text="tg.label"></span>
-                  <button type="button" @click="tags.splice(i,1)" class="opacity-60 hover:opacity-100">×</button>
-                </span>
-              </template>
-              <input x-model="tagLabel" maxlength="40" placeholder="+ tag" @keydown.enter.prevent="addTag()"
-                     class="w-24 rounded border border-slate-300 px-2 py-0.5 text-xs">
-              <input type="color" x-model="tagColor" class="w-6 h-6 rounded border border-slate-300 p-0 bg-transparent cursor-pointer">
-              <button type="button" @click="addTag()" class="text-xs rounded bg-slate-200 px-2 py-0.5 hover:bg-slate-300">add</button>
-            </div>
-          </div>
           <label class="flex items-start gap-2 mb-2 text-xs text-slate-500 cursor-pointer">
             <input type="checkbox" name="draft_wiki" checked class="mt-0.5 rounded border-slate-300">
             <span>Draft a starter wiki from the abstracts <span class="text-slate-400">— an AI-generated starting point you edit; not your own synthesis.</span></span>
@@ -270,21 +255,6 @@
             <input name="name" x-model="dname" class="w-full rounded border px-3 py-2 text-sm mb-1"
                    :class="nameTaken(dname) ? 'border-rose-400' : 'border-slate-300'">
             <p x-show="nameTaken(dname)" x-cloak class="mb-2 text-xs text-rose-600">That name is already used — pick a different one.</p>
-            <div class="mb-3">
-              <label class="block text-xs text-slate-500 mb-1">Tags <span class="text-slate-400">(optional)</span></label>
-              <div class="flex flex-wrap items-center gap-1.5">
-                <template x-for="(tg, i) in tags" :key="i">
-                  <span class="inline-flex items-center gap-1 rounded-full text-xs px-2 py-0.5" :style="`background:${tg.color}22;color:${tg.color};border:1px solid ${tg.color}55`">
-                    <span x-text="tg.label"></span>
-                    <button type="button" @click="tags.splice(i,1)" class="opacity-60 hover:opacity-100">×</button>
-                  </span>
-                </template>
-                <input x-model="tagLabel" maxlength="40" placeholder="+ tag" @keydown.enter.prevent="addTag()"
-                       class="w-24 rounded border border-slate-300 px-2 py-0.5 text-xs">
-                <input type="color" x-model="tagColor" class="w-6 h-6 rounded border border-slate-300 p-0 bg-transparent cursor-pointer">
-                <button type="button" @click="addTag()" class="text-xs rounded bg-slate-200 px-2 py-0.5 hover:bg-slate-300">add</button>
-              </div>
-            </div>
             <label class="flex items-start gap-2 mb-2 text-xs text-slate-500 cursor-pointer">
               <input type="checkbox" name="draft_wiki" checked class="mt-0.5 rounded border-slate-300">
               <span>Draft a starter wiki from the abstracts <span class="text-slate-400">— an AI-generated starting point you edit; not your own synthesis.</span></span>
@@ -370,10 +340,6 @@
             <span class="text-slate-400 font-normal">{{ "paper" if c.paper_count == 1 else "papers" }}</span>
             {% if c.unread %}<span class="text-sky-600 font-normal">· {{ c.unread }} unread</span>{% endif %}
           </span>
-        </div>
-
-        <div class="mt-2">
-          {% with slug = c.slug, tags = c.tags %}{% include "_tagbar.html" %}{% endwith %}
         </div>
 
         {% if not c.zotero_collection_id %}

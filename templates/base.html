@@ -108,6 +108,11 @@
 <body class="bg-slate-50 text-slate-900 h-screen flex overflow-hidden"
       x-data="{ settingsOpen: false, skillOpen: false, skillTitle: '',
                 dark: document.documentElement.classList.contains('dark'),
+                navOpen: (function(){ try { return localStorage.getItem('pa.nav') !== 'closed'; } catch(e){ return true; } })(),
+                toggleNav() {
+                  this.navOpen = !this.navOpen;
+                  try { localStorage.setItem('pa.nav', this.navOpen ? 'open' : 'closed'); } catch (e) {}
+                },
                 toggleTheme() {
                   this.dark = !this.dark;
                   document.documentElement.classList.toggle('dark', this.dark);
@@ -117,11 +122,19 @@
   {% set nav = pa_nav() %}
   <!-- App shell sidebar: collections + research topics + settings. Rendered on
        every page via base.html; data from the pa_nav() Jinja global. -->
-  <aside class="w-60 shrink-0 h-full flex flex-col border-r border-slate-200 bg-white">
-    <a href="/" class="flex items-center gap-2 px-4 h-14 shrink-0 font-semibold tracking-tight text-slate-900 border-b border-slate-100">
-      {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
-      <span>{{ b.app_name }}</span>
-    </a>
+  <!-- floating reopen handle (shown only when the sidebar is hidden) -->
+  <button type="button" x-show="!navOpen" x-cloak @click="toggleNav()"
+          class="fixed top-3 left-3 z-40 grid place-items-center w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
+          title="Show sidebar" aria-label="Show sidebar">☰</button>
+  <aside x-show="navOpen" class="w-60 shrink-0 h-full flex flex-col border-r border-slate-200 bg-white">
+    <div class="flex items-center gap-2 px-4 h-14 shrink-0 border-b border-slate-100">
+      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight text-slate-900 min-w-0">
+        {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
+        <span class="truncate">{{ b.app_name }}</span>
+      </a>
+      <button type="button" @click="toggleNav()" class="ml-auto grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              title="Hide sidebar" aria-label="Hide sidebar">‹</button>
+    </div>
     <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">
       <div>
         <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Collections</div>
@@ -198,32 +211,6 @@
   </main>
 
   <script>
-    // Custom-tag bar (used on landing cards + collection page). Saves to /c/<slug>/tags.
-    function tagBar(slug, initial) {
-      return {
-        tags: initial || [],
-        open: false,
-        label: "",
-        color: "#0ea5e9",
-        presets: ["#0ea5e9", "#10b981", "#f59e0b", "#f43f5e", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b"],
-        pillStyle(c) { return `background:${c}22;color:${c};border:1px solid ${c}55`; },
-        add() {
-          const l = (this.label || "").trim();
-          if (!l) return;
-          this.tags.push({ label: l.slice(0, 40), color: this.color });
-          this.label = ""; this.open = false; this.save();
-        },
-        remove(i) { this.tags.splice(i, 1); this.save(); },
-        save() {
-          fetch(`/c/${slug}/tags`, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({ tags: JSON.stringify(this.tags) }),
-          });
-        },
-      };
-    }
-
     // Reusable confirm/alert dialog (consistent in-app modal instead of native popups).
     (function () {
       const m = document.getElementById("pa-confirm");

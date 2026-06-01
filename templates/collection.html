@@ -4,7 +4,7 @@
 {% block main_pad %}pt-3 pb-2{% endblock %}
 {% block main_inner %}h-full{% endblock %}
 {% block content %}
-<div x-data='collectionView()' class="flex flex-col h-full min-h-0">
+<div x-data='collectionView()' @open-add.window="addOpen = true" class="flex flex-col h-full min-h-0">
 
   <!-- header: collection name + source actions (icon-only, label on hover) -->
   <div class="shrink-0">
@@ -36,9 +36,6 @@
       {% endif %}
 
       <span class="ml-auto text-xs rounded-full bg-slate-200 px-2 py-1 text-slate-600">{{ papers|length }} papers</span>
-    </div>
-    <div class="mt-1.5">
-      {% with slug = slug, tags = (col.tags if col else []) %}{% include "_tagbar.html" %}{% endwith %}
     </div>
   </div>
 
@@ -144,9 +141,6 @@
             <span class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5">{{ dup_count }}</span>
           </button>
           {% endif %}
-          <button @click="addOpen = !addOpen"
-                  class="rounded border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:bg-slate-50"
-                  title="Add a paper by arXiv id/URL">⊕ Add</button>
         </div>
       </div>
 

@@ -745,6 +745,11 @@
       {{ section_badge(6) }}
       <h2 class="text-lg font-semibold text-slate-900">Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
+      {# Opens the Add-papers wizard living in the collection shell (the wiki panel
+         is HTMX-swapped, so we bridge via a window event rather than Alpine scope). #}
+      <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-add'))"
+              class="ml-auto rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              title="Add a paper by arXiv id / URL">＋ Add paper</button>
     </div>
 
     {# --- Filter by theme (client-side; themes come from the knowledge graph). --- #}

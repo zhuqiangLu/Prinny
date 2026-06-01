@@ -10,7 +10,7 @@
   .tc-dots i:nth-child(2){animation-delay:.15s}.tc-dots i:nth-child(3){animation-delay:.3s}
   @keyframes tcb{0%,80%,100%{opacity:.3}40%{opacity:1}}
 </style>
-<div class="flex h-full">
+<div class="flex h-full" x-data="topicShell()">
   {# ---- left: the topic content ---- #}
   <div class="flex-1 min-w-0 overflow-y-auto px-6 py-6">
   <div x-data="{ manage: false }" class="max-w-3xl mx-auto">
@@ -287,12 +287,36 @@
   </div>{# /max-w-3xl content #}
   </div>{# /left scroll column #}
 
+  {# reopen tab when the assistant is collapsed #}
+  <button x-show="!asstOpen" x-cloak @click="setAsst(true)"
+          class="shrink-0 self-stretch w-5 border-l border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Show assistant">‹</button>
+  {# draggable divider + hide handle #}
+  <div x-show="asstOpen" x-cloak @mousedown.prevent="startDrag($event)"
+       class="relative w-1.5 mx-1 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
+    <button type="button" @mousedown.stop @click="setAsst(false)"
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer" title="Hide assistant">›</button>
+  </div>
   {# ---- right: Prinny Assistant (topic-grounded, read-only, streaming) ---- #}
-  <aside class="w-96 shrink-0 h-full border-l border-slate-200 bg-white flex flex-col" x-data="topicChat('{{ t.slug }}')">
-    <div class="shrink-0 flex items-center gap-2 px-4 h-14 border-b border-slate-100">
-      <span class="text-violet-500">✦</span>
-      <span class="font-semibold text-slate-900">Prinny Assistant</span>
-      <span class="ml-auto text-[10px] text-slate-400">read-only</span>
+  <div x-show="asstOpen" x-cloak :style="`width:${asstW}px`" class="shrink-0 h-full">
+  <aside class="h-full border-l border-slate-200 bg-white flex flex-col" x-data="topicChat('{{ t.slug }}')">
+    <div class="shrink-0 px-3 h-14 border-b border-slate-100 flex flex-col justify-center gap-1">
+      <div class="flex items-center gap-2">
+        <span class="text-violet-500">✦</span>
+        <span class="font-semibold text-slate-900 text-sm">Prinny Assistant</span>
+        <span class="ml-auto text-[10px] text-slate-400">read-only</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div x-data="modelPicker('{{ model }}')" x-init="load()" class="min-w-0 flex-1">
+          <select x-model="current" @change="setModel()" title="Model (applies to all chats)"
+                  class="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-600">
+            <template x-for="m in models" :key="m"><option :value="m" x-text="m"></option></template>
+          </select>
+        </div>
+        <div x-data="ctxGauge('{{ model }}')" x-init="init()" class="flex items-center gap-1 shrink-0 text-[10px] text-slate-400" title="Rough context fullness (transcript chars ÷ 4)">
+          <span class="block w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden"><span class="block h-full" :class="pct<75?'bg-emerald-400':pct<90?'bg-amber-400':'bg-rose-500'" :style="`width:${pct}%`"></span></span>
+          <span class="tabular-nums" x-text="`~${pct}%`"></span>
+        </div>
+      </div>
     </div>
     <div id="tc-log" x-ref="log" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
       {% for m in chat %}{% include "_chat_bubble.html" %}{% endfor %}
@@ -311,9 +335,50 @@
       </div>
     </form>
   </aside>
+  </div>{# /assistant width wrapper #}
 </div>
 
 <script>
+  // Resizable + collapsible assistant pane (mirrors the collection's lever).
+  function topicShell() {
+    return {
+      asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
+      asstW: (function(){ try { return parseInt(localStorage.getItem('pa.tasstW') || '384', 10); } catch(e){ return 384; } })(),
+      setAsst(v) { this.asstOpen = v; try { localStorage.setItem('pa.tasst', v ? 'open' : 'closed'); } catch(e){} },
+      startDrag(e) {
+        const x0 = e.clientX, w0 = this.asstW;
+        const mv = (ev) => { this.asstW = Math.max(300, Math.min(w0 + (x0 - ev.clientX), 760)); };
+        const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+                           try { localStorage.setItem('pa.tasstW', this.asstW); } catch(e){} };
+        document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+      },
+    };
+  }
+  // Model picker (global CLI model; same /models.json + /model as the other chats).
+  function modelPicker(initial) {
+    return {
+      current: initial, models: initial ? [initial] : [],
+      async load() {
+        try { const d = await (await fetch('/models.json')).json();
+              const s = new Set(d.models || []); if (this.current) s.add(this.current);
+              if (s.size) this.models = [...s].sort(); } catch (e) {}
+      },
+      async setModel() {
+        try { await fetch('/model', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ model: this.current }) }); } catch (e) {}
+      },
+    };
+  }
+  // Rough context gauge over the topic transcript (#tc-log).
+  function ctxGauge(model) {
+    return {
+      window: /1m|1\s*m|million/i.test(model || '') ? 1000000 : 200000, pct: 0,
+      init() { this.recompute(); const log = document.getElementById('tc-log');
+               if (log) new MutationObserver(() => this.recompute()).observe(log, { childList: true, subtree: true, characterData: true }); },
+      recompute() { const log = document.getElementById('tc-log'); const chars = log ? (log.innerText || '').length : 0;
+                    this.pct = Math.min(100, Math.round((Math.round(chars / 4) / this.window) * 100)); },
+    };
+  }
   function topicChat(slug) {
     return {
       async send() {

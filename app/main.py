@@ -209,6 +209,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "reading": topic_view.suggested_reading(t["slug"]) if (relevant and relevant.get("analyzed")) else [],
         "graph": topic_view.topic_graph_view(t["slug"]) if (relevant and relevant.get("analyzed")) else None,
         "chat": chat,
+        "model": load_config().get("model", ""),
     })
 
 
@@ -620,17 +621,6 @@ def collections_new(name: str = Form(...), purpose: str = Form(""), summary: str
     name = _require_unique_name(name)
     slug = library.create_local_collection(name, purpose=purpose.strip(), summary=summary.strip())
     return RedirectResponse(f"/c/{slug}", status_code=303)
-
-
-@app.post("/c/{slug}/tags")
-def collection_tags(slug: str, tags: str = Form("[]")) -> dict:
-    """Replace a collection's custom tags. ``tags`` is a JSON list of {label, color}."""
-    _require_collection(slug)
-    try:
-        parsed = json.loads(tags)
-    except (json.JSONDecodeError, TypeError):
-        parsed = []
-    return {"tags": library.set_tags(slug, parsed)}
 
 
 @app.post("/c/{slug}/summary")
