@@ -31,6 +31,7 @@ _HOMES: dict[str, list[str]] = {
     # (field-model) + belief candidates (belief-draft). The old notes-pipeline
     # homes (organizer/debt/brainstorm/lint) were removed with the pipeline.
     "wiki": ["field-model", "belief-draft", "theme-name"],
+    "topic": ["topic-seed"],
 }
 
 

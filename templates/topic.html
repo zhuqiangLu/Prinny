@@ -70,10 +70,75 @@
     <p class="mt-3 text-[11px] text-slate-400">Collections are evidence sources — this topic references them, it doesn't own their papers.</p>
   </section>
 
-  {# === Section 3 — Relevant entities (next slice: seed → structural ranking) === #}
-  <section class="rounded-xl border border-dashed border-slate-200 bg-slate-50/30 p-4 mb-4">
-    <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Relevant entities</div>
-    <p class="text-[12px] text-slate-400">Auto-derived problems / methods / concepts / beliefs from your linked collections, ranked by relevance to the question. <i>Coming in the next slice.</i></p>
+  {# === Section 3 — Relevant entities (seed → structural ranking) === #}
+  {% set KIND = {'problem':{'c':'bg-rose-50 text-rose-700 border-rose-200','dot':'#f43f5e','h':'Problems'},
+                 'method':{'c':'bg-sky-50 text-sky-700 border-sky-200','dot':'#0ea5e9','h':'Methods'},
+                 'concept':{'c':'bg-violet-50 text-violet-700 border-violet-200','dot':'#7c3aed','h':'Concepts'},
+                 'belief':{'c':'bg-amber-50 text-amber-800 border-amber-200','dot':'#f59e0b','h':'Beliefs'}} %}
+  {% set REL = {'high':'bg-emerald-100 text-emerald-700','medium':'bg-amber-100 text-amber-700','low':'bg-slate-100 text-slate-500'} %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="text-base font-semibold text-slate-900">Relevant ideas</h2>
+      {% if relevant and (relevant.analyzed or relevant.n_candidates) %}
+      <form id="an-form" method="post" action="/t/{{ t.slug }}/analyze" class="ml-auto">
+        <button class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100">
+          <span class="an-idle">{% if relevant.analyzed %}↻ Re-analyze{% else %}✦ Analyze relevance{% endif %}</span>
+          <span class="an-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Analyzing…</span>
+        </button>
+      </form>
+      <style>#an-form .an-busy{display:none}#an-form.htmx-request .an-busy,#an-form:has(button:active) .an-busy{display:inline-flex}#an-form:has(button:active) .an-idle{display:none}</style>
+      {% endif %}
+    </div>
+
+    {% if not relevant %}
+    <p class="text-sm text-slate-500">Link a collection above to derive the ideas relevant to your question.</p>
+    {% elif not relevant.analyzed %}
+      {% if relevant.n_candidates %}
+      <p class="text-sm text-slate-500">{{ relevant.n_candidates }} ideas across your linked collections. Click <b>✦ Analyze relevance</b> — the agent anchors your question to the most central ideas, then the graph ranks the rest.</p>
+      {% else %}
+      <p class="text-sm text-slate-500">Your linked collections have no extracted ideas yet. Open each collection and <b>↻ Regenerate</b> its wiki, then analyze.</p>
+      {% endif %}
+    {% else %}
+      {% if relevant.stale %}<p class="text-[11px] text-amber-600 mb-2">Question/hypotheses/collections changed since last analysis — ↻ Re-analyze to refresh.</p>{% endif %}
+      <div class="space-y-3">
+        {% for kind in ['problem','method','concept','belief'] %}
+        {% if relevant.grouped[kind] %}
+        <div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ KIND[kind].h }}</div>
+          <ul class="space-y-1">
+            {% for i in relevant.grouped[kind] %}
+            <li class="flex items-start gap-2 text-sm" title="{{ i.why }}">
+              <span class="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style="background:{{ KIND[kind].dot }}"></span>
+              <span class="text-slate-800">{{ i.label }}</span>
+              {% if i.is_seed %}<span class="text-[9px] rounded px-1 bg-violet-600 text-white" title="Seed: {{ i.why }}">anchor</span>{% endif %}
+              <span class="text-[10px] text-slate-400">{{ i.collection }}</span>
+              {% if i.why and not i.is_seed %}<span class="text-[11px] text-slate-400 truncate">· {{ i.why }}</span>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# External methods — relevant ideas MISSING from the linked collections #}
+    {% if relevant and relevant.external %}
+    <div class="mt-4 pt-3 border-t border-slate-100">
+      <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Potentially relevant · missing from your collections</div>
+      <ul class="space-y-1.5">
+        {% for e in relevant.external %}
+        <li class="text-sm">
+          <span class="font-medium text-slate-800">{{ e.name }}</span>
+          <span class="text-[9px] rounded px-1 {{ REL.get(e.relevance,'bg-slate-100 text-slate-500') }}">{{ e.relevance }}</span>
+          <a href="https://arxiv.org/abs/?searchtype=all&query={{ (e.name ~ ' ' ~ t.question)|urlencode }}" target="_blank" rel="noopener" class="text-[11px] text-violet-600 hover:underline">explore arXiv ↗</a>
+          {% if e.reason %}<div class="text-[12px] text-slate-500">{{ e.reason }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="mt-2 text-[10px] text-slate-400">Cross-pollination: ideas your linked collections don't cover but the question needs. Add a collection that has them, or explore arXiv.</p>
+    </div>
+    {% endif %}
   </section>
 
   {# === Section 4 — Hypotheses (first-class, may be ungrounded) === #}
@@ -103,7 +168,12 @@
 
   {# === Section 5 — Open questions === #}
   <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <h2 class="text-base font-semibold text-slate-900 mb-3">Open questions</h2>
+    <div class="flex items-center gap-2 mb-3">
+      <h2 class="text-base font-semibold text-slate-900">Open questions</h2>
+      <form method="post" action="/t/{{ t.slug }}/questions/suggest" class="ml-auto">
+        <button class="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100" title="Agent drafts sub-questions from your question + relevant ideas">✦ Suggest questions</button>
+      </form>
+    </div>
     {% if t.questions %}
     <ul class="space-y-2 mb-3">
       {% for q in t.questions %}
@@ -125,10 +195,83 @@
     </form>
   </section>
 
-  {# === Section 6 + Graph (next slices) === #}
-  <section class="rounded-xl border border-dashed border-slate-200 bg-slate-50/30 p-4">
-    <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Suggested reading · Topic graph</div>
-    <p class="text-[12px] text-slate-400">Reading recommendations (with reasons) and the question→entities→evidence graph land in the next slices.</p>
+  {# === Section 6 — Suggested reading (structural; from relevant entities) === #}
+  {% if reading %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
+    <h2 class="text-base font-semibold text-slate-900 mb-3">Suggested reading</h2>
+    <ul class="space-y-2">
+      {% for r in reading %}
+      <li class="flex items-start gap-2">
+        <span class="text-violet-400 mt-0.5 shrink-0">▸</span>
+        <div class="min-w-0">
+          <a href="/c/{{ r.collection }}/p/{{ r.id }}" class="text-sm font-medium text-violet-700 hover:underline">{{ r.title|truncate(80) }}</a>
+          <div class="text-[12px] text-slate-500">{{ r.why }}</div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="mt-2 text-[10px] text-slate-400">Ranked by how many of your relevant ideas each paper anchors — grounded, not asserted.</p>
   </section>
+  {% endif %}
+
+  {# === Topic graph — question (center) → relevant ideas, ringed by relevance === #}
+  {% if graph and graph.nodes %}
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ open: false }">
+    <button type="button" @click="open = !open; if (open) $nextTick(() => window.tgRender && window.tgRender())"
+            class="inline-flex items-center gap-1 text-sm font-semibold text-slate-900">
+      <span x-text="open ? '▾' : '▸'"></span> Topic map
+      <span class="text-[11px] font-normal text-slate-400">({{ graph.nodes|length - 1 }} ideas)</span>
+    </button>
+    <div x-show="open" x-cloak class="mt-2">
+      <div class="flex items-center gap-2 mb-1.5 text-[9px] text-slate-500">
+        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0f172a"></span>question</span>
+        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
+        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
+        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
+        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
+      </div>
+      <div id="tg-cyto" class="rounded-lg border border-slate-200 bg-white" style="height:420px;"
+           data-graph='{{ graph | tojson }}'></div>
+      <p class="mt-1.5 text-[10px] text-slate-400">Center = your question; inner ring = anchor ideas; outer ring = related. Edges = question→anchors and ideas that share papers. Position = relevance, not flow.</p>
+    </div>
+    <script>
+      window.tgRender = function () {
+        var el = document.getElementById("tg-cyto");
+        if (!el || typeof cytoscape !== "function" || el.dataset.init) return;
+        if (!el.clientWidth) { requestAnimationFrame(window.tgRender); return; }
+        var data; try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
+        el.dataset.init = "1";
+        var COLOR = {question:"#0f172a", problem:"#f43f5e", method:"#0ea5e9", concept:"#7c3aed", belief:"#f59e0b"};
+        var els = [];
+        data.nodes.forEach(function (n) {
+          els.push({data: {id: n.id, label: n.label, kind: n.kind, ring: n.ring}});
+        });
+        data.edges.forEach(function (e) {
+          els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target}});
+        });
+        var cy = cytoscape({
+          container: el, elements: els,
+          style: [
+            {selector: "node", style: {
+              "background-color": function (n) { return COLOR[n.data("kind")] || "#94a3b8"; },
+              "label": "data(label)", "font-size": 8, "color": "#334155",
+              "text-wrap": "ellipsis", "text-max-width": 90,
+              "width": function (n) { return n.data("kind") === "question" ? 22 : (n.data("ring") === 1 ? 16 : 12); },
+              "height": function (n) { return n.data("kind") === "question" ? 22 : (n.data("ring") === 1 ? 16 : 12); },
+              "text-valign": "bottom", "text-margin-y": 2}},
+            {selector: "node[kind = 'question']", style: {"shape": "round-rectangle", "font-weight": "bold", "text-max-width": 160}},
+            {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
+            {selector: ".dim", style: {"opacity": 0.12}},
+          ],
+          layout: {name: "concentric", concentric: function (n) { return 3 - (n.data("ring") || 2); },
+                   levelWidth: function () { return 1; }, minNodeSpacing: 24, padding: 14},
+        });
+        cy.on("mouseover", "node", function (evt) { var k = evt.target.closedNeighborhood(); cy.elements().not(k).addClass("dim"); });
+        cy.on("mouseout", "node", function () { cy.elements().removeClass("dim"); });
+        cy.resize(); cy.fit(undefined, 20);
+      };
+    </script>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

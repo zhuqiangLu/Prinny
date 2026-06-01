@@ -37,6 +37,7 @@ from . import (
     sync as sync_mod,
     theme as theme_mod,
     thoughts as thoughts_mod,
+    topic_view,
     topics as topics_mod,
     triage as triage_mod,
     wiki,
@@ -178,10 +179,34 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
     t = topics_mod.get_topic(slug)
     if not t:
         raise HTTPException(status_code=404, detail="Research topic not found")
+    relevant = topic_view.relevant_entities(t["slug"])
     return templates.TemplateResponse(request, "topic.html", {
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
+        "relevant": relevant,
+        "reading": topic_view.suggested_reading(t["slug"]) if (relevant and relevant.get("analyzed")) else [],
+        "graph": topic_view.topic_graph_view(t["slug"]) if (relevant and relevant.get("analyzed")) else None,
     })
+
+
+@app.post("/t/{slug}/analyze")
+def topic_analyze(slug: str) -> RedirectResponse:
+    """Anchor the question to existing ideas + name missing ones (one LLM call,
+    cached). PRG back to the page (re-render uses the cache, no LLM)."""
+    try:
+        topic_view.analyze(slug)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.topics").exception("topic analyze failed")
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/questions/suggest")
+def topic_suggest_questions(slug: str) -> RedirectResponse:
+    try:
+        topic_view.suggest_questions(slug)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.topics").exception("topic suggest-questions failed")
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.post("/t/{slug}/status")
