@@ -101,23 +101,11 @@
     html.pa-themed:not(.dark) .hover\:bg-slate-700:hover { background-color:var(--pa-accent-hover) !important; }
     html.pa-themed:not(.dark) .text-slate-900 { color:var(--pa-ink) !important; }
     html.pa-themed:not(.dark) .border-slate-900 { border-color:var(--pa-accent) !important; }
-    {% if _t.bg_light_url %}
-    /* light-mode wallpaper (fixed cover behind opaque cards) */
-    html.pa-themed:not(.dark) body {
-      background-image:url('{{ _t.bg_light_url }}'); background-size:cover;
-      background-position:center; background-attachment:fixed; background-repeat:no-repeat;
-    }
-    {% endif %}
-    {% if _t.bg_dark_url %}
-    html.pa-themed.dark body {
-      background-image:url('{{ _t.bg_dark_url }}'); background-size:cover;
-      background-position:center; background-attachment:fixed; background-repeat:no-repeat;
-    }
-    {% endif %}
+    /* No background wallpaper — clean flat surfaces (sidebar app shell). */
   </style>
   {% endif %}
 </head>
-<body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden"
+<body class="bg-slate-50 text-slate-900 h-screen flex overflow-hidden"
       x-data="{ settingsOpen: false, skillOpen: false, skillTitle: '',
                 dark: document.documentElement.classList.contains('dark'),
                 toggleTheme() {
@@ -126,31 +114,45 @@
                   try { localStorage.setItem('pa.theme', this.dark ? 'dark' : 'light'); } catch (e) {}
                   if (window.__onThemeChange) window.__onThemeChange();
                 } }">
-  <nav class="border-b border-slate-200 bg-white/90 backdrop-blur shrink-0">
-    <div class="px-4 py-3 flex items-center justify-between gap-4">
-      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight text-slate-900 shrink-0">
-        {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
-        <span>{{ b.app_name }}</span>
-      </a>
-      {% block header_center %}{% endblock %}
-      <div class="flex items-center gap-1 shrink-0">
-        <button type="button" @click="toggleTheme()"
-                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                title="Toggle dark mode" aria-label="Toggle dark mode">
-          <span x-show="!dark" class="grid place-items-center">{% if b.assets.moon %}<img src="{{ b.assets.moon }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">🌙</span>{% endif %}</span>
-          <span x-show="dark" class="grid place-items-center">{% if b.assets.sun %}<img src="{{ b.assets.sun }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">☀️</span>{% endif %}</span>
-        </button>
-        <button type="button" @click="settingsOpen = true"
-                hx-get="/settings/form?cat=agents" hx-target="#settings-modal-body" hx-swap="innerHTML"
-                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                title="Agents — sub-agent skills &amp; tools" aria-label="Agents">{% if b.assets.agents %}<img src="{{ b.assets.agents }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">🤖</span>{% endif %}</button>
-        <button type="button" @click="settingsOpen = true"
-                hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
-                class="grid place-items-center w-9 h-9 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
-                title="Settings" aria-label="Settings">{% if b.assets.settings %}<img src="{{ b.assets.settings }}" alt="" class="w-5 h-5">{% else %}<span class="text-lg leading-none">⚙</span>{% endif %}</button>
+  {% set nav = pa_nav() %}
+  <!-- App shell sidebar: collections + research topics + settings. Rendered on
+       every page via base.html; data from the pa_nav() Jinja global. -->
+  <aside class="w-60 shrink-0 h-full flex flex-col border-r border-slate-200 bg-white">
+    <a href="/" class="flex items-center gap-2 px-4 h-14 shrink-0 font-semibold tracking-tight text-slate-900 border-b border-slate-100">
+      {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
+      <span>{{ b.app_name }}</span>
+    </a>
+    <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">
+      <div>
+        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Collections</div>
+        {% for c in nav.collections %}
+        <a href="/c/{{ c.slug }}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-700 hover:bg-slate-100 {% if request.url.path == '/c/' ~ c.slug %}bg-slate-100 font-medium text-slate-900{% endif %}">
+          <span class="text-slate-400 shrink-0">▤</span><span class="flex-1 truncate">{{ c.name }}</span>
+          {% if c.papers %}<span class="text-[11px] text-slate-400 tabular-nums">{{ c.papers }}</span>{% endif %}
+        </a>
+        {% endfor %}
+        <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New collection</a>
       </div>
+      <div>
+        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Research Topics</div>
+        {% for t in nav.topics %}
+        <a href="/t/{{ t.slug }}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-700 hover:bg-slate-100 {% if request.url.path == '/t/' ~ t.slug %}bg-slate-100 font-medium text-slate-900{% endif %}">
+          <span class="text-violet-400 shrink-0">◆</span><span class="flex-1 truncate">{{ t.title }}</span>
+        </a>
+        {% endfor %}
+        <a href="/topics" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New topic</a>
+      </div>
+    </nav>
+    <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">
+      <button type="button" @click="settingsOpen = true" hx-get="/settings/form?cat=agents" hx-target="#settings-modal-body" hx-swap="innerHTML"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">🤖 <span>Agents</span></button>
+      <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">⚙ <span>Settings</span></button>
+      <button type="button" @click="toggleTheme()"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">
+        <span x-text="dark ? '☀️' : '🌙'"></span> <span x-text="dark ? 'Light mode' : 'Dark mode'"></span></button>
     </div>
-  </nav>
+  </aside>
 
   <!-- Settings modal (loaded on open; form submits + refresh swap in place) -->
   <div x-show="settingsOpen" x-cloak @keydown.escape.window="settingsOpen = false"
@@ -188,17 +190,12 @@
       </div>
     </div>
   </div>
-  <!-- full-width scroll container so the scrollbar sits at the window's right edge;
-       the centered max-width wrapper lives inside it -->
-  <main class="w-full flex-1 min-h-0 overflow-y-auto">
-    <div class="mx-auto {% block main_width %}max-w-6xl{% endblock %} w-full px-4 {% block main_pad %}py-6{% endblock %} {% block main_inner %}{% endblock %}">
+  <!-- Main column (fills the space beside the sidebar; its own scroll). -->
+  <main class="flex-1 min-w-0 h-full overflow-y-auto">
+    <div class="mx-auto {% block main_width %}max-w-6xl{% endblock %} w-full px-6 {% block main_pad %}py-6{% endblock %} {% block main_inner %}{% endblock %}">
       {% block content %}{% endblock %}
     </div>
   </main>
-  <footer class="shrink-0 border-t border-slate-200 bg-white py-2 text-center text-xs text-slate-400">
-    {{ b.app_name }} · <a href="https://github.com/paper-agent/paper-agent" target="_blank"
-      class="hover:text-slate-700">GitHub ↗</a>
-  </footer>
 
   <script>
     // Custom-tag bar (used on landing cards + collection page). Saves to /c/<slug>/tags.

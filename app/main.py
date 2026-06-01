@@ -74,6 +74,25 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["pa_theme"] = theme_mod.load_theme
 templates.env.globals["pa_branding"] = theme_mod.branding
 
+
+def _pa_nav() -> dict:
+    """Sidebar data for the app shell (base.html) — collections + research topics.
+    Evaluated per render; degrades to empty lists if the DB isn't ready."""
+    try:
+        cols = [{"slug": c["slug"], "name": c["name"], "papers": c.get("paper_count")}
+                for c in library.list_collections(with_activity=True)]
+    except Exception:  # noqa: BLE001
+        cols = []
+    try:
+        tops = [{"slug": t["slug"], "title": t["title"], "status": t["status"]}
+                for t in topics_mod.list_topics()]
+    except Exception:  # noqa: BLE001
+        tops = []
+    return {"collections": cols, "topics": tops}
+
+
+templates.env.globals["pa_nav"] = _pa_nav
+
 app = FastAPI(title="Paper Collection Wiki Agent")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
