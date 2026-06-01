@@ -303,6 +303,16 @@
   <!-- Collection grid -->
   {% if collections %}
   <div x-data="collectionCards()" x-init="init()">
+    <!-- Research Topics entry -->
+    <a href="/topics" class="mt-8 flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 hover:bg-violet-100/60 transition">
+      <span class="text-lg">🧭</span>
+      <div class="min-w-0">
+        <div class="text-sm font-semibold text-slate-900">Research Topics</div>
+        <div class="text-[12px] text-slate-500">Questions you're investigating across collections — what you're chasing, not what the field contains.</div>
+      </div>
+      <span class="ml-auto text-slate-400">→</span>
+    </a>
+
     <!-- Collections heading + sort -->
     <div class="mt-8 flex items-center justify-between gap-3 text-sm">
       <h2 class="text-lg font-semibold text-slate-900">Collections</h2>

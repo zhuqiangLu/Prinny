@@ -37,6 +37,7 @@ from . import (
     sync as sync_mod,
     theme as theme_mod,
     thoughts as thoughts_mod,
+    topics as topics_mod,
     triage as triage_mod,
     wiki,
 )
@@ -135,6 +136,94 @@ def hero_image(mode: str) -> FileResponse:
     if not p:
         raise HTTPException(status_code=404, detail="No hero image")
     return FileResponse(str(p))
+
+
+# ============================ Research Topics (v1) ============================
+# Cross-collection investigation threads. Topic = what I'm investigating
+# (references collections + entities; owns no papers/notes/wiki).
+
+def _topic_sources(t: dict) -> list[dict]:
+    """Resolve a topic's linked collection slugs to {slug,name,n_papers,missing}."""
+    by_slug = {c["slug"]: c for c in library.list_collections(with_activity=True)}
+    out = []
+    for cs in t["collections"]:
+        c = by_slug.get(cs)
+        out.append({"slug": cs, "name": c["name"] if c else cs,
+                    "n_papers": (c.get("paper_count") if c else None), "missing": c is None})
+    return out
+
+
+@app.get("/topics", response_class=HTMLResponse)
+def topics_index(request: Request, error: str = "") -> HTMLResponse:
+    return templates.TemplateResponse(request, "topics.html", {
+        "topics": topics_mod.list_topics(),
+        "collections": library.list_collections(with_activity=True),
+        "error": error,
+    })
+
+
+@app.post("/topics")
+def topic_create(title: str = Form(""), question: str = Form(""),
+                 collections: list[str] = Form([])) -> RedirectResponse:
+    try:
+        slug = topics_mod.create_topic(title, question, collections)
+    except ValueError:
+        return RedirectResponse("/topics?error=A+research+topic+needs+a+question.",
+                                status_code=303)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.get("/t/{slug}", response_class=HTMLResponse)
+def topic_page(request: Request, slug: str) -> HTMLResponse:
+    t = topics_mod.get_topic(slug)
+    if not t:
+        raise HTTPException(status_code=404, detail="Research topic not found")
+    return templates.TemplateResponse(request, "topic.html", {
+        "t": t, "sources": _topic_sources(t),
+        "all_collections": library.list_collections(with_activity=True),
+    })
+
+
+@app.post("/t/{slug}/status")
+def topic_status(slug: str, status: str = Form("")) -> RedirectResponse:
+    topics_mod.set_status(slug, status)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/collections")
+def topic_collections(slug: str, collections: list[str] = Form([])) -> RedirectResponse:
+    topics_mod.set_collections(slug, collections)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/delete")
+def topic_delete(slug: str) -> RedirectResponse:
+    topics_mod.delete_topic(slug)
+    return RedirectResponse("/topics", status_code=303)
+
+
+@app.post("/t/{slug}/hypotheses")
+def topic_add_hypothesis(slug: str, text: str = Form("")) -> RedirectResponse:
+    topics_mod.add_hypothesis(slug, text)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/hypotheses/{hid}/delete")
+def topic_del_hypothesis(slug: str, hid: int) -> RedirectResponse:
+    topics_mod.delete_hypothesis(slug, hid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/questions")
+def topic_add_question(slug: str, text: str = Form("")) -> RedirectResponse:
+    topics_mod.add_question(slug, text, "user")
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/questions/{qid}/delete")
+def topic_del_question(slug: str, qid: int) -> RedirectResponse:
+    topics_mod.delete_question(slug, qid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.get("/search-index")

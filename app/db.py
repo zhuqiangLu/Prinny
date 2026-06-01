@@ -183,6 +183,45 @@ CREATE TABLE IF NOT EXISTS reading_debt (
 );
 CREATE INDEX IF NOT EXISTS idx_debt_slug ON reading_debt(collection_slug, status);
 
+-- Research Topics (RESEARCH_TOPICS v1): cross-collection investigation threads.
+-- A topic REFERENCES collections + entities; it never owns papers/notes/wiki.
+-- Collection = what the field says · Topic = what I'm investigating.
+CREATE TABLE IF NOT EXISTS research_topics (
+  id INTEGER PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  question TEXT NOT NULL,                         -- required: the spine of the topic
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT CHECK(status IN ('exploring','active','answered','parked'))
+    NOT NULL DEFAULT 'exploring',
+  seed TEXT NOT NULL DEFAULT '{}',                -- cached seed-entity anchor (JSON)
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- Evidence sources: the collections a topic draws on (references only).
+CREATE TABLE IF NOT EXISTS topic_collections (
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  collection_slug TEXT NOT NULL,
+  PRIMARY KEY (topic_id, collection_slug)
+);
+-- Hypotheses: first-class, topic-scoped, may be ungrounded (it's an investigation).
+CREATE TABLE IF NOT EXISTS topic_hypotheses (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- Open questions: user- or agent-generated sub-questions of the topic.
+CREATE TABLE IF NOT EXISTS topic_questions (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  source TEXT CHECK(source IN ('user','agent')) NOT NULL DEFAULT 'user',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_topic_coll ON topic_collections(collection_slug);
+
 -- External-content FTS over paper_notes. First column is paper_id; paper_notes.paper_id
 -- is an INTEGER PRIMARY KEY so it *is* the rowid (content_rowid='rowid' stays correct).
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
