@@ -106,11 +106,7 @@
 
   <form x-data="chatComposer({{ 'true' if chat_streaming else 'false' }}, '{{ slug }}', '{{ paper_key }}')"
         class="border-t border-slate-200 p-3"
-        {% if chat_streaming %}@submit.prevent="stream()"{% else %}hx-post="/c/{{ slug }}/chat"
-        hx-target="#chat-log"
-        hx-swap="beforeend"
-        hx-disabled-elt="find button"
-        hx-on::after-request="if(event.detail.successful){window.Alpine.$data(this).clear(); this.reset(); const l=document.getElementById('chat-log'); l.scrollTop=l.scrollHeight;}"{% endif %}>
+        {% if chat_streaming %}@submit.prevent="stream()"{% else %}@submit.prevent="send()"{% endif %}>
     <input type="hidden" name="paper_key" value="{{ paper_key }}">
     <input type="hidden" name="images_json" :value="JSON.stringify(images)">
 
@@ -183,9 +179,50 @@
         },
         clear() { this.images = []; },
 
-        // Streamed per-paper turn (NDJSON: status/token/done/error). Renders tokens
-        // live, then re-renders the final text as markdown via /render.
-        async stream() {
+        // Submit handler for the non-agent (collection / non-eligible-paper) form:
+        // slash-commands need the agentic flow (blocking), everything else streams
+        // so the chat shows the message + a typing indicator immediately.
+        send() {
+          const ta = this.$el.querySelector('textarea[name="message"]');
+          const msg = (ta.value || "").trim();
+          if (msg.startsWith("/")) return this.sendBlocking();
+          return this.streamTo(`/c/${this.slug}/chat/stream`);
+        },
+        // Per-paper sub-agent turn.
+        stream() { return this.streamTo(`/c/${this.slug}/p/${this.paperKey}/chat/stream`); },
+        // Blocking turn (slash-commands / agentic): show a typing bubble, then append
+        // the server-rendered turn. No optimistic user bubble (the response includes it).
+        async sendBlocking() {
+          const form = this.$el;
+          const ta = form.querySelector('textarea[name="message"]');
+          const msg = (ta.value || "").trim();
+          const imgs = this.images.slice();
+          if (!msg && !imgs.length) return;
+          const log = document.getElementById("chat-log");
+          const a = document.createElement("div");
+          a.className = "flex justify-start";
+          a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100">'
+                      + '<div class="pa-working"><span class="pa-typing" aria-label="working"><i></i><i></i><i></i></span></div></div>';
+          log.appendChild(a);
+          ta.value = ""; this.clear(); log.scrollTop = log.scrollHeight;
+          try {
+            const resp = await fetch(`/c/${this.slug}/chat`, {
+              method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
+                                          images_json: JSON.stringify(imgs) }),
+            });
+            const html = await resp.text();
+            a.remove();
+            log.insertAdjacentHTML("beforeend", html);
+            if (window.htmx && log.lastElementChild) window.htmx.process(log.lastElementChild);
+          } catch (e) {
+            a.querySelector(".pa-working").textContent = "Send failed: " + e;
+          }
+          log.scrollTop = log.scrollHeight;
+        },
+        // Streamed turn (NDJSON: status/token/done/error). Renders tokens live, then
+        // re-renders the final text as markdown via /render.
+        async streamTo(url) {
           const form = this.$el;
           const ta = form.querySelector('textarea[name="message"]');
           const msg = (ta.value || "").trim();
@@ -214,9 +251,10 @@
           log.scrollTop = log.scrollHeight;
           let acc = "";
           try {
-            const resp = await fetch(`/c/${this.slug}/p/${this.paperKey}/chat/stream`, {
+            const resp = await fetch(url, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ message: msg, images_json: JSON.stringify(imgs) }),
+              body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
+                                          images_json: JSON.stringify(imgs) }),
             });
             const reader = resp.body.getReader(), dec = new TextDecoder();
             let buf = "";

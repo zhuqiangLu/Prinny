@@ -956,6 +956,57 @@ def chat_post(
     )
 
 
+@app.post("/c/{slug}/chat/stream")
+def collection_chat_stream(slug: str, message: str = Form(""),
+                           paper_key: str = Form(""), images_json: str = Form("")):
+    """Streamed PLAIN collection turn (also a non-agent paper turn when a paper is
+    open) — NDJSON token/done/error, so the collection chat shows the message +
+    a typing indicator immediately instead of blocking like a frozen app. Slash-
+    command / agentic-prefixed turns are NOT routed here; the composer sends those
+    to the blocking /chat endpoint (they need the agentic flow)."""
+    col = _require_collection(slug)
+    message = message.strip()
+    images = _parse_images(images_json)
+    if not message and not images:
+        raise HTTPException(status_code=400, detail="Empty message")
+    pid = int(paper_key) if paper_key else None
+    thread_id = get_or_create_thread(slug, pid)
+    # /collection /wiki include tokens (mirror chat_post).
+    include_collection = False
+    for token in ("/collection", "/wiki"):
+        if token in message:
+            include_collection = True
+            message = message.replace(token, "").strip()
+    history = get_messages(thread_id, limit=10)
+    messages, refs = context.build_messages(
+        slug, col["name"], history, message, pid, include_collection,
+        images=images, artifact=get_artifact(thread_id),
+    )
+    stored = message + (f"\n\n_({len(images)} image{'s' if len(images) != 1 else ''} attached)_"
+                        if images else "")
+
+    def _ev(d: dict) -> str:
+        return json.dumps(d) + "\n"
+
+    def gen():
+        acc = ""
+        try:
+            for tok in llm.stream(messages):
+                acc += tok
+                yield _ev({"type": "token", "text": tok})
+        except llm.LLMError as exc:
+            yield _ev({"type": "error", "text": str(exc)}); return
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger("paper_agent.chat").exception("collection chat stream failed")
+            yield _ev({"type": "error", "text": f"LLM call failed: {exc}"}); return
+        # Persist only on success, so the thread never holds an orphan user turn.
+        add_message(thread_id, "user", stored or "(image)", refs)
+        add_message(thread_id, "assistant", acc, refs)
+        yield _ev({"type": "done"})
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
 @app.post("/c/{slug}/p/{paper_id}/chat/stream")
 def paper_chat_stream(slug: str, paper_id: int, message: str = Form(""),
                       images_json: str = Form("")):
