@@ -1,41 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ name }} — Paper Agent{% endblock %}
 {% block main_width %}max-w-none{% endblock %}
-{% block main_pad %}pt-3 pb-2{% endblock %}
+{% block main_pad %}p-0{% endblock %}
 {% block main_inner %}h-full{% endblock %}
 {% block content %}
 <div x-data='collectionView()' @open-add.window="addOpen = true" class="flex flex-col h-full min-h-0">
-
-  <!-- header: collection name + source actions (icon-only, label on hover) -->
-  <div class="shrink-0">
-    <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← Collections</a>
-    <div class="flex items-center gap-2 mt-1">
-      <h1 class="text-xl font-semibold">{{ name }}</h1>
-
-      {% macro icon_label(icon, label) %}
-        <span class="text-base leading-none">{{ icon }}</span>
-        <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">{{ label }}</span>
-      {% endmacro %}
-      {% set btncls = "group relative grid place-items-center w-8 h-8 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" %}
-
-      <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
-      {% if dup_count %}
-      <button type="button" @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
-              class="{{ btncls }} relative">{{ icon_label("⧉", "Resolve duplicates") }}
-        <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-amber-300 text-amber-900 text-[10px] leading-none">{{ dup_count }}</span>
-      </button>
-      {% endif %}
-      {% if graveyard_count %}
-      <button type="button" @click="graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })"
-              class="{{ btncls }} relative">{{ icon_label("🪦", "Graveyard (recently removed)") }}
-        <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-slate-500 text-white text-[10px] leading-none">{{ graveyard_count }}</span>
-      </button>
-      {% endif %}
-      {% if col and col.copy_mode == "lazy" %}
-      <form method="post" action="/c/{{ slug }}/download-all"><button type="submit" class="{{ btncls }}">{{ icon_label("⤓", "Download all PDFs") }}</button></form>
-      {% endif %}
-    </div>
-  </div>
 
   <!-- Pull-from-Zotero modal (body loaded via HTMX) -->
   <div x-show="syncWith" x-cloak @keydown.escape.window="syncWith = false" @click.self="syncWith = false"
@@ -122,11 +91,39 @@
     </div>
   </div>
 
-  <!-- split: paper list | divider | right pane (Chat / Thoughts) -->
-  <div class="flex flex-1 min-h-0 mt-3" x-ref="split">
-    <!-- left column: the wiki flows directly (no card chrome / no duplicate
-         header) so the middle panel matches the research-topic layout. -->
-    <div class="min-w-0 flex-1 flex flex-col overflow-hidden">
+  <!-- split: left scroll column (header + wiki) | divider | Prinny Assistant.
+       Matches the research-topic layout: the header lives inside the scrolling
+       column so the chat panel fills top-to-bottom (no gap above it). -->
+  <div class="flex flex-1 min-h-0" x-ref="split">
+    <div class="flex-1 min-w-0 h-full overflow-y-auto px-6 py-6">
+      <!-- header: collection name + source actions (icon-only, label on hover) -->
+      <div class="mb-4">
+        <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← Collections</a>
+        <div class="flex items-center gap-2 mt-1">
+          <h1 class="text-xl font-semibold">{{ name }}</h1>
+          {% macro icon_label(icon, label) %}
+            <span class="text-base leading-none">{{ icon }}</span>
+            <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">{{ label }}</span>
+          {% endmacro %}
+          {% set btncls = "group relative grid place-items-center w-8 h-8 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" %}
+          <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
+          {% if dup_count %}
+          <button type="button" @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
+                  class="{{ btncls }} relative">{{ icon_label("⧉", "Resolve duplicates") }}
+            <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-amber-300 text-amber-900 text-[10px] leading-none">{{ dup_count }}</span>
+          </button>
+          {% endif %}
+          {% if graveyard_count %}
+          <button type="button" @click="graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })"
+                  class="{{ btncls }} relative">{{ icon_label("🪦", "Graveyard (recently removed)") }}
+            <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-slate-500 text-white text-[10px] leading-none">{{ graveyard_count }}</span>
+          </button>
+          {% endif %}
+          {% if col and col.copy_mode == "lazy" %}
+          <form method="post" action="/c/{{ slug }}/download-all"><button type="submit" class="{{ btncls }}">{{ icon_label("⤓", "Download all PDFs") }}</button></form>
+          {% endif %}
+        </div>
+      </div>
 
       <!-- Duplicate review modal (body loaded via HTMX) -->
       <div x-show="dupOpen" x-cloak @keydown.escape.window="dupOpen = false" @click.self="dupOpen = false"
@@ -200,14 +197,11 @@
         </div>
       </div>
 
-      <!-- content area (scrolls): the wiki is the collection's single surface.
-           Papers live inside it (Evidence section). Loaded via HTMX on init. -->
-      <div class="flex-1 min-h-0 overflow-auto">
+      <!-- wiki (the collection's single surface; loaded via HTMX on init) -->
       <div id="left-panel">
         <span class="block p-3 text-sm text-slate-400">Loading…</span>
       </div>
-      </div><!-- /content area -->
-    </div><!-- /left column -->
+    </div><!-- /left scroll column -->
 
     <!-- draggable divider with a centered hide handle -->
     <div x-show="paneOpen" @mousedown.prevent="startDrag($event)"
@@ -219,7 +213,7 @@
 
     <!-- right pane: Chat / Thoughts -->
     <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
-         class="shrink-0 flex flex-col min-h-0 rounded-lg border border-slate-200 bg-white overflow-hidden">
+         class="shrink-0 h-full flex flex-col min-h-0 border-l border-slate-200 bg-white overflow-hidden">
       <div class="shrink-0 border-b border-slate-200 px-3 flex items-center gap-2 text-sm">
         <span class="text-violet-500">✦</span>
         <span class="font-semibold text-slate-900 shrink-0">Prinny Assistant</span>
