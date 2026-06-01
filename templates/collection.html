@@ -18,13 +18,13 @@
       {% endmacro %}
       {% set btncls = "group relative grid place-items-center w-8 h-8 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" %}
 
-      {% if source.refreshable %}
-      <button type="button"
-              @click="syncWith = true; htmx.ajax('GET', '/c/{{ slug }}/sync/preview', { target: '#sync-modal-body', swap: 'innerHTML' })"
-              class="{{ btncls }}">{{ icon_label("⬇", "Pull from " ~ source.name) }}
+      <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
+      {% if dup_count %}
+      <button type="button" @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
+              class="{{ btncls }} relative">{{ icon_label("⧉", "Resolve duplicates") }}
+        <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-amber-300 text-amber-900 text-[10px] leading-none">{{ dup_count }}</span>
       </button>
       {% endif %}
-      <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
       {% if graveyard_count %}
       <button type="button" @click="graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })"
               class="{{ btncls }} relative">{{ icon_label("🪦", "Graveyard (recently removed)") }}
@@ -34,8 +34,6 @@
       {% if col and col.copy_mode == "lazy" %}
       <form method="post" action="/c/{{ slug }}/download-all"><button type="submit" class="{{ btncls }}">{{ icon_label("⤓", "Download all PDFs") }}</button></form>
       {% endif %}
-
-      <span class="ml-auto text-xs rounded-full bg-slate-200 px-2 py-1 text-slate-600">{{ papers|length }} papers</span>
     </div>
   </div>
 
@@ -126,23 +124,9 @@
 
   <!-- split: paper list | divider | right pane (Chat / Thoughts) -->
   <div class="flex flex-1 min-h-0 mt-3" x-ref="split">
-    <!-- left column: the wiki (the collection's single surface; papers live in it) -->
-    <div class="min-w-0 flex-1 flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <!-- left header: the collection's single surface is the wiki (papers live
-           inside it, in the Evidence section). Add + Duplicates are page-level
-           actions; there's no separate Papers tab. -->
-      <div class="shrink-0 flex items-center gap-1 border-b border-slate-200 px-2 py-1.5 text-sm">
-        <span class="font-semibold text-slate-700 px-1">{{ name }}</span>
-        <div class="ml-auto flex items-center gap-1">
-          {% if dup_count %}
-          <button @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
-                  class="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800 hover:bg-amber-100"
-                  title="Resolve same-title duplicate papers">⧉ Duplicates
-            <span class="ml-0.5 rounded-full bg-amber-200 text-amber-900 text-xs px-1.5">{{ dup_count }}</span>
-          </button>
-          {% endif %}
-        </div>
-      </div>
+    <!-- left column: the wiki flows directly (no card chrome / no duplicate
+         header) so the middle panel matches the research-topic layout. -->
+    <div class="min-w-0 flex-1 flex flex-col overflow-hidden">
 
       <!-- Duplicate review modal (body loaded via HTMX) -->
       <div x-show="dupOpen" x-cloak @keydown.escape.window="dupOpen = false" @click.self="dupOpen = false"
