@@ -199,12 +199,16 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
     if not t:
         raise HTTPException(status_code=404, detail="Research topic not found")
     relevant = topic_view.relevant_entities(t["slug"])
+    thread_id = get_or_create_thread(f"topic:{t['slug']}", None)
+    chat = [{"role": m["role"], "html": render_md(m["content"], "")}
+            for m in get_messages(thread_id, limit=50)]
     return templates.TemplateResponse(request, "topic.html", {
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
         "relevant": relevant,
         "reading": topic_view.suggested_reading(t["slug"]) if (relevant and relevant.get("analyzed")) else [],
         "graph": topic_view.topic_graph_view(t["slug"]) if (relevant and relevant.get("analyzed")) else None,
+        "chat": chat,
     })
 
 
@@ -226,6 +230,42 @@ def topic_suggest_questions(slug: str) -> RedirectResponse:
     except Exception:  # noqa: BLE001
         logging.getLogger("paper_agent.topics").exception("topic suggest-questions failed")
     return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/chat/stream")
+def topic_chat_stream(slug: str, message: str = Form("")):
+    """Streamed topic-assistant turn (NDJSON token/done/error). Grounded in the
+    topic; read-only. Thread keyed 'topic:<slug>'; persists only on success."""
+    t = topics_mod.get_topic(slug)
+    if not t:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    message = message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Empty message")
+    thread_id = get_or_create_thread(f"topic:{slug}", None)
+    history = get_messages(thread_id, limit=10)
+    messages = topic_view.chat_messages(slug, history, message)
+    refs = [{"type": "topic", "id": slug}]
+
+    def _ev(d: dict) -> str:
+        return json.dumps(d) + "\n"
+
+    def gen():
+        acc = ""
+        try:
+            for tok in llm.stream(messages):
+                acc += tok
+                yield _ev({"type": "token", "text": tok})
+        except llm.LLMError as exc:
+            yield _ev({"type": "error", "text": str(exc)}); return
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger("paper_agent.topics").exception("topic chat stream failed")
+            yield _ev({"type": "error", "text": f"LLM call failed: {exc}"}); return
+        add_message(thread_id, "user", message, refs)
+        add_message(thread_id, "assistant", acc, refs)
+        yield _ev({"type": "done"})
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
 @app.post("/t/{slug}/status")

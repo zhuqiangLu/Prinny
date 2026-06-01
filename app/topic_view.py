@@ -282,3 +282,36 @@ def suggest_questions(slug: str) -> dict:
                 seen.add(q.lower())
                 added += 1
     return {"added": added}
+
+
+# ---- topic assistant: chat grounded in the topic (read-only) -----------------
+
+def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
+    """Build the LLM messages for the topic assistant: a system prompt grounded
+    in the topic (question, hypotheses, relevant ideas, evidence collections) +
+    recent history + the user turn. Read-only — the assistant never mutates."""
+    t = topics.get_topic(slug)
+    rel = relevant_entities(slug)
+    parts = ["You are a research assistant for an INVESTIGATION (a research topic), "
+             "not a single collection. Help the researcher think about their question.",
+             f"QUESTION: {t['question']}"]
+    if t.get("description"):
+        parts.append(f"DESCRIPTION: {t['description']}")
+    if t["hypotheses"]:
+        parts.append("HYPOTHESES:\n" + "\n".join(f"- {h['text']}" for h in t["hypotheses"]))
+    if t["questions"]:
+        parts.append("OPEN QUESTIONS:\n" + "\n".join(f"- {q['text']}" for q in t["questions"]))
+    if rel and rel.get("analyzed") and rel.get("items"):
+        parts.append("RELEVANT IDEAS (from the linked collections): "
+                     + ", ".join(i["label"] for i in rel["items"][:15]))
+        if rel.get("external"):
+            parts.append("Ideas the collections DON'T cover but the question needs: "
+                         + ", ".join(e["name"] for e in rel["external"]))
+    if t["collections"]:
+        parts.append("EVIDENCE COLLECTIONS: " + ", ".join(t["collections"]))
+    parts.append("Be concise and grounded. Name the ideas/papers you reference. If the "
+                 "collections don't cover something the question needs, say so honestly "
+                 "rather than inventing support. You are read-only: you don't change the "
+                 "user's notes, wiki, hypotheses, or collections.")
+    return ([{"role": "system", "content": "\n\n".join(parts)}]
+            + history + [{"role": "user", "content": user_msg}])

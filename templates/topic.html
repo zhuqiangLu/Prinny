@@ -1,8 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ t.title }} — Research Topic{% endblock %}
+{% block main_width %}max-w-none{% endblock %}
+{% block main_pad %}p-0{% endblock %}
+{% block main_inner %}h-full{% endblock %}
 {% block content %}
 {% set STATUS = {'exploring':'bg-violet-100 text-violet-700','active':'bg-emerald-100 text-emerald-700','answered':'bg-sky-100 text-sky-700','parked':'bg-slate-100 text-slate-500'} %}
-<div x-data="{ manage: false }" class="max-w-3xl mx-auto">
+<style>
+  .tc-dots{display:inline-flex;gap:4px}.tc-dots i{width:6px;height:6px;border-radius:9999px;background:#94a3b8;display:inline-block;animation:tcb 1s infinite}
+  .tc-dots i:nth-child(2){animation-delay:.15s}.tc-dots i:nth-child(3){animation-delay:.3s}
+  @keyframes tcb{0%,80%,100%{opacity:.3}40%{opacity:1}}
+</style>
+<div class="flex h-full">
+  {# ---- left: the topic content ---- #}
+  <div class="flex-1 min-w-0 overflow-y-auto px-6 py-6">
+  <div x-data="{ manage: false }" class="max-w-3xl mx-auto">
   <a href="/topics" class="text-sm text-slate-500 hover:text-slate-900">← Research Topics</a>
 
   <div class="flex items-start gap-3 mt-2 mb-4">
@@ -273,5 +284,75 @@
     </script>
   </section>
   {% endif %}
+  </div>{# /max-w-3xl content #}
+  </div>{# /left scroll column #}
+
+  {# ---- right: Prinny Assistant (topic-grounded, read-only, streaming) ---- #}
+  <aside class="w-96 shrink-0 h-full border-l border-slate-200 bg-white flex flex-col" x-data="topicChat('{{ t.slug }}')">
+    <div class="shrink-0 flex items-center gap-2 px-4 h-14 border-b border-slate-100">
+      <span class="text-violet-500">✦</span>
+      <span class="font-semibold text-slate-900">Prinny Assistant</span>
+      <span class="ml-auto text-[10px] text-slate-400">read-only</span>
+    </div>
+    <div id="tc-log" x-ref="log" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+      {% for m in chat %}{% include "_chat_bubble.html" %}{% endfor %}
+      {% if not chat %}
+      <p class="text-sm text-slate-400">Ask about this topic — your question, hypotheses, the relevant ideas, or where the gaps are. Grounded in your linked collections; read-only.</p>
+      {% endif %}
+    </div>
+    <form @submit.prevent="send()" class="shrink-0 border-t border-slate-200 p-3">
+      <div class="flex gap-2 items-end">
+        <textarea x-ref="ta" rows="2" placeholder="Ask anything about this topic…"
+                  @keydown.enter.prevent="if(!$event.shiftKey) send()"
+                  class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <button type="submit" aria-label="Send" class="shrink-0 grid place-items-center w-10 h-10 rounded bg-slate-900 text-white hover:bg-slate-700">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path></svg>
+        </button>
+      </div>
+    </form>
+  </aside>
 </div>
+
+<script>
+  function topicChat(slug) {
+    return {
+      async send() {
+        const ta = this.$refs.ta, log = this.$refs.log;
+        const msg = (ta.value || "").trim();
+        if (!msg) return;
+        const u = document.createElement("div"); u.className = "flex justify-end";
+        u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
+        u.firstElementChild.textContent = msg; log.appendChild(u);
+        const a = document.createElement("div"); a.className = "flex justify-start";
+        a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100 text-slate-900">'
+                    + '<div class="tc-body" style="white-space:pre-wrap"></div>'
+                    + '<div class="tc-work mt-1"><span class="tc-dots"><i></i><i></i><i></i></span></div></div>';
+        log.appendChild(a);
+        const body = a.querySelector(".tc-body"), work = a.querySelector(".tc-work");
+        ta.value = ""; log.scrollTop = log.scrollHeight;
+        let acc = "";
+        try {
+          const r = await fetch(`/t/${slug}/chat/stream`, {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ message: msg }),
+          });
+          const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+          for (;;) {
+            const { value, done } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true }); let nl;
+            while ((nl = buf.indexOf("\n")) >= 0) {
+              const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1); if (!line) continue;
+              let ev; try { ev = JSON.parse(line); } catch (e) { continue; }
+              if (ev.type === "token") { acc += ev.text; body.textContent = acc; }
+              else if (ev.type === "error") { body.classList.add("text-rose-700"); body.textContent = ev.text; }
+              log.scrollTop = log.scrollHeight;
+            }
+          }
+        } catch (e) { body.textContent = "Stream failed: " + e; }
+        if (work) work.remove();
+        log.scrollTop = log.scrollHeight;
+      },
+    };
+  }
+</script>
 {% endblock %}
