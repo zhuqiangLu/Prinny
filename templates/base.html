@@ -135,24 +135,51 @@
       <button type="button" @click="toggleNav()" class="ml-auto grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               title="Hide sidebar" aria-label="Hide sidebar">‹</button>
     </div>
+    {% set NAV_MAX = 6 %}
     <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">
-      <div>
+      <div x-data="{ more: (function(){ try { return localStorage.getItem('pa.moreCol') === '1'; } catch(e){ return false; } })() }">
         <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Collections</div>
         {% for c in nav.collections %}
-        <a href="/c/{{ c.slug }}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-700 hover:bg-slate-100 {% if request.url.path == '/c/' ~ c.slug %}bg-slate-100 font-medium text-slate-900{% endif %}">
-          <span class="text-slate-400 shrink-0">▤</span><span class="flex-1 truncate">{{ c.name }}</span>
-          {% if c.papers %}<span class="text-[11px] text-slate-400 tabular-nums">{{ c.papers }}</span>{% endif %}
-        </a>
+        <div {% if loop.index > NAV_MAX %}x-show="more" x-cloak{% endif %}
+             class="group flex items-center rounded-md hover:bg-slate-100 {% if request.url.path == '/c/' ~ c.slug %}bg-slate-100{% endif %}">
+          <a href="/c/{{ c.slug }}" class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-slate-700 {% if request.url.path == '/c/' ~ c.slug %}font-medium text-slate-900{% endif %}">
+            <span class="text-slate-400 shrink-0">▤</span><span class="flex-1 truncate">{{ c.name }}</span>
+            {% if c.papers %}<span class="text-[11px] text-slate-400 tabular-nums">{{ c.papers }}</span>{% endif %}
+          </a>
+          <button type="button" title="Delete collection" data-slug="{{ c.slug }}" data-name="{{ c.name }}" data-topics="{{ c.topics_using or 0 }}"
+                  @click.stop.prevent="$dispatch('nav-del', {kind:'collection', slug:$el.dataset.slug, name:$el.dataset.name, topics:Number($el.dataset.topics)})"
+                  class="shrink-0 px-1.5 py-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-600">✕</button>
+        </div>
         {% endfor %}
+        {% if nav.collections|length > NAV_MAX %}
+        <button type="button" @click="more = !more; try { localStorage.setItem('pa.moreCol', more ? '1' : '0'); } catch(e){}"
+                class="w-full flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <span x-text="more ? '▴' : '▾'"></span>
+          <span x-text="more ? 'Show less' : 'Show {{ nav.collections|length - NAV_MAX }} more'"></span>
+        </button>
+        {% endif %}
         <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New collection</a>
       </div>
-      <div>
+      <div x-data="{ more: (function(){ try { return localStorage.getItem('pa.moreTop') === '1'; } catch(e){ return false; } })() }">
         <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Research Topics</div>
         {% for t in nav.topics %}
-        <a href="/t/{{ t.slug }}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-700 hover:bg-slate-100 {% if request.url.path == '/t/' ~ t.slug %}bg-slate-100 font-medium text-slate-900{% endif %}">
-          <span class="text-violet-400 shrink-0">◆</span><span class="flex-1 truncate">{{ t.title }}</span>
-        </a>
+        <div {% if loop.index > NAV_MAX %}x-show="more" x-cloak{% endif %}
+             class="group flex items-center rounded-md hover:bg-slate-100 {% if request.url.path == '/t/' ~ t.slug %}bg-slate-100{% endif %}">
+          <a href="/t/{{ t.slug }}" class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-slate-700 {% if request.url.path == '/t/' ~ t.slug %}font-medium text-slate-900{% endif %}">
+            <span class="text-violet-400 shrink-0">◆</span><span class="flex-1 truncate">{{ t.title }}</span>
+          </a>
+          <button type="button" title="Delete topic" data-slug="{{ t.slug }}" data-name="{{ t.title }}"
+                  @click.stop.prevent="$dispatch('nav-del', {kind:'topic', slug:$el.dataset.slug, name:$el.dataset.name, topics:0})"
+                  class="shrink-0 px-1.5 py-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-600">✕</button>
+        </div>
         {% endfor %}
+        {% if nav.topics|length > NAV_MAX %}
+        <button type="button" @click="more = !more; try { localStorage.setItem('pa.moreTop', more ? '1' : '0'); } catch(e){}"
+                class="w-full flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <span x-text="more ? '▴' : '▾'"></span>
+          <span x-text="more ? 'Show less' : 'Show {{ nav.topics|length - NAV_MAX }} more'"></span>
+        </button>
+        {% endif %}
         <a href="/topics" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New topic</a>
       </div>
     </nav>
@@ -190,6 +217,36 @@
         <button type="button" @click="skillOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
       <div id="skill-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Sidebar delete modal: opened by the row ✕ via the 'nav-del' event. Collections
+       require type-to-confirm + a topic-use warning; topics get a single confirm. -->
+  <div x-data="navDelete()" @nav-del.window="show($event.detail)">
+    <div x-show="open" x-cloak @keydown.escape.window="open = false" @click.self="open = false"
+         class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-28">
+      <div class="bg-white rounded-xl shadow-xl w-[min(440px,92vw)] p-5">
+        <h2 class="font-semibold text-slate-900 mb-2">Delete <span x-text="kind === 'topic' ? 'topic' : 'collection'"></span> “<span x-text="name"></span>”?</h2>
+        <template x-if="kind === 'collection'">
+          <div class="space-y-2 text-sm">
+            <template x-if="topics > 0">
+              <p class="rounded bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-amber-800 text-xs">⚠ Used as evidence by <b x-text="topics"></b> research topic<span x-show="topics !== 1">s</span> — they'll lose this source.</p>
+            </template>
+            <p class="text-slate-600">This permanently removes this collection's <b>notes, highlights, wiki, and thoughts</b>, and purges any paper left in no other collection. <b>Zotero is untouched.</b></p>
+            <label class="block text-xs text-slate-500">Type <b class="text-slate-700" x-text="name"></b> to confirm:</label>
+            <input x-model="typed" @keydown.enter.prevent="submit()" spellcheck="false"
+                   class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+          </div>
+        </template>
+        <template x-if="kind === 'topic'">
+          <p class="text-sm text-slate-600">This removes the investigation record. Its linked collections and their papers are untouched.</p>
+        </template>
+        <form x-ref="form" method="post" :action="action" class="mt-4 flex justify-end gap-2">
+          <button type="button" @click="open = false" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" :disabled="!ready" @click="if (!ready) $event.preventDefault()"
+                  class="rounded bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 disabled:opacity-40">Delete</button>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -251,6 +308,21 @@
         });
       });
     })();
+
+    // Sidebar delete modal. Collections gate the Delete button behind typing the
+    // exact name; topics submit on confirm. Posts to the existing delete routes.
+    function navDelete() {
+      return {
+        open: false, kind: "", slug: "", name: "", topics: 0, typed: "",
+        get action() { return this.kind === "topic" ? `/t/${this.slug}/delete` : `/c/${this.slug}/delete`; },
+        get ready() { return this.kind === "topic" || this.typed.trim() === (this.name || "").trim(); },
+        show(d) {
+          this.kind = d.kind; this.slug = d.slug; this.name = d.name || "";
+          this.topics = d.topics || 0; this.typed = ""; this.open = true;
+        },
+        submit() { if (this.ready) this.$refs.form.submit(); },
+      };
+    }
 
     // Settings highlight-scheme editor: editable rows of {color, label}.
     function schemeEditor(initial) {

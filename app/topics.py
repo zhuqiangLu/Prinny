@@ -64,6 +64,17 @@ def create_topic(title: str, question: str, collections: list[str] | None = None
         con.close()
 
 
+def collection_usage() -> dict:
+    """``{collection_slug: n_topics}`` — how many research topics reference each
+    collection. Drives the sidebar delete-collection warning."""
+    con = connect()
+    try:
+        return {r["collection_slug"]: r["n"] for r in con.execute(
+            "SELECT collection_slug, COUNT(*) AS n FROM topic_collections GROUP BY collection_slug")}
+    finally:
+        con.close()
+
+
 def list_topics() -> list[dict]:
     """All topics, newest-updated first, with their linked-collection count."""
     con = connect()

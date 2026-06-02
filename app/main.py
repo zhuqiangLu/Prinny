@@ -79,8 +79,15 @@ def _pa_nav() -> dict:
     """Sidebar data for the app shell (base.html) — collections + research topics.
     Evaluated per render; degrades to empty lists if the DB isn't ready."""
     try:
-        cols = [{"slug": c["slug"], "name": c["name"], "papers": c.get("paper_count")}
+        usage = topics_mod.collection_usage()
+        cols = [{"slug": c["slug"], "name": c["name"], "papers": c.get("paper_count"),
+                 "last_added": c.get("last_added") or "",
+                 "topics_using": usage.get(c["slug"], 0)}
                 for c in library.list_collections(with_activity=True)]
+        # "Latest" first for the sidebar's show-more cap (most-recently-added paper);
+        # ties + empties fall back to alphabetical (stable two-pass sort).
+        cols.sort(key=lambda c: (c["name"] or "").lower())
+        cols.sort(key=lambda c: c["last_added"] or "", reverse=True)
     except Exception:  # noqa: BLE001
         cols = []
     try:
