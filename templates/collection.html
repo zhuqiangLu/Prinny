@@ -9,6 +9,29 @@
      @wiki-jump.window="lsModal = ''; tab = 'connections'; $nextTick(() => { window.kgRender && window.kgRender(); setTimeout(() => { window.kgFocus && window.kgFocus($event.detail.id); }, 420); })"
      class="flex flex-col h-full min-h-0">
 
+  <!-- Edit-thesis-with-agent modal: instruction → propose (diff) → Apply/Discard.
+       Nothing is written until Apply; a one-step Undo appears in the panel after. -->
+  <div x-show="aeditOpen" x-cloak @keydown.escape.window="aeditOpen = false" @click.self="aeditOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
+    <div class="bg-white rounded-xl shadow-xl w-[min(640px,95vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">✎ Edit thesis with agent</h2>
+        <button type="button" @click="aeditOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3">Describe the change in plain language — the agent proposes a revision, and <b>nothing is written until you Apply</b>. (One LLM call; it edits the current text only, no PDFs.)</p>
+      <form hx-post="/c/{{ slug }}/wiki/thesis/propose" hx-target="#aedit-diff" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <textarea id="aedit-instr" name="instruction" rows="2" required
+                  placeholder="e.g. sharpen the thesis around long-context cost; keep the three callouts"
+                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <div class="mt-2 flex items-center gap-2">
+          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">Propose <span class="htmx-indicator">…</span></button>
+          <span class="text-[11px] text-slate-400">one LLM call · no tools</span>
+        </div>
+      </form>
+      <div id="aedit-diff" class="mt-3"></div>
+    </div>
+  </div>
+
   <!-- Create-topic modal: a Research Topic seeded from this collection (preselected). -->
   <div x-show="topicOpen" x-cloak @keydown.escape.window="topicOpen = false" @click.self="topicOpen = false"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
@@ -263,6 +286,7 @@
       // Page-level modals.
       addOpen: false,
       topicOpen: false,
+      aeditOpen: false,     // ✎ Edit thesis with agent (propose → diff → apply)
       syncOpen: false,
       syncWith: false,     // ⇅ Pull-from-Zotero sync-preview modal
       graveOpen: false,

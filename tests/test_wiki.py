@@ -111,6 +111,34 @@ def test_generate_overview_writes_field_model_files(tmp_path, monkeypatch):
     assert thesis_meta["type"] == "thesis"
 
 
+def test_thesis_agent_edit_propose_apply_undo(tmp_path, monkeypatch):
+    """The section editor: propose returns a diff without writing; apply writes +
+    snapshots; undo restores. Validators clamp the round-trip."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    assert wiki.generate_overview("vlms") is True
+    original = wiki.current_thesis("vlms")
+    assert original and original["one_paragraph"]
+
+    # propose: the editor stub revises only the paragraph
+    revised = {**original, "one_paragraph": "A sharper one-paragraph thesis about cost."}
+    monkeypatch.setattr(wiki.llm, "complete", lambda *a, **k: json.dumps(revised))
+    res = wiki.propose_thesis_edit("vlms", "sharpen the paragraph")
+    assert res["ok"] and res["proposed"]["one_paragraph"].startswith("A sharper")
+    # propose writes nothing
+    assert wiki.current_thesis("vlms")["one_paragraph"] == original["one_paragraph"]
+    assert wiki.has_thesis_undo("vlms") is False
+
+    # apply writes + leaves an undo snapshot
+    assert wiki.apply_thesis_edit("vlms", res["proposed"])["ok"] is True
+    assert wiki.current_thesis("vlms")["one_paragraph"].startswith("A sharper")
+    assert wiki.has_thesis_undo("vlms") is True
+
+    # undo restores the original and consumes the snapshot
+    assert wiki.undo_thesis_edit("vlms")["ok"] is True
+    assert wiki.current_thesis("vlms")["one_paragraph"] == original["one_paragraph"]
+    assert wiki.has_thesis_undo("vlms") is False
+
+
 def test_validate_field_model_caps_long_lists_and_drops_short_items():
     """The validator clamps landscape columns to _LANDSCAPE_MAX_ITEMS and drops
     items shorter than 3 chars (e.g., the 'ab' planted in the fixture)."""

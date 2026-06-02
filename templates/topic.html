@@ -118,7 +118,13 @@
           <div class="flex items-center gap-2 mb-3">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">1</span>
             <h2 class="text-sm font-semibold text-slate-900">Research Question</h2>
-            <button @click="edit=!edit" class="ml-auto text-xs text-slate-400 hover:text-violet-600">✎ Edit</button>
+            <div class="ml-auto flex items-center gap-2">
+              {% if basics_undo %}
+              <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="Revert the last agent edit">↩ Undo</button></form>
+              {% endif %}
+              <button @click="aeditOpen=true; $nextTick(() => { var i=document.getElementById('t-aedit-instr'); if(i)i.value=''; var d=document.getElementById('t-aedit-diff'); if(d)d.innerHTML=''; })" class="text-xs text-violet-600 hover:underline">✎ with agent</button>
+              <button @click="edit=!edit" class="text-xs text-slate-400 hover:text-violet-600">Edit</button>
+            </div>
           </div>
           <div x-show="!edit" class="rounded-lg bg-slate-50 border border-slate-100 p-4">
             <p class="text-base font-medium text-slate-900 leading-snug">{{ t.question }}</p>
@@ -449,6 +455,27 @@
         </div>
       </div>
     </div>
+    {# Edit question with agent: instruction → propose (diff) → Apply/Discard #}
+    <div x-show="aeditOpen" x-cloak @keydown.escape.window="aeditOpen=false" @click.self="aeditOpen=false"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
+      <div class="bg-white rounded-xl shadow-xl w-[min(640px,95vw)] p-5">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="font-semibold">✎ Edit question with agent</h2>
+          <button type="button" @click="aeditOpen=false" class="text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+        <p class="text-sm text-slate-500 mb-3">Describe the change in plain language — the agent proposes a revision, and <b>nothing is written until you Apply</b>. (One LLM call; edits the current text only.)</p>
+        <form hx-post="/t/{{ t.slug }}/question/propose" hx-target="#t-aedit-diff" hx-swap="innerHTML" hx-disabled-elt="find button">
+          <textarea id="t-aedit-instr" name="instruction" rows="2" required
+                    placeholder="e.g. narrow the question to memory-module adaptation specifically"
+                    class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+          <div class="mt-2 flex items-center gap-2">
+            <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">Propose <span class="htmx-indicator">…</span></button>
+            <span class="text-[11px] text-slate-400">one LLM call · no tools</span>
+          </div>
+        </form>
+        <div id="t-aedit-diff" class="mt-3"></div>
+      </div>
+    </div>
     {# Manage collections #}
     <div x-show="manage" x-cloak @keydown.escape.window="manage=false" @click.self="manage=false"
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
@@ -583,7 +610,7 @@
       // tab + modal state for the v2 topic page
       tab: (function(){ try { return localStorage.getItem('pa.ttab') || 'overview'; } catch(e){ return 'overview'; } })(),
       q: "",
-      addHyp: false, viewAll: "", manage: false,
+      addHyp: false, viewAll: "", manage: false, aeditOpen: false,
       go(t) { this.tab = t; try { localStorage.setItem('pa.ttab', t); } catch(e){} },
       asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
       asstW: (function(){ try { return parseInt(localStorage.getItem('pa.tasstW') || '384', 10); } catch(e){ return 384; } })(),

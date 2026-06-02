@@ -1,0 +1,29 @@
+{# Agent section-edit proposal: before/after diff + Apply/Discard. Loaded via
+   HTMX into the edit modal body. Nothing is written until Apply. The Apply form
+   carries the proposed values as hidden fields (re-validated server-side).
+   apply_hx=True → hx-post into #left-panel (collection wiki); else a normal POST
+   (topic page, PRG). aeditOpen lives on the surrounding Alpine scope. #}
+{% if error %}
+<div class="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{{ error }}</div>
+<div class="mt-3 flex justify-end"><button type="button" @click="aeditOpen = false" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Close</button></div>
+{% else %}
+<p class="text-xs text-slate-500 mb-2">Review the proposed change — nothing is written until you click <b>Apply</b>.</p>
+<div class="space-y-3 max-h-[55vh] overflow-auto pr-1">
+  {% for r in rows %}
+  <div>
+    <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">{{ r.label }}</div>
+    {% if r.before|trim != r.after|trim %}
+    {% if r.before|trim %}<div class="rounded border border-rose-100 bg-rose-50/40 px-2 py-1.5 text-xs text-slate-500 line-through whitespace-pre-wrap">{{ r.before }}</div>{% endif %}
+    <div class="rounded border border-emerald-200 bg-emerald-50/50 px-2 py-1.5 text-xs text-slate-800 whitespace-pre-wrap {% if r.before|trim %}mt-1{% endif %}">{{ r.after or '(empty)' }}</div>
+    {% else %}
+    <div class="rounded border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-500 whitespace-pre-wrap">{{ r.after or '(empty)' }} <span class="text-[10px] text-slate-400">· unchanged</span></div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<form {% if apply_hx %}hx-post="{{ apply_action }}" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"{% else %}method="post" action="{{ apply_action }}"{% endif %} class="mt-3 flex justify-end gap-2">
+  {% for r in rows %}<input type="hidden" name="{{ r.field }}" value="{{ r.after }}">{% endfor %}
+  <button type="button" @click="aeditOpen = false" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Discard</button>
+  <button type="submit" @click="aeditOpen = false" class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700">Apply</button>
+</form>
+{% endif %}

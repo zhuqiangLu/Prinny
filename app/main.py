@@ -243,6 +243,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
         "stats": stats, "linked": linked,
+        "basics_undo": topic_view.has_basics_undo(slug),
         "gen_running": gen_running,
         "gen_label": topic_view.gen_stage_label(gen_job) if gen_running else "",
         "gen_collections": (gen_job or {}).get("n_collections", 0) if gen_running else 0,
@@ -348,6 +349,35 @@ def topic_lifecycle(slug: str, lifecycle: str = Form("")) -> RedirectResponse:
 @app.post("/t/{slug}/edit")
 def topic_edit(slug: str, question: str = Form(""), description: str = Form("")) -> RedirectResponse:
     topics_mod.update_basics(slug, question=question, description=description)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/question/propose", response_class=HTMLResponse)
+def topic_question_propose(request: Request, slug: str, instruction: str = Form("")) -> HTMLResponse:
+    """Agent proposes a question/description revision; returns the diff fragment."""
+    res = topic_view.propose_basics_edit(slug, instruction)
+    rows = []
+    if res.get("ok"):
+        cur, prop = res["current"], res["proposed"]
+        rows = [{"label": "Research question", "field": "question",
+                 "before": cur.get("question", ""), "after": prop.get("question", "")},
+                {"label": "Description", "field": "description",
+                 "before": cur.get("description", ""), "after": prop.get("description", "")}]
+    return templates.TemplateResponse(request, "_section_edit_diff.html", {
+        "error": None if res.get("ok") else res.get("error"), "rows": rows,
+        "apply_hx": False, "apply_action": f"/t/{slug}/question/apply"})
+
+
+@app.post("/t/{slug}/question/apply")
+def topic_question_apply(slug: str, question: str = Form(""),
+                         description: str = Form("")) -> RedirectResponse:
+    topic_view.apply_basics_edit(slug, question, description)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/question/undo")
+def topic_question_undo(slug: str) -> RedirectResponse:
+    topic_view.undo_basics_edit(slug)
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -1860,6 +1890,7 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "dup_count": len(library.find_duplicate_groups(slug)),
          "graveyard_count": library.graveyard_count(slug),
+         "thesis_undo": wiki.has_thesis_undo(slug),
          "draft_job": job,                       # active running job, or None
          "draft_initial_action": wiki._stage_message(job)["action"] if job else "",
          "draft_initial_subline": wiki._stage_message(job)["subline"] if job else "",
@@ -1953,6 +1984,43 @@ def wiki_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
     """Drop a candidate (delete the file). Re-render the panel."""
     _require_collection(slug)
     wiki.dismiss_belief(slug, cid)
+    return _wiki_panel(request, slug)
+
+
+_THESIS_LABELS = [("one_paragraph", "Thesis paragraph"), ("core_tension", "Core tension"),
+                  ("key_intuition", "Key intuition"), ("central_question", "Central question")]
+
+
+@app.post("/c/{slug}/wiki/thesis/propose", response_class=HTMLResponse)
+def wiki_thesis_propose(request: Request, slug: str, instruction: str = Form("")) -> HTMLResponse:
+    """Agent proposes a thesis revision from the instruction; returns the diff
+    fragment for the edit modal. Writes nothing."""
+    _require_collection(slug)
+    res = wiki.propose_thesis_edit(slug, instruction)
+    rows = []
+    if res.get("ok"):
+        cur, prop = res["current"], res["proposed"]
+        rows = [{"label": lbl, "field": k, "before": cur.get(k, ""), "after": prop.get(k, "")}
+                for k, lbl in _THESIS_LABELS]
+    return templates.TemplateResponse(request, "_section_edit_diff.html", {
+        "error": None if res.get("ok") else res.get("error"), "rows": rows,
+        "apply_hx": True, "apply_action": f"/c/{slug}/wiki/thesis/apply"})
+
+
+@app.post("/c/{slug}/wiki/thesis/apply", response_class=HTMLResponse)
+def wiki_thesis_apply(request: Request, slug: str, one_paragraph: str = Form(""),
+                      core_tension: str = Form(""), key_intuition: str = Form(""),
+                      central_question: str = Form("")) -> HTMLResponse:
+    _require_collection(slug)
+    wiki.apply_thesis_edit(slug, {"one_paragraph": one_paragraph, "core_tension": core_tension,
+                                  "key_intuition": key_intuition, "central_question": central_question})
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/thesis/undo", response_class=HTMLResponse)
+def wiki_thesis_undo(request: Request, slug: str) -> HTMLResponse:
+    _require_collection(slug)
+    wiki.undo_thesis_edit(slug)
     return _wiki_panel(request, slug)
 
 

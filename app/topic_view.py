@@ -18,6 +18,7 @@ Topics own no papers/notes/wiki — everything here references existing knowledg
 from __future__ import annotations
 
 import hashlib
+import json
 
 from . import agent_skills, graph as _graph, llm, topics
 from .wiki import _extract_json
@@ -248,6 +249,66 @@ def topic_graph_view(slug: str) -> dict | None:
                     seen.add(key)
                     edges.append({"source": a, "target": b})
     return {"nodes": nodes, "edges": edges}
+
+
+# ---- agent section editor for the topic Question/Description -----------------
+# Same safe loop as the wiki thesis editor: one-shot completion (no tools),
+# validators clamp it, UI diffs it, only Apply writes (with one-step undo).
+_BASICS_UNDO: dict[str, dict] = {}
+
+
+def propose_basics_edit(slug: str, instruction: str) -> dict:
+    """One LLM call → a revised question/description from the instruction.
+    Returns ``{ok, error, current, proposed}``; writes nothing."""
+    t = topics.get_topic(slug)
+    if not t:
+        return {"ok": False, "error": "Topic not found."}
+    instruction = (instruction or "").strip()
+    if not instruction:
+        return {"ok": False, "error": "Tell the agent what to change."}
+    cur = {"question": t["question"], "description": t.get("description", "")}
+    system = (agent_skills.skill_body("section-edit")
+              or "Revise the section's JSON per the instruction; same keys; change only "
+                 "what's asked; invent nothing. Output JSON only.")
+    user = ("SECTION: Research Topic question\n"
+            "SHAPE (return exactly these keys): {question, description}\n\n"
+            "CURRENT CONTENT (JSON):\n" + json.dumps(cur, ensure_ascii=False, indent=2) + "\n\n"
+            "USER INSTRUCTION:\n" + instruction + "\n")
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}])) or {}
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "The LLM call failed."}
+    q = (data.get("question") or "").strip()
+    if not q:
+        return {"ok": False, "error": "The agent dropped the question."}
+    proposed = {"question": q[:400], "description": (data.get("description") or "").strip()[:1000]}
+    return {"ok": True, "current": cur, "proposed": proposed}
+
+
+def apply_basics_edit(slug: str, question: str, description: str) -> dict:
+    t = topics.get_topic(slug)
+    if not t:
+        return {"ok": False, "error": "Topic not found."}
+    if not (question or "").strip():
+        return {"ok": False, "error": "The question can't be empty."}
+    _BASICS_UNDO[slug] = {"question": t["question"], "description": t.get("description", "")}
+    topics.update_basics(slug, question=question, description=description)
+    topics.log_event(slug, "edited", "question/description via agent")
+    return {"ok": True}
+
+
+def has_basics_undo(slug: str) -> bool:
+    return slug in _BASICS_UNDO
+
+
+def undo_basics_edit(slug: str) -> dict:
+    prev = _BASICS_UNDO.pop(slug, None)
+    if not prev:
+        return {"ok": False, "error": "Nothing to undo."}
+    topics.update_basics(slug, question=prev["question"], description=prev["description"])
+    topics.log_event(slug, "reverted", "question/description edit undone")
+    return {"ok": True}
 
 
 # ---- v2: generate the full scientific investigation (one LLM call) ----------

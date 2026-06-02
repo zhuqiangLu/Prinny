@@ -44,6 +44,11 @@
       <span class="text-violet-500">(from {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts.)</span>
       {% endif %}
     </span>
+    {% if thesis_undo %}
+    <form hx-post="/c/{{ slug }}/wiki/thesis/undo" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
+    </form>
+    {% endif %}
   </div>
 
   {# --- Section 1: Collection Thesis (+ Focus sidebar, threshold-gated) --- #}
@@ -54,6 +59,9 @@
       <div class="flex items-center gap-2 mb-3">
         {{ section_badge(1) }}
         <h2 class="text-lg font-semibold text-slate-900">Collection Thesis</h2>
+        <button type="button" title="Edit with agent"
+                @click="aeditOpen = true; $nextTick(() => { var i = document.getElementById('aedit-instr'); if (i) i.value = ''; var d = document.getElementById('aedit-diff'); if (d) d.innerHTML = ''; })"
+                class="ml-auto text-xs text-slate-400 hover:text-violet-600">✎ Edit with agent</button>
       </div>
       {% if overview.thesis.one_paragraph %}
       <p class="text-sm text-slate-700 leading-relaxed mb-3">{{ overview.thesis.one_paragraph }}</p>

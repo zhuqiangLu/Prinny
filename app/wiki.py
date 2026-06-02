@@ -764,6 +764,108 @@ def dismiss_belief(slug: str, candidate_id: str) -> bool:
     return True
 
 
+# --- Agent section editor (propose → diff → apply; reversible; no silent writes) ---
+# The user instructs a change in plain language; the agent re-emits the section's
+# structured content (one-shot completion, NO PDF/MCP tools — so a write-capable
+# path never roams untrusted content). Our validators clamp it, the UI shows a
+# diff, and only the user's Apply writes (with a one-step undo snapshot + log).
+
+def _thesis_history(slug: str) -> Path:
+    return _sections_dir(slug) / ".history" / "thesis.bak"
+
+
+def current_thesis(slug: str) -> dict | None:
+    """The thesis as the fielded dict (one_paragraph + 3 callouts), or None."""
+    p = _thesis_path(slug)
+    if not p.is_file():
+        return None
+    try:
+        _, body = frontmatter.parse(p.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    return _parse_thesis_body(body)
+
+
+def _concept_names(slug: str) -> list[str]:
+    if not _concepts_path(slug).is_file():
+        return []
+    try:
+        cs = json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or []
+        return [c.get("name", "") for c in cs if c.get("name")]
+    except (ValueError, OSError):
+        return []
+
+
+def propose_thesis_edit(slug: str, instruction: str) -> dict:
+    """One LLM call → a revised thesis from the user's instruction. Returns
+    ``{ok, error, current, proposed}``; writes nothing."""
+    cur = current_thesis(slug)
+    if cur is None:
+        return {"ok": False, "error": "No thesis to edit yet — draft the Field Model first."}
+    instruction = (instruction or "").strip()
+    if not instruction:
+        return {"ok": False, "error": "Tell the agent what to change."}
+
+    from . import agent_skills
+    system = (agent_skills.skill_body("section-edit")
+              or "Revise the section's JSON per the instruction; same keys; change only "
+                 "what's asked; invent nothing. Output JSON only.")
+    concepts = _concept_names(slug)
+    user = (
+        "SECTION: Collection Thesis\n"
+        "SHAPE (return exactly these keys): "
+        "{one_paragraph, core_tension, key_intuition, central_question}\n\n"
+        "CURRENT CONTENT (JSON):\n" + json.dumps(cur, ensure_ascii=False, indent=2) + "\n\n"
+        + (f"(For context, this collection's concepts: {', '.join(concepts[:20])}.)\n\n" if concepts else "")
+        + "USER INSTRUCTION:\n" + instruction + "\n")
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}])) or {}
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "The LLM call failed."}
+    th = data.get("thesis") if isinstance(data.get("thesis"), dict) else data
+    proposed = _validate_field_model({"thesis": th})["thesis"]
+    if not any(proposed.values()):
+        return {"ok": False, "error": "The agent returned nothing usable."}
+    return {"ok": True, "current": cur, "proposed": proposed}
+
+
+def apply_thesis_edit(slug: str, proposed: dict) -> dict:
+    """Apply a proposed thesis (snapshot current for undo, write, log). The
+    proposed dict is re-validated here (never trust the round-trip)."""
+    proposed = _validate_field_model({"thesis": proposed})["thesis"]
+    if not any(proposed.values()):
+        return {"ok": False, "error": "Empty edit."}
+    p = _thesis_path(slug)
+    if not p.is_file():
+        return {"ok": False, "error": "No thesis to edit."}
+    cur_text = p.read_text(encoding="utf-8")
+    meta, _ = frontmatter.parse(cur_text)
+    _thesis_history(slug).parent.mkdir(parents=True, exist_ok=True)
+    _thesis_history(slug).write_text(cur_text, encoding="utf-8")   # one-step undo
+    meta_extra = {k: meta.get(k) for k in ("paper_count", "pdfs_read", "pdfs_missing")
+                  if meta.get(k) is not None}
+    _write_thesis_page(slug, proposed, meta_extra)
+    _append_log(slug, "edited thesis via agent instruction",
+                json.dumps(proposed, ensure_ascii=False)[:500])
+    return {"ok": True}
+
+
+def has_thesis_undo(slug: str) -> bool:
+    return _thesis_history(slug).is_file()
+
+
+def undo_thesis_edit(slug: str) -> dict:
+    """Restore the thesis from the last agent-edit snapshot."""
+    bak = _thesis_history(slug)
+    if not bak.is_file():
+        return {"ok": False, "error": "Nothing to undo."}
+    _thesis_path(slug).write_text(bak.read_text(encoding="utf-8"), encoding="utf-8")
+    bak.unlink()
+    _append_log(slug, "undid last thesis agent edit", "")
+    return {"ok": True}
+
+
 # --- Benchmarks (method × benchmark performance table) ----------------------
 # Net-new extraction layer (2026-06-02). One LLM call reads the collection's
 # abstracts + PDF excerpts and pulls out reported benchmark numbers as
