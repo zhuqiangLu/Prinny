@@ -184,12 +184,14 @@ def topics_index(request: Request, error: str = "") -> HTMLResponse:
 
 @app.post("/topics")
 def topic_create(title: str = Form(""), question: str = Form(""),
+                 description: str = Form(""),
                  collections: list[str] = Form([])) -> RedirectResponse:
     try:
-        slug = topics_mod.create_topic(title, question, collections)
+        slug = topics_mod.create_topic(title, question, collections, description=description)
     except ValueError:
         return RedirectResponse("/topics?error=A+research+topic+needs+a+question.",
                                 status_code=303)
+    topics_mod.log_event(slug, "created", question.strip()[:200])
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -198,19 +200,47 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
     t = topics_mod.get_topic(slug)
     if not t:
         raise HTTPException(status_code=404, detail="Research topic not found")
-    relevant = topic_view.relevant_entities(t["slug"])
     thread_id = get_or_create_thread(f"topic:{t['slug']}", None)
     chat = [{"role": m["role"], "html": render_md(m["content"], "")}
             for m in get_messages(thread_id, limit=50)]
+
+    ev = t["evidence"]
+    stats = {"collections": len(t["collections"]),
+             "evidence": sum(1 for e in ev if e["kind"] != "missing"),
+             "hypotheses": len(t["hypotheses"]),
+             "unknowns": len(t["unknowns"]),
+             "experiments": len(t["experiments"])}
+    # Connected collections (Section 6): name + paper count + a relevance bar
+    # (share of this topic's grounded evidence drawn from that collection).
+    from collections import Counter
+    evc = Counter(e["collection"] for e in ev if e["collection"])
+    allc = {c["slug"]: c for c in library.list_collections(with_activity=True)}
+    max_ev = max([1] + list(evc.values()))
+    linked = []
+    for cs in t["collections"]:
+        c = allc.get(cs, {})
+        linked.append({"slug": cs, "name": c.get("name", cs),
+                       "papers": c.get("paper_count") or 0,
+                       "evidence": evc.get(cs, 0),
+                       "relevance_pct": round(100 * evc.get(cs, 0) / max_ev)})
     return templates.TemplateResponse(request, "topic.html", {
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
-        "relevant": relevant,
-        "reading": topic_view.suggested_reading(t["slug"]) if (relevant and relevant.get("analyzed")) else [],
-        "graph": topic_view.topic_graph_view(t["slug"]) if (relevant and relevant.get("analyzed")) else None,
+        "stats": stats, "linked": linked,
         "chat": chat,
         "model": load_config().get("model", ""),
     })
+
+
+@app.post("/t/{slug}/generate")
+def topic_generate(slug: str) -> RedirectResponse:
+    """Generate (or refresh) the full investigation — one LLM call over the
+    linked collections. Also backs the header's 'Find evidence' action."""
+    try:
+        topic_view.generate_investigation(slug)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.topics").exception("topic generate failed")
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.post("/t/{slug}/analyze")
@@ -272,6 +302,81 @@ def topic_chat_stream(slug: str, message: str = Form("")):
 @app.post("/t/{slug}/status")
 def topic_status(slug: str, status: str = Form("")) -> RedirectResponse:
     topics_mod.set_status(slug, status)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/lifecycle")
+def topic_lifecycle(slug: str, lifecycle: str = Form("")) -> RedirectResponse:
+    """v2 lifecycle: exploration / investigation / active / archived."""
+    topics_mod.set_lifecycle(slug, lifecycle)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/edit")
+def topic_edit(slug: str, question: str = Form(""), description: str = Form("")) -> RedirectResponse:
+    topics_mod.update_basics(slug, question=question, description=description)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+# --- v2 inquiry-list CRUD (assumptions / unknowns / experiments / notes / evidence) ---
+@app.post("/t/{slug}/assumptions")
+def topic_add_assumption(slug: str, text: str = Form("")) -> RedirectResponse:
+    topics_mod.add_assumption(slug, text)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/assumptions/{aid}/delete")
+def topic_del_assumption(slug: str, aid: int) -> RedirectResponse:
+    topics_mod.delete_assumption(slug, aid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/unknowns")
+def topic_add_unknown(slug: str, text: str = Form(""), priority: str = Form("medium")) -> RedirectResponse:
+    topics_mod.add_unknown(slug, text, priority)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/unknowns/{uid}/delete")
+def topic_del_unknown(slug: str, uid: int) -> RedirectResponse:
+    topics_mod.delete_unknown(slug, uid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/unknowns/{uid}/status")
+def topic_set_unknown(slug: str, uid: int, status: str = Form("")) -> RedirectResponse:
+    topics_mod.set_unknown(slug, uid, status=status)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/experiments")
+def topic_add_experiment(slug: str, title: str = Form(""), method: str = Form(""),
+                         metric: str = Form("")) -> RedirectResponse:
+    topics_mod.add_experiment(slug, title, method, metric)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/experiments/{eid}/delete")
+def topic_del_experiment(slug: str, eid: int) -> RedirectResponse:
+    topics_mod.delete_experiment(slug, eid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/notes")
+def topic_add_note(slug: str, body: str = Form("")) -> RedirectResponse:
+    topics_mod.add_note(slug, body)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/notes/{nid}/delete")
+def topic_del_note(slug: str, nid: int) -> RedirectResponse:
+    topics_mod.delete_note(slug, nid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/evidence/{eid}/delete")
+def topic_del_evidence(slug: str, eid: int) -> RedirectResponse:
+    topics_mod.delete_evidence(slug, eid)
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -1693,11 +1798,35 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     # panel level; the template renders structured data (thesis callouts,
     # landscape bullet lists, paper cards) directly via Jinja.
     overview = wiki.load_overview(slug, attention_since=attention_since)
+    benchmarks = wiki.load_benchmarks(slug)
+
+    # Header stat strip (Papers · Highlights · Notes · Connections). Cheap counts;
+    # 'Connections' reuses the structural graph's edge count from connection_view.
+    stats = None
+    if overview and not overview.get("needs_migration"):
+        cx = (overview.get("connections") or {}).get("overview") or {}
+        stats = {
+            "papers": len(overview.get("papers") or []),
+            "highlights": (overview.get("focus") or {}).get("highlights"),
+            "notes": (overview.get("focus") or {}).get("notes"),
+            "connections": cx.get("connections"),
+        }
+        # focus is threshold-gated (often None); fall back to direct counts so the
+        # strip always shows real numbers, not blanks.
+        if stats["highlights"] is None or stats["notes"] is None:
+            h, n = wiki.attention_counts(slug)
+            stats["highlights"], stats["notes"] = h, n
 
     return templates.TemplateResponse(
         request, "_wiki_panel.html",
         {"slug": slug,
          "overview": overview,
+         "benchmarks": benchmarks,
+         "stats": stats,
+         "col": library.get_collection(slug),
+         "collection_name": (library.get_collection(slug) or {}).get("name", slug),
+         "dup_count": len(library.find_duplicate_groups(slug)),
+         "graveyard_count": library.graveyard_count(slug),
          "draft_job": job,                       # active running job, or None
          "draft_initial_action": wiki._stage_message(job)["action"] if job else "",
          "draft_initial_subline": wiki._stage_message(job)["subline"] if job else "",
@@ -1791,6 +1920,18 @@ def wiki_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
     """Drop a candidate (delete the file). Re-render the panel."""
     _require_collection(slug)
     wiki.dismiss_belief(slug, cid)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/benchmarks/extract", response_class=HTMLResponse)
+def wiki_benchmarks_extract(request: Request, slug: str) -> HTMLResponse:
+    """Run the benchmark-extract LLM call synchronously (reads abstracts + PDF
+    excerpts, pulls reported numbers) and re-render the panel with the table."""
+    _require_collection(slug)
+    try:
+        wiki.extract_benchmarks(slug)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.wiki").exception("extract_benchmarks failed")
     return _wiki_panel(request, slug)
 
 

@@ -4,287 +4,466 @@
 {% block main_pad %}p-0{% endblock %}
 {% block main_inner %}h-full{% endblock %}
 {% block content %}
-{% set STATUS = {'exploring':'bg-violet-100 text-violet-700','active':'bg-emerald-100 text-emerald-700','answered':'bg-sky-100 text-sky-700','parked':'bg-slate-100 text-slate-500'} %}
+{% set HSTAT = {'supported':'bg-emerald-100 text-emerald-700','mixed':'bg-amber-100 text-amber-700','challenged':'bg-rose-100 text-rose-700','unknown':'bg-slate-100 text-slate-500'} %}
+{% set PRIO = {'high':'bg-rose-100 text-rose-700','medium':'bg-amber-100 text-amber-700','low':'bg-slate-100 text-slate-500'} %}
+{% set EXP = {'planned':'bg-slate-100 text-slate-600','running':'bg-sky-100 text-sky-700','done':'bg-emerald-100 text-emerald-700'} %}
+{% set gen = t.generated or {} %}
+{% set has_content = t.hypotheses or t.assumptions or t.evidence %}
 <style>
   .tc-dots{display:inline-flex;gap:4px}.tc-dots i{width:6px;height:6px;border-radius:9999px;background:#94a3b8;display:inline-block;animation:tcb 1s infinite}
   .tc-dots i:nth-child(2){animation-delay:.15s}.tc-dots i:nth-child(3){animation-delay:.3s}
   @keyframes tcb{0%,80%,100%{opacity:.3}40%{opacity:1}}
 </style>
 <div class="flex h-full" x-data="topicShell()">
-  {# ---- left: the topic content ---- #}
-  <div class="flex-1 min-w-0 overflow-y-auto px-6 py-6">
-  <div x-data="{ manage: false }" class="max-w-3xl mx-auto">
-  <a href="/topics" class="text-sm text-slate-500 hover:text-slate-900">← Research Topics</a>
+  {# ---- left: the topic content (header + tabs + panes) ---- #}
+  <div class="flex-1 min-w-0 overflow-y-auto">
 
-  <div class="flex items-start gap-3 mt-2 mb-4">
-    <div class="min-w-0 flex-1">
-      <h1 class="text-2xl font-semibold text-slate-900 leading-tight">{{ t.title }}</h1>
-    </div>
-    <form method="post" action="/t/{{ t.slug }}/status" class="shrink-0">
-      <select name="status" onchange="this.form.submit()"
-              class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600">
-        {% for s in ['exploring','active','answered','parked'] %}
-        <option value="{{ s }}" {{ 'selected' if t.status == s }}>{{ s }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    <form method="post" action="/t/{{ t.slug }}/delete" class="shrink-0"
-          onsubmit="return confirm('Delete this research topic? (collections and papers are untouched)')">
-      <button class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-500 hover:bg-rose-50 hover:text-rose-700">Delete</button>
-    </form>
-  </div>
-
-  {# === Section 1 — Question (the spine) === #}
-  <section class="rounded-xl border border-violet-200 bg-violet-50/50 p-5 mb-4">
-    <div class="text-[10px] font-semibold uppercase tracking-wide text-violet-400 mb-1">Question</div>
-    <p class="text-lg font-medium text-slate-900 leading-snug">{{ t.question }}</p>
-    {% if t.description %}<p class="text-sm text-slate-600 mt-2">{{ t.description }}</p>{% endif %}
-  </section>
-
-  {# === Section 2 — Evidence sources (collections; references only) === #}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <div class="flex items-center gap-2 mb-3">
-      <h2 class="text-base font-semibold text-slate-900">Evidence sources</h2>
-      <button @click="manage = !manage" class="ml-auto text-xs text-violet-600 hover:underline">Manage</button>
-    </div>
-    {% if sources %}
-    <div class="flex flex-wrap gap-2">
-      {% for s in sources %}
-      <div class="rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2">
-        {% if s.missing %}
-        <div class="text-sm text-slate-500">{{ s.name }} <span class="text-[10px] text-rose-500">(not found)</span></div>
-        {% else %}
-        <a href="/c/{{ s.slug }}" class="text-sm font-medium text-slate-800 hover:underline">{{ s.name }}</a>
-        <div class="text-[11px] text-slate-400">{{ s.n_papers }} papers</div>
-        {% endif %}
+    {# ===== HEADER (purple-tinted workspace header) ===== #}
+    <div class="bg-gradient-to-b from-violet-50 to-white border-b border-violet-100 px-6 pt-5">
+      <div class="text-sm text-slate-500 mb-2">
+        <a href="/topics" class="hover:text-slate-900">Research Topics</a>
+        <span class="text-slate-300 mx-1">›</span>
+        <span class="text-slate-700">{{ t.title }}</span>
       </div>
-      {% endfor %}
+      <div class="flex items-start gap-3 mb-2">
+        <div class="grid place-items-center w-12 h-12 rounded-xl bg-violet-100 text-2xl shrink-0">🔥</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <h1 class="text-2xl font-bold text-slate-900 leading-tight">{{ t.title }}</h1>
+            <form method="post" action="/t/{{ t.slug }}/lifecycle" class="shrink-0">
+              <select name="lifecycle" onchange="this.form.submit()"
+                      class="rounded-full border border-violet-200 bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+                {% for s, label in [('exploration','Exploration'),('investigation','Investigation'),('active','Active Project'),('archived','Archived')] %}
+                <option value="{{ s }}" {{ 'selected' if t.lifecycle == s }}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </div>
+          <p class="text-sm text-slate-600 mt-1">{{ t.question }}</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <form method="post" action="/t/{{ t.slug }}/generate" id="fe-form">
+            <button class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <span class="fe-idle">⌕ Find evidence</span>
+              <span class="fe-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Investigating…</span>
+            </button>
+          </form>
+          <style>#fe-form .fe-busy{display:none}#fe-form.htmx-request .fe-busy,#fe-form:has(button:active) .fe-busy{display:inline-flex}#fe-form:has(button:active) .fe-idle{display:none}</style>
+          <button @click="addHyp = true" class="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button>
+          <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+            <button @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50">⋯</button>
+            <div x-show="open" x-cloak class="absolute right-0 mt-1 w-52 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
+              {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
+              <form method="post" action="/t/{{ t.slug }}/generate" @submit="open=false"><button class="{{ mi }}">↻ Regenerate investigation</button></form>
+              <button @click="open=false; manage=true" class="{{ mi }}">⛓ Manage collections</button>
+              <form method="post" action="/t/{{ t.slug }}/delete" onsubmit="return confirm('Delete this research topic? (collections and papers are untouched)')"><button class="{{ mi }} text-rose-600 hover:bg-rose-50">🗑 Delete topic</button></form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# stat strip #}
+      <div class="flex items-center gap-6 text-sm flex-wrap pb-1">
+        {% for n, label, icon in [
+          (stats.collections,'Collections','⛓'), (stats.evidence,'Evidence papers','📄'),
+          (stats.hypotheses,'Hypotheses','🧪'), (stats.unknowns,'Unknowns','❓'),
+          (stats.experiments,'Experiments','⚗')] %}
+        <div><span class="font-semibold text-slate-900 tabular-nums">{{ n }}</span> <span class="text-slate-400">{{ icon }} {{ label }}</span></div>
+        {% endfor %}
+        <div class="ml-auto relative pb-1">
+          <input x-model="q" @keydown.enter="go('evidence')" type="search" placeholder="Search evidence…"
+                 class="w-52 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm">
+          <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">⌕</span>
+        </div>
+      </div>
+
+      {# tab bar #}
+      {% set TABS = [('overview','▢ Overview'),('hypotheses','🧪 Hypotheses'),('evidence','◈ Evidence'),('unknowns','❓ Unknowns'),('experiments','⚗ Experiments'),('notes','🗒 Notes'),('timeline','◷ Timeline')] %}
+      <div class="flex items-center gap-1 overflow-x-auto -mb-px">
+        {% for key, label in TABS %}
+        <button @click="go('{{ key }}')"
+                :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
+                class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>{# /header #}
+
+    <div class="px-6 py-6">
+    {% if not has_content %}
+    {# Empty investigation — prominent generate CTA #}
+    <div class="rounded-xl border border-violet-200 bg-violet-50/40 p-6 text-center max-w-2xl mx-auto">
+      <p class="text-base font-semibold text-slate-900">No investigation yet</p>
+      <p class="text-sm text-slate-600 mt-1">{% if t.collections %}Generate the scientific argument for this question — the agent reads your linked collections and drafts assumptions, hypotheses, evidence (for &amp; against), unknowns and candidate experiments.{% else %}Link at least one collection first, then generate. <button @click="manage=true" class="text-violet-700 underline">Manage collections</button>.{% endif %}</p>
+      {% if t.collections %}
+      <form method="post" action="/t/{{ t.slug }}/generate" class="mt-3">
+        <button class="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-medium hover:bg-violet-700">✦ Generate investigation</button>
+        <span class="ml-1 text-xs text-slate-400">one LLM pass over {{ t.collections|length }} collection{{ 's' if t.collections|length != 1 }}</span>
+      </form>
+      {% endif %}
     </div>
-    {% else %}
-    <p class="text-sm text-slate-500">No collections linked. <button @click="manage = true" class="text-violet-600 hover:underline">Link one</button> to draw evidence.</p>
     {% endif %}
 
-    <div x-show="manage" x-cloak class="mt-3 pt-3 border-t border-slate-100">
-      <form method="post" action="/t/{{ t.slug }}/collections">
-        <div class="max-h-40 overflow-y-auto space-y-1 mb-2">
-          {% for c in all_collections %}
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" name="collections" value="{{ c.slug }}" class="rounded border-slate-300"
-                   {{ 'checked' if c.slug in t.collections }}>
-            {{ c.name }} <span class="text-[11px] text-slate-400">{{ c.paper_count }} papers</span>
-          </label>
-          {% endfor %}
-        </div>
-        <button class="rounded-md bg-violet-600 px-3 py-1 text-sm text-white hover:bg-violet-700">Save sources</button>
-      </form>
-    </div>
-    <p class="mt-3 text-[11px] text-slate-400">Collections are evidence sources — this topic references them, it doesn't own their papers.</p>
-  </section>
+    {# ============================ OVERVIEW ============================ #}
+    <div x-show="tab==='overview'" class="space-y-4">
+      {% if has_content %}
+      {# Row 1: Question | Assumptions | Hypotheses #}
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        {# 1 — Research Question #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ edit: false }">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">1</span>
+            <h2 class="text-sm font-semibold text-slate-900">Research Question</h2>
+            <button @click="edit=!edit" class="ml-auto text-xs text-slate-400 hover:text-violet-600">✎ Edit</button>
+          </div>
+          <div x-show="!edit" class="rounded-lg bg-slate-50 border border-slate-100 p-4">
+            <p class="text-base font-medium text-slate-900 leading-snug">{{ t.question }}</p>
+            {% if t.description %}<p class="text-xs text-slate-500 mt-2">{{ t.description }}</p>{% endif %}
+          </div>
+          <form x-show="edit" x-cloak method="post" action="/t/{{ t.slug }}/edit" class="space-y-2">
+            <textarea name="question" rows="3" required class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">{{ t.question }}</textarea>
+            <textarea name="description" rows="2" placeholder="Description (optional)" class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs">{{ t.description }}</textarea>
+            <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
+              <button type="button" @click="edit=false" class="text-xs text-slate-400">Cancel</button></div>
+          </form>
+        </section>
 
-  {# === Section 3 — Relevant entities (seed → structural ranking) === #}
-  {% set KIND = {'problem':{'c':'bg-rose-50 text-rose-700 border-rose-200','dot':'#f43f5e','h':'Problems'},
-                 'method':{'c':'bg-sky-50 text-sky-700 border-sky-200','dot':'#0ea5e9','h':'Methods'},
-                 'concept':{'c':'bg-violet-50 text-violet-700 border-violet-200','dot':'#7c3aed','h':'Concepts'},
-                 'belief':{'c':'bg-amber-50 text-amber-800 border-amber-200','dot':'#f59e0b','h':'Beliefs'}} %}
-  {% set REL = {'high':'bg-emerald-100 text-emerald-700','medium':'bg-amber-100 text-amber-700','low':'bg-slate-100 text-slate-500'} %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <div class="flex items-center gap-2 mb-3">
-      <h2 class="text-base font-semibold text-slate-900">Relevant ideas</h2>
-      {% if relevant and (relevant.analyzed or relevant.n_candidates) %}
-      <form id="an-form" method="post" action="/t/{{ t.slug }}/analyze" class="ml-auto">
-        <button class="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100">
-          <span class="an-idle">{% if relevant.analyzed %}↻ Re-analyze{% else %}✦ Analyze relevance{% endif %}</span>
-          <span class="an-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Analyzing…</span>
-        </button>
-      </form>
-      <style>#an-form .an-busy{display:none}#an-form.htmx-request .an-busy,#an-form:has(button:active) .an-busy{display:inline-flex}#an-form:has(button:active) .an-idle{display:none}</style>
-      {% endif %}
-    </div>
+        {# 2 — Assumptions #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ add: false }">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">2</span>
+            <h2 class="text-sm font-semibold text-slate-900">Assumptions</h2>
+            <button @click="viewAll='assumptions'" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
+          </div>
+          <div class="space-y-2">
+            {% for a in t.assumptions[:3] %}
+            <div class="flex items-start gap-2">
+              <span class="text-[11px] font-semibold text-violet-500 mt-0.5 shrink-0">A{{ loop.index }}</span>
+              <p class="text-sm text-slate-700 leading-snug">{{ a.text }}</p>
+            </div>
+            {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+          </div>
+          <button @click="add=!add" class="mt-3 pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add assumption</button>
+          <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/assumptions" class="mt-2 flex gap-2">
+            <input name="text" required placeholder="A premise you're accepting" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
+            <button class="rounded bg-slate-900 text-white px-2 py-1 text-xs hover:bg-slate-700">Add</button>
+          </form>
+        </section>
 
-    {% if not relevant %}
-    <p class="text-sm text-slate-500">Link a collection above to derive the ideas relevant to your question.</p>
-    {% elif not relevant.analyzed %}
-      {% if relevant.n_candidates %}
-      <p class="text-sm text-slate-500">{{ relevant.n_candidates }} ideas across your linked collections. Click <b>✦ Analyze relevance</b> — the agent anchors your question to the most central ideas, then the graph ranks the rest.</p>
-      {% else %}
-      <p class="text-sm text-slate-500">Your linked collections have no extracted ideas yet. Open each collection and <b>↻ Regenerate</b> its wiki, then analyze.</p>
-      {% endif %}
-    {% else %}
-      {% if relevant.stale %}<p class="text-[11px] text-amber-600 mb-2">Question/hypotheses/collections changed since last analysis — ↻ Re-analyze to refresh.</p>{% endif %}
-      <div class="space-y-3">
-        {% for kind in ['problem','method','concept','belief'] %}
-        {% if relevant.grouped[kind] %}
-        <div>
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ KIND[kind].h }}</div>
-          <ul class="space-y-1">
-            {% for i in relevant.grouped[kind] %}
-            <li class="flex items-start gap-2 text-sm" title="{{ i.why }}">
-              <span class="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style="background:{{ KIND[kind].dot }}"></span>
-              <span class="text-slate-800">{{ i.label }}</span>
-              {% if i.is_seed %}<span class="text-[9px] rounded px-1 bg-violet-600 text-white" title="Seed: {{ i.why }}">anchor</span>{% endif %}
-              <span class="text-[10px] text-slate-400">{{ i.collection }}</span>
-              {% if i.why and not i.is_seed %}<span class="text-[11px] text-slate-400 truncate">· {{ i.why }}</span>{% endif %}
+        {# 3 — Hypotheses #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">3</span>
+            <h2 class="text-sm font-semibold text-slate-900">Hypotheses</h2>
+            <button @click="go('hypotheses')" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
+          </div>
+          <div class="space-y-2.5">
+            {% for h in t.hypotheses[:4] %}
+            <div class="flex items-start gap-2">
+              <span class="text-[11px] font-semibold text-violet-500 mt-0.5 shrink-0">H{{ loop.index }}</span>
+              <p class="flex-1 text-sm text-slate-700 leading-snug">{{ h.text }}</p>
+              <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HSTAT.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
+              <span class="shrink-0 text-[11px] text-slate-400 tabular-nums" title="{{ h.support_count }} support · {{ h.counter_count }} counter">👍{{ h.support_count }}</span>
+            </div>
+            {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+          </div>
+          <button @click="addHyp=true" class="mt-3 pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add hypothesis</button>
+        </section>
+      </div>
+
+      {# Row 2: Evidence Summary | Next Steps #}
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        {# 4 — Evidence Summary #}
+        <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">4</span>
+            <h2 class="text-sm font-semibold text-slate-900">Evidence Summary</h2>
+          </div>
+          {% set n_sup = t.evidence|selectattr('kind','equalto','supporting')|list|length %}
+          {% set n_cnt = t.evidence|selectattr('kind','equalto','counter')|list|length %}
+          {% set n_mis = t.evidence|selectattr('kind','equalto','missing')|list|length %}
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+              <div class="text-[11px] text-slate-500">Supporting</div>
+              <div class="text-2xl font-semibold text-emerald-600 tabular-nums">{{ n_sup }}</div>
+              <div class="text-[10px] text-slate-400">papers</div>
+            </button>
+            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+              <div class="text-[11px] text-slate-500">Counter</div>
+              <div class="text-2xl font-semibold text-rose-600 tabular-nums">{{ n_cnt }}</div>
+              <div class="text-[10px] text-slate-400">papers</div>
+            </button>
+            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+              <div class="text-[11px] text-slate-500">Missing</div>
+              <div class="text-2xl font-semibold text-amber-500 tabular-nums">{{ n_mis }}</div>
+              <div class="text-[10px] text-slate-400">gaps</div>
+            </button>
+            <div class="rounded-lg border border-slate-200 p-3">
+              <div class="text-[11px] text-slate-500">Confidence</div>
+              {% if gen.confidence %}
+              <div class="text-2xl font-semibold text-violet-600">{{ gen.confidence.label }}</div>
+              <div class="text-[10px] text-slate-400 tabular-nums">{{ '%.2f'|format(gen.confidence.score) }}</div>
+              {% else %}<div class="text-2xl font-semibold text-slate-300">—</div><div class="text-[10px] text-slate-400">no hypotheses</div>{% endif %}
+            </div>
+          </div>
+          <p class="mt-3 text-[10px] text-slate-400">Confidence is computed from hypothesis statuses (supported=1, mixed=.5, challenged=.15). Counts are evidence items, not a trend.</p>
+        </section>
+
+        {# 5 — Next Steps #}
+        <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">5</span>
+            <h2 class="text-sm font-semibold text-slate-900">Next Steps</h2>
+          </div>
+          {% if gen.next_steps %}
+          <ul class="space-y-2">
+            {% for s in gen.next_steps %}
+            <li class="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5">
+              <span class="text-violet-500 mt-0.5 shrink-0">◎</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm text-slate-800 leading-snug">{{ s.title }}</p>
+                {% if s.detail %}<p class="text-[11px] text-slate-400">{{ s.detail }}</p>{% endif %}
+              </div>
             </li>
             {% endfor %}
           </ul>
+          {% else %}<p class="text-sm text-slate-400">No next steps yet — generate the investigation.</p>{% endif %}
+        </section>
+      </div>
+
+      {# Row 3: Connected Collections | Key Terms #}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {# 6 — Connected Collections #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">6</span>
+            <h2 class="text-sm font-semibold text-slate-900">Connected Collections</h2>
+            <button @click="manage=true" class="ml-auto text-xs text-violet-600 hover:underline">Manage</button>
+          </div>
+          {% if linked %}
+          <ul class="space-y-2">
+            {% for c in linked %}
+            <li class="flex items-center gap-3">
+              <span class="text-slate-400 shrink-0">▤</span>
+              <a href="/c/{{ c.slug }}" class="text-sm font-medium text-slate-800 hover:underline shrink-0">{{ c.name }}</a>
+              <span class="text-[11px] text-slate-400 shrink-0">{{ c.papers }} papers</span>
+              <span class="ml-auto block w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden" title="{{ c.evidence }} evidence items from this collection">
+                <span class="block h-full bg-violet-400" style="width: {{ c.relevance_pct }}%"></span>
+              </span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="text-sm text-slate-400">No collections linked. <button @click="manage=true" class="text-violet-600 hover:underline">Link one</button>.</p>{% endif %}
+        </section>
+
+        {# 7 — Key Terms #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">7</span>
+            <h2 class="text-sm font-semibold text-slate-900">Key Terms</h2>
+          </div>
+          {% if gen.key_terms %}
+          <div class="flex flex-wrap gap-1.5">
+            {% for k in gen.key_terms %}<span class="text-xs rounded-md px-2 py-1 bg-violet-50 text-violet-700 border border-violet-100">{{ k }}</span>{% endfor %}
+          </div>
+          {% else %}<p class="text-sm text-slate-400">No key terms yet.</p>{% endif %}
+        </section>
+      </div>
+      {% endif %}
+    </div>{# /overview #}
+
+    {# ============================ HYPOTHESES ============================ #}
+    <div x-show="tab==='hypotheses'" x-cloak class="space-y-3">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧪</span> Hypotheses
+        <button @click="addHyp=true" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button></h2>
+      {% for h in t.hypotheses %}
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <div class="flex items-start gap-3">
+          <span class="text-sm font-semibold text-violet-500 mt-0.5 shrink-0">H{{ loop.index }}</span>
+          <p class="flex-1 text-sm text-slate-800 leading-snug">{{ h.text }}</p>
+          <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HSTAT.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
+          <span class="shrink-0 text-[11px] text-emerald-600 tabular-nums" title="supporting">👍{{ h.support_count }}</span>
+          <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="counter">👎{{ h.counter_count }}</span>
+          <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button></form>
+        </div>
+        {% set evs = t.evidence|selectattr('hypothesis_id','equalto',h.id)|list %}
+        {% if evs %}
+        <div class="mt-2 pl-7 space-y-1">
+          {% for e in evs %}
+          <div class="flex items-start gap-1.5 text-[12px]">
+            <span class="shrink-0">{% if e.kind=='supporting' %}<span class="text-emerald-600">＋</span>{% elif e.kind=='counter' %}<span class="text-rose-600">－</span>{% else %}<span class="text-amber-500">?</span>{% endif %}</span>
+            <span class="text-slate-600">{{ e.claim }}</span>
+            {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="text-violet-600 hover:underline shrink-0">[paper]</a>{% endif %}
+          </div>
+          {% endfor %}
         </div>
         {% endif %}
+      </div>
+      {% else %}<p class="text-sm text-slate-400">No hypotheses yet — use Find evidence to generate them, or add your own.</p>{% endfor %}
+    </div>
+
+    {# ============================ EVIDENCE ============================ #}
+    <div x-show="tab==='evidence'" x-cloak>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-1"><span>◈</span> Evidence</h2>
+      <p class="text-xs text-slate-500 mb-3">Each item is a <b>claim</b> tied to a paper (or a gap). Supporting / Counter cite real papers from your linked collections; Missing drives discovery.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        {% for col, kind, tint in [('Supporting Evidence','supporting','emerald'),('Counter Evidence','counter','rose'),('Missing Evidence','missing','amber')] %}
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <h3 class="text-sm font-semibold text-{{ tint }}-700 mb-2 pb-1.5 border-b border-slate-100">{{ col }}</h3>
+          <div class="space-y-2">
+            {% for e in t.evidence if e.kind == kind %}
+            <div class="rounded-lg border border-{{ tint }}-100 bg-{{ tint }}-50/40 p-2.5 group"
+                 data-s="{{ (e.claim ~ ' ' ~ (e.paper_title or ''))|lower }}"
+                 x-show="q.trim()==='' || $el.dataset.s.includes(q.trim().toLowerCase())">
+              <div class="flex items-start gap-1.5">
+                <p class="flex-1 text-[13px] text-slate-700 leading-snug">{{ e.claim }}</p>
+                <form method="post" action="/t/{{ t.slug }}/evidence/{{ e.id }}/delete" class="shrink-0 opacity-0 group-hover:opacity-100"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">{{ (e.paper_title or 'paper')|truncate(32) }}</a>{% endif %}
+                {% if e.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == e.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
+              </div>
+            </div>
+            {% else %}<p class="text-[12px] text-slate-400">None.</p>{% endfor %}
+          </div>
+        </div>
         {% endfor %}
       </div>
-    {% endif %}
+    </div>
 
-    {# External methods — relevant ideas MISSING from the linked collections #}
-    {% if relevant and relevant.external %}
-    <div class="mt-4 pt-3 border-t border-slate-100">
-      <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Potentially relevant · missing from your collections</div>
-      <ul class="space-y-1.5">
-        {% for e in relevant.external %}
-        <li class="text-sm">
-          <span class="font-medium text-slate-800">{{ e.name }}</span>
-          <span class="text-[9px] rounded px-1 {{ REL.get(e.relevance,'bg-slate-100 text-slate-500') }}">{{ e.relevance }}</span>
-          <a href="https://arxiv.org/abs/?searchtype=all&query={{ (e.name ~ ' ' ~ t.question)|urlencode }}" target="_blank" rel="noopener" class="text-[11px] text-violet-600 hover:underline">explore arXiv ↗</a>
-          {% if e.reason %}<div class="text-[12px] text-slate-500">{{ e.reason }}</div>{% endif %}
+    {# ============================ UNKNOWNS ============================ #}
+    <div x-show="tab==='unknowns'" x-cloak class="space-y-3" x-data="{ add: false }">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>❓</span> Unknowns
+        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add unknown</button></h2>
+      <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/unknowns" class="flex gap-2">
+        <input name="text" required placeholder="An open research question" class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <select name="priority" class="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-600"><option value="high">high</option><option value="medium" selected>medium</option><option value="low">low</option></select>
+        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add</button>
+      </form>
+      {% for u in t.unknowns %}
+      <div class="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3">
+        <span class="text-violet-400 mt-0.5 shrink-0">?</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-slate-800 leading-snug">{{ u.text }}</p>
+          <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span class="rounded px-1.5 py-0.5 {{ PRIO.get(u.priority,'bg-slate-100 text-slate-500') }}">{{ u.priority }} priority</span>
+            <span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">{{ u.status }}</span>
+            {% if u.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == u.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
+          </div>
+        </div>
+        <form method="post" action="/t/{{ t.slug }}/unknowns/{{ u.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+      </div>
+      {% else %}<p class="text-sm text-slate-400">No unknowns yet — what does this investigation still need to answer?</p>{% endfor %}
+    </div>
+
+    {# ============================ EXPERIMENTS ============================ #}
+    <div x-show="tab==='experiments'" x-cloak class="space-y-3" x-data="{ add: false }">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚗</span> Experiments
+        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add experiment</button></h2>
+      <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/experiments" class="rounded-lg border border-slate-200 p-3 space-y-2">
+        <input name="title" required placeholder="Experiment title (e.g. Adapt memory module only)" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <input name="method" placeholder="Method / setup" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <div class="flex gap-2"><input name="metric" placeholder="Metric (e.g. LongVideoBench)" class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
+          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add</button></div>
+      </form>
+      {% for x in t.experiments %}
+      <div class="rounded-xl border border-slate-200 bg-white p-4">
+        <div class="flex items-start gap-2">
+          <span class="text-slate-400 mt-0.5 shrink-0">⚗</span>
+          <p class="flex-1 text-sm font-medium text-slate-800">{{ x.title }}</p>
+          <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
+          <form method="post" action="/t/{{ t.slug }}/experiments/{{ x.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+        </div>
+        <div class="mt-1.5 pl-6 text-[12px] text-slate-600 space-y-0.5">
+          {% if x.method %}<div><span class="text-slate-400">Method:</span> {{ x.method }}</div>{% endif %}
+          {% if x.metric %}<div><span class="text-slate-400">Measure:</span> {{ x.metric }}</div>{% endif %}
+          {% if x.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == x.hypothesis_id %}<div><span class="text-slate-400">Tests:</span> <span class="text-violet-700">H{{ loop.index }}</span></div>{% endif %}{% endfor %}{% endif %}
+        </div>
+      </div>
+      {% else %}<p class="text-sm text-slate-400">No experiments yet — lightweight candidate studies that would test a hypothesis.</p>{% endfor %}
+    </div>
+
+    {# ============================ NOTES ============================ #}
+    <div x-show="tab==='notes'" x-cloak class="space-y-3">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🗒</span> Notes</h2>
+      <form method="post" action="/t/{{ t.slug }}/notes" class="space-y-2">
+        <textarea name="body" rows="3" required placeholder="A note on this investigation…" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add note</button>
+      </form>
+      {% for n in t.notes %}
+      <div class="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3">
+        <div class="flex-1 min-w-0"><p class="text-sm text-slate-700 whitespace-pre-wrap">{{ n.body }}</p>
+          <div class="text-[10px] text-slate-400 mt-1">{{ n.created_at }}</div></div>
+        <form method="post" action="/t/{{ t.slug }}/notes/{{ n.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+      </div>
+      {% else %}<p class="text-sm text-slate-400">No notes yet.</p>{% endfor %}
+    </div>
+
+    {# ============================ TIMELINE ============================ #}
+    <div x-show="tab==='timeline'" x-cloak class="space-y-3">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◷</span> Timeline</h2>
+      {% if t.timeline %}
+      <ol class="relative border-l border-slate-200 ml-2 space-y-4">
+        {% for ev in t.timeline %}
+        <li class="ml-4">
+          <span class="absolute -left-1.5 w-3 h-3 rounded-full bg-violet-400 border-2 border-white"></span>
+          <div class="text-sm text-slate-800 capitalize">{{ ev.event|replace('_',' ') }}</div>
+          {% if ev.detail %}<div class="text-[12px] text-slate-500">{{ ev.detail }}</div>{% endif %}
+          <div class="text-[10px] text-slate-400">{{ ev.created_at }}</div>
         </li>
         {% endfor %}
-      </ul>
-      <p class="mt-2 text-[10px] text-slate-400">Cross-pollination: ideas your linked collections don't cover but the question needs. Add a collection that has them, or explore arXiv.</p>
+      </ol>
+      {% else %}<p class="text-sm text-slate-400">No events yet.</p>{% endif %}
     </div>
-    {% endif %}
-  </section>
+    </div>{# /px-6 panes #}
 
-  {# === Section 4 — Hypotheses (first-class, may be ungrounded) === #}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <h2 class="text-base font-semibold text-slate-900 mb-3">Hypotheses</h2>
-    {% if t.hypotheses %}
-    <ul class="space-y-2 mb-3">
-      {% for h in t.hypotheses %}
-      <li class="flex items-start gap-2 group">
-        <span class="mt-0.5 text-[11px] font-semibold text-violet-500 shrink-0">H{{ loop.index }}</span>
-        <span class="flex-1 text-sm text-slate-700">{{ h.text }}</span>
-        <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0">
-          <button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button>
+    {# ===== modals ===== #}
+    {# Add hypothesis #}
+    <div x-show="addHyp" x-cloak @keydown.escape.window="addHyp=false" @click.self="addHyp=false"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24">
+      <div class="bg-white rounded-xl shadow-xl w-[min(540px,95vw)] p-5">
+        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">Add hypothesis</h2><button @click="addHyp=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <form method="post" action="/t/{{ t.slug }}/hypotheses" class="space-y-2">
+          <textarea name="text" rows="2" required placeholder="A testable claim, e.g. online adaptation improves evidence retention" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+          <div class="flex justify-end"><button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700">Add hypothesis</button></div>
         </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-sm text-slate-400 mb-3">No hypotheses yet — claims you're testing in this investigation (they don't need citations).</p>
-    {% endif %}
-    <form method="post" action="/t/{{ t.slug }}/hypotheses" class="flex gap-2">
-      <input name="text" required placeholder="A claim you're testing, e.g. online adaptation improves evidence retention"
-             class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
-      <button class="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add</button>
-    </form>
-  </section>
-
-  {# === Section 5 — Open questions === #}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <div class="flex items-center gap-2 mb-3">
-      <h2 class="text-base font-semibold text-slate-900">Open questions</h2>
-      <form method="post" action="/t/{{ t.slug }}/questions/suggest" class="ml-auto">
-        <button class="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100" title="Agent drafts sub-questions from your question + relevant ideas">✦ Suggest questions</button>
-      </form>
-    </div>
-    {% if t.questions %}
-    <ul class="space-y-2 mb-3">
-      {% for q in t.questions %}
-      <li class="flex items-start gap-2">
-        <span class="mt-0.5 text-violet-400 shrink-0">?</span>
-        <span class="flex-1 text-sm text-slate-700">{{ q.text }}</span>
-        {% if q.source == 'agent' %}<span class="text-[9px] rounded px-1 bg-violet-50 text-violet-500">agent</span>{% endif %}
-        <form method="post" action="/t/{{ t.slug }}/questions/{{ q.id }}/delete" class="shrink-0">
-          <button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button>
-        </form>
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
-    <form method="post" action="/t/{{ t.slug }}/questions" class="flex gap-2">
-      <input name="text" required placeholder="A sub-question to investigate, e.g. how expensive is TTT at inference?"
-             class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
-      <button class="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add</button>
-    </form>
-  </section>
-
-  {# === Section 6 — Suggested reading (structural; from relevant entities) === #}
-  {% if reading %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <h2 class="text-base font-semibold text-slate-900 mb-3">Suggested reading</h2>
-    <ul class="space-y-2">
-      {% for r in reading %}
-      <li class="flex items-start gap-2">
-        <span class="text-violet-400 mt-0.5 shrink-0">▸</span>
-        <div class="min-w-0">
-          <a href="/c/{{ r.collection }}/p/{{ r.id }}" class="text-sm font-medium text-violet-700 hover:underline">{{ r.title|truncate(80) }}</a>
-          <div class="text-[12px] text-slate-500">{{ r.why }}</div>
-        </div>
-      </li>
-      {% endfor %}
-    </ul>
-    <p class="mt-2 text-[10px] text-slate-400">Ranked by how many of your relevant ideas each paper anchors — grounded, not asserted.</p>
-  </section>
-  {% endif %}
-
-  {# === Topic graph — question (center) → relevant ideas, ringed by relevance === #}
-  {% if graph and graph.nodes %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ open: false }">
-    <button type="button" @click="open = !open; if (open) $nextTick(() => window.tgRender && window.tgRender())"
-            class="inline-flex items-center gap-1 text-sm font-semibold text-slate-900">
-      <span x-text="open ? '▾' : '▸'"></span> Topic map
-      <span class="text-[11px] font-normal text-slate-400">({{ graph.nodes|length - 1 }} ideas)</span>
-    </button>
-    <div x-show="open" x-cloak class="mt-2">
-      <div class="flex items-center gap-2 mb-1.5 text-[9px] text-slate-500">
-        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0f172a"></span>question</span>
-        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
-        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
-        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
-        <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
       </div>
-      <div id="tg-cyto" class="rounded-lg border border-slate-200 bg-white" style="height:420px;"
-           data-graph='{{ graph | tojson }}'></div>
-      <p class="mt-1.5 text-[10px] text-slate-400">Center = your question; inner ring = anchor ideas; outer ring = related. Edges = question→anchors and ideas that share papers. Position = relevance, not flow.</p>
     </div>
-    <script>
-      window.tgRender = function () {
-        var el = document.getElementById("tg-cyto");
-        if (!el || typeof cytoscape !== "function" || el.dataset.init) return;
-        if (!el.clientWidth) { requestAnimationFrame(window.tgRender); return; }
-        var data; try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
-        el.dataset.init = "1";
-        var COLOR = {question:"#0f172a", problem:"#f43f5e", method:"#0ea5e9", concept:"#7c3aed", belief:"#f59e0b"};
-        var els = [];
-        data.nodes.forEach(function (n) {
-          els.push({data: {id: n.id, label: n.label, kind: n.kind, ring: n.ring}});
-        });
-        data.edges.forEach(function (e) {
-          els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target}});
-        });
-        var cy = cytoscape({
-          container: el, elements: els,
-          style: [
-            {selector: "node", style: {
-              "background-color": function (n) { return COLOR[n.data("kind")] || "#94a3b8"; },
-              "label": "data(label)", "font-size": 8, "color": "#334155",
-              "text-wrap": "ellipsis", "text-max-width": 90,
-              "width": function (n) { return n.data("kind") === "question" ? 22 : (n.data("ring") === 1 ? 16 : 12); },
-              "height": function (n) { return n.data("kind") === "question" ? 22 : (n.data("ring") === 1 ? 16 : 12); },
-              "text-valign": "bottom", "text-margin-y": 2}},
-            {selector: "node[kind = 'question']", style: {"shape": "round-rectangle", "font-weight": "bold", "text-max-width": 160}},
-            {selector: "edge", style: {"width": 1, "line-color": "#cbd5e1", "curve-style": "haystack", "opacity": 0.6}},
-            {selector: ".dim", style: {"opacity": 0.12}},
-          ],
-          layout: {name: "concentric", concentric: function (n) { return 3 - (n.data("ring") || 2); },
-                   levelWidth: function () { return 1; }, minNodeSpacing: 24, padding: 14},
-        });
-        cy.on("mouseover", "node", function (evt) { var k = evt.target.closedNeighborhood(); cy.elements().not(k).addClass("dim"); });
-        cy.on("mouseout", "node", function () { cy.elements().removeClass("dim"); });
-        cy.resize(); cy.fit(undefined, 20);
-      };
-    </script>
-  </section>
-  {% endif %}
-  </div>{# /max-w-3xl content #}
+    {# View-all assumptions #}
+    <div x-show="viewAll==='assumptions'" x-cloak @keydown.escape.window="viewAll=''" @click.self="viewAll=''"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+      <div class="bg-white rounded-xl shadow-xl w-[min(620px,95vw)] max-h-[85vh] overflow-auto p-5">
+        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">Assumptions</h2><button @click="viewAll=''" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <div class="space-y-2">
+          {% for a in t.assumptions %}
+          <div class="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/40 p-3 group">
+            <span class="text-[11px] font-semibold text-violet-500 mt-0.5 shrink-0">A{{ loop.index }}</span>
+            <p class="flex-1 text-sm text-slate-700">{{ a.text }}</p>
+            <form method="post" action="/t/{{ t.slug }}/assumptions/{{ a.id }}/delete" class="shrink-0 opacity-0 group-hover:opacity-100"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+          </div>
+          {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+    {# Manage collections #}
+    <div x-show="manage" x-cloak @keydown.escape.window="manage=false" @click.self="manage=false"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+      <div class="bg-white rounded-xl shadow-xl w-[min(520px,95vw)] p-5">
+        <div class="flex items-center justify-between mb-1"><h2 class="font-semibold">Linked collections</h2><button @click="manage=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <p class="text-xs text-slate-500 mb-3">Collections are evidence sources — this topic references them, it never owns their papers.</p>
+        <form method="post" action="/t/{{ t.slug }}/collections">
+          <div class="max-h-72 overflow-y-auto space-y-1 mb-3">
+            {% for c in all_collections %}
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" name="collections" value="{{ c.slug }}" class="rounded border-slate-300" {{ 'checked' if c.slug in t.collections }}>
+              {{ c.name }} <span class="text-[11px] text-slate-400">{{ c.paper_count }} papers</span>
+            </label>
+            {% endfor %}
+          </div>
+          <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-3 py-1.5 text-sm text-white hover:bg-violet-700">Save & close</button></div>
+        </form>
+      </div>
+    </div>
+
   </div>{# /left scroll column #}
 
   {# reopen tab when the assistant is collapsed #}
@@ -342,6 +521,11 @@
   // Resizable + collapsible assistant pane (mirrors the collection's lever).
   function topicShell() {
     return {
+      // tab + modal state for the v2 topic page
+      tab: (function(){ try { return localStorage.getItem('pa.ttab') || 'overview'; } catch(e){ return 'overview'; } })(),
+      q: "",
+      addHyp: false, viewAll: "", manage: false,
+      go(t) { this.tab = t; try { localStorage.setItem('pa.ttab', t); } catch(e){} },
       asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
       asstW: (function(){ try { return parseInt(localStorage.getItem('pa.tasstW') || '384', 10); } catch(e){ return 384; } })(),
       setAsst(v) { this.asstOpen = v; try { localStorage.setItem('pa.tasst', v ? 'open' : 'closed'); } catch(e){} },

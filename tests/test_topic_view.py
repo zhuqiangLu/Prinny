@@ -85,3 +85,42 @@ def test_no_collections_returns_none(topicdb):
     slug = topics.create_topic("T", "Q?")              # no linked collections
     assert topic_view.relevant_entities(slug) is None
     assert topic_view.analyze(slug).get("error")
+
+
+def test_generate_investigation_grounds_and_persists(topicdb, monkeypatch):
+    """The big v2 generation: evidence must cite a real linked-collection paper
+    (ungrounded dropped), hypotheses carry agent status, confidence is computed."""
+    slug = topics.create_topic("T", "Can TTT improve long-video reasoning?", collections=["vlms"])
+    _, refmap = topic_view._topic_digest(["vlms"])
+    assert refmap                                       # the vlms field model has papers
+    ref = next(iter(refmap))
+    payload = {
+        "assumptions": ["A premise."],
+        "hypotheses": [{"statement": "First is supported.", "status": "supported",
+                        "support_count": 2, "counter_count": 0},
+                       {"statement": "Second is mixed.", "status": "mixed",
+                        "support_count": 1, "counter_count": 1}],
+        "supporting_evidence": [{"claim": "Grounded claim.", "paper": ref, "hypothesis": "H1"},
+                                {"claim": "Ungrounded — drop me.", "paper": "NOPE", "hypothesis": "H1"}],
+        "counter_evidence": [{"claim": "A counter.", "paper": ref, "hypothesis": "H2"}],
+        "missing_evidence": [{"claim": "A gap.", "hypothesis": "H1"}],
+        "unknowns": [{"question": "An unknown?", "priority": "high", "hypothesis": "H2"}],
+        "experiments": [{"title": "Exp", "method": "m", "metric": "x", "hypothesis": "H2"}],
+        "next_steps": [{"title": "Do X", "detail": "why"}],
+        "key_terms": ["Alpha", "Beta"],
+    }
+    monkeypatch.setattr(topic_view.llm, "complete", lambda *a, **k: json.dumps(payload))
+    res = topic_view.generate_investigation(slug)
+    assert res["ok"] is True
+
+    t = topics.get_topic(slug)
+    assert len(t["assumptions"]) == 1 and len(t["hypotheses"]) == 2
+    kinds = [e["kind"] for e in t["evidence"]]
+    assert kinds.count("supporting") == 1               # the ungrounded one was dropped (the gate)
+    assert kinds.count("counter") == 1 and kinds.count("missing") == 1
+    sup = next(e for e in t["evidence"] if e["kind"] == "supporting")
+    assert sup["paper_id"] and sup["collection"] == "vlms"      # resolved to a real paper
+    assert t["hypotheses"][0]["status"] == "supported"
+    assert t["generated"]["confidence"]["label"] == "High"     # mean(1, .5) = .75
+    assert t["generated"]["key_terms"] == ["Alpha", "Beta"]
+    assert any(e["hypothesis_id"] for e in t["evidence"])       # linked to a hypothesis

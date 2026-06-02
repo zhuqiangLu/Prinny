@@ -250,6 +250,192 @@ def topic_graph_view(slug: str) -> dict | None:
     return {"nodes": nodes, "edges": edges}
 
 
+# ---- v2: generate the full scientific investigation (one LLM call) ----------
+
+_HYP_STATUS = ("supported", "mixed", "challenged", "unknown")
+_INVEST_PAPERS_PER_COLLECTION = 40
+_INVEST_ABSTRACT_CHARS = 320
+
+
+def _topic_digest(collections: list[str]) -> tuple[str, dict]:
+    """Build the generation input: each linked collection's field summary + its
+    papers (cited by [ref]). Returns ``(digest, refmap)`` where refmap maps a
+    paper ref → {paper_id, collection, title} (the grounding gate for evidence)."""
+    from . import wiki
+    blocks, refmap = [], {}
+    for slug in collections:
+        try:
+            field = wiki._add_seed(slug)
+        except Exception:  # noqa: BLE001
+            field = ""
+        try:
+            papers = wiki._collection_abstracts(slug)[:_INVEST_PAPERS_PER_COLLECTION]
+        except Exception:  # noqa: BLE001
+            papers = []
+        lines = [f"=== COLLECTION: {slug} ==="]
+        if field:
+            lines.append(field)
+        if papers:
+            lines.append("PAPERS (cite by the [ref] token):")
+            for p in papers:
+                ref = p.get("ref")
+                if not ref:
+                    continue
+                refmap[ref] = {"paper_id": p["id"], "collection": slug, "title": p.get("title", "")}
+                ab = (p.get("abstract") or "").strip()[:_INVEST_ABSTRACT_CHARS]
+                lines.append(f"[{ref}] {p.get('title','')}" + (f" — {ab}" if ab else ""))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks), refmap
+
+
+def _confidence(hypotheses: list[dict]) -> dict | None:
+    """Deterministic overall confidence from the agent-assigned hypothesis
+    statuses: supported=1, mixed=.5, challenged=.15, unknown ignored. Mean →
+    {score, label}. None when there's nothing decided yet."""
+    w = {"supported": 1.0, "mixed": 0.5, "challenged": 0.15}
+    vals = [w[h["status"]] for h in hypotheses if h.get("status") in w]
+    if not vals:
+        return None
+    score = round(sum(vals) / len(vals), 2)
+    label = "High" if score >= 0.66 else ("Medium" if score >= 0.4 else "Low")
+    return {"score": score, "label": label}
+
+
+def generate_investigation(slug: str) -> dict:
+    """One LLM call → the full scientific investigation (assumptions, hypotheses
+    with status/counts, supporting/counter/missing evidence, unknowns, candidate
+    experiments, next steps, key terms), written directly into the topic.
+
+    The grounding gate is enforced in code: supporting/counter evidence MUST cite
+    a paper ref that exists in a linked collection; anything ungrounded is dropped
+    (the agent is told to express un-citable gaps as 'missing' evidence instead).
+    Returns ``{ok, error, counts}``."""
+    t = topics.get_topic(slug)
+    if not t:
+        return {"ok": False, "error": "Topic not found."}
+    if not t["collections"]:
+        return {"ok": False, "error": "Link at least one collection first."}
+    digest, refmap = _topic_digest(t["collections"])
+    if not digest.strip():
+        return {"ok": False, "error": "Linked collections have no papers/field model yet."}
+
+    valid_refs = "\n".join(f"- {r}" for r in list(refmap)[:120]) or "(none)"
+    user = (f"RESEARCH QUESTION:\n{t['question']}\n\n"
+            + (f"DESCRIPTION:\n{t['description']}\n\n" if t.get("description") else "")
+            + "LINKED COLLECTIONS (field summaries + papers):\n\n" + digest
+            + "\n\nVALID PAPER REFS (cite evidence ONLY with these exact tokens):\n"
+            + valid_refs)
+    system = (agent_skills.skill_body("topic-investigate")
+              or 'Output STRICT JSON: {assumptions:[".."], hypotheses:[{statement,status,'
+                 'support_count,counter_count}], supporting_evidence:[{claim,paper,hypothesis}],'
+                 'counter_evidence:[{claim,paper,hypothesis}], missing_evidence:[{claim,hypothesis}],'
+                 'unknowns:[{question,priority,hypothesis}], experiments:[{title,method,metric,'
+                 'hypothesis}], next_steps:[{title,detail}], key_terms:[".."]}.')
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}])) or {}
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "The LLM call failed."}
+
+    # --- validate + ground -------------------------------------------------
+    assumptions = [str(a).strip()[:300] for a in (data.get("assumptions") or []) if str(a).strip()][:8]
+
+    hypotheses = []
+    for h in (data.get("hypotheses") or [])[:10]:
+        if not isinstance(h, dict):
+            continue
+        text = (h.get("statement") or h.get("text") or "").strip()
+        if len(text) < 8:
+            continue
+        status = h.get("status") if h.get("status") in _HYP_STATUS else "unknown"
+        hypotheses.append({"text": text[:400], "status": status,
+                           "support_count": max(0, int(h.get("support_count", 0) or 0)),
+                           "counter_count": max(0, int(h.get("counter_count", 0) or 0))})
+
+    def _hyp_index(v):
+        # The agent references hypotheses by 1-based "H1"/"H2"/index or label.
+        if v is None:
+            return None
+        s = str(v).strip().lstrip("Hh#")
+        try:
+            i = int(s) - 1
+            return i if 0 <= i < len(hypotheses) else None
+        except (TypeError, ValueError):
+            return None
+
+    evidence = []
+    for kind, key in (("supporting", "supporting_evidence"), ("counter", "counter_evidence")):
+        for e in (data.get(key) or []):
+            if not isinstance(e, dict):
+                continue
+            claim = (e.get("claim") or "").strip()
+            ref = (e.get("paper") or "").strip()
+            info = refmap.get(ref)
+            if not claim or not info:
+                continue                      # ungrounded → drop (gate); agent should use 'missing'
+            evidence.append({"kind": kind, "claim": claim[:400], "paper_ref": ref,
+                             "paper_id": info["paper_id"], "collection": info["collection"],
+                             "hyp_index": _hyp_index(e.get("hypothesis"))})
+    for e in (data.get("missing_evidence") or []):
+        claim = (e.get("claim") if isinstance(e, dict) else str(e)).strip() if e else ""
+        if claim:
+            evidence.append({"kind": "missing", "claim": claim[:400], "paper_ref": None,
+                             "paper_id": None, "collection": None,
+                             "hyp_index": _hyp_index(e.get("hypothesis") if isinstance(e, dict) else None)})
+
+    unknowns = []
+    for u in (data.get("unknowns") or [])[:12]:
+        text = (u.get("question") or u.get("text") if isinstance(u, dict) else str(u)) or ""
+        text = text.strip()
+        if not text:
+            continue
+        pr = (u.get("priority") if isinstance(u, dict) else "") or "medium"
+        unknowns.append({"text": text[:300], "priority": pr if pr in ("high", "medium", "low") else "medium",
+                         "hyp_index": _hyp_index(u.get("hypothesis") if isinstance(u, dict) else None)})
+
+    experiments = []
+    for x in (data.get("experiments") or [])[:8]:
+        if not isinstance(x, dict):
+            continue
+        title = (x.get("title") or "").strip()
+        if not title:
+            continue
+        experiments.append({"title": title[:200], "method": (x.get("method") or "").strip()[:300],
+                            "metric": (x.get("metric") or "").strip()[:120], "status": "planned",
+                            "hyp_index": _hyp_index(x.get("hypothesis"))})
+
+    next_steps = []
+    for n in (data.get("next_steps") or [])[:6]:
+        if isinstance(n, dict) and (n.get("title") or "").strip():
+            next_steps.append({"title": n["title"].strip()[:160],
+                               "detail": (n.get("detail") or "").strip()[:200]})
+        elif isinstance(n, str) and n.strip():
+            next_steps.append({"title": n.strip()[:160], "detail": ""})
+    key_terms = [str(k).strip()[:40] for k in (data.get("key_terms") or []) if str(k).strip()][:12]
+
+    if not hypotheses and not assumptions:
+        return {"ok": False, "error": "The agent produced no usable investigation."}
+
+    generated = {"next_steps": next_steps, "key_terms": key_terms,
+                 "confidence": _confidence(hypotheses), "generated_at": _now()}
+    topics.replace_investigation(slug, assumptions=assumptions, hypotheses=hypotheses,
+                                 evidence=evidence, unknowns=unknowns,
+                                 experiments=experiments, generated=generated)
+    counts = {"assumptions": len(assumptions), "hypotheses": len(hypotheses),
+              "evidence": len([e for e in evidence if e["kind"] != "missing"]),
+              "missing": len([e for e in evidence if e["kind"] == "missing"]),
+              "unknowns": len(unknowns), "experiments": len(experiments)}
+    topics.log_event(slug, "generated",
+                     f"{counts['hypotheses']} hypotheses · {counts['evidence']} evidence · "
+                     f"{counts['unknowns']} unknowns")
+    return {"ok": True, "counts": counts}
+
+
+def _now() -> str:
+    from .wiki import _now as wnow
+    return wnow()
+
+
 # ---- agent open-questions (one LLM call) -------------------------------------
 
 def suggest_questions(slug: str) -> dict:
@@ -297,10 +483,19 @@ def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
              f"QUESTION: {t['question']}"]
     if t.get("description"):
         parts.append(f"DESCRIPTION: {t['description']}")
+    if t.get("assumptions"):
+        parts.append("ASSUMPTIONS:\n" + "\n".join(f"- {a['text']}" for a in t["assumptions"]))
     if t["hypotheses"]:
-        parts.append("HYPOTHESES:\n" + "\n".join(f"- {h['text']}" for h in t["hypotheses"]))
-    if t["questions"]:
-        parts.append("OPEN QUESTIONS:\n" + "\n".join(f"- {q['text']}" for q in t["questions"]))
+        parts.append("HYPOTHESES (with status):\n" + "\n".join(
+            f"- [{h.get('status', 'unknown')}] {h['text']}" for h in t["hypotheses"]))
+    if t.get("evidence"):
+        ev = t["evidence"]
+        ns = sum(1 for e in ev if e["kind"] == "supporting")
+        nc = sum(1 for e in ev if e["kind"] == "counter")
+        nm = sum(1 for e in ev if e["kind"] == "missing")
+        parts.append(f"EVIDENCE: {ns} supporting, {nc} counter, {nm} missing (gaps).")
+    if t.get("unknowns"):
+        parts.append("OPEN UNKNOWNS:\n" + "\n".join(f"- {u['text']}" for u in t["unknowns"]))
     if rel and rel.get("analyzed") and rel.get("items"):
         parts.append("RELEVANT IDEAS (from the linked collections): "
                      + ", ".join(i["label"] for i in rel["items"][:15]))

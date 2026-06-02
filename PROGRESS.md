@@ -2266,3 +2266,69 @@ the build tool; rebuild only when classes change.
 
 **Verified:** real Safari now renders the legend dots (8×8px), `text-[9px]` (9px),
 and the emerald button (visible); page loads `/static/app.css`, CDN gone. 161 tests pass.
+
+---
+
+## 2026-06-02 — Collection page: tabbed cognitive-model wiki + Benchmarks
+
+The collection's middle panel became a **tabbed workspace** (matching the
+research-topic shell): a header (breadcrumb · title · ☆ star · stats strip
+Papers/Highlights/Notes/Connections · search · `+ Add paper` / `✦ Create topic` /
+`⋯` overflow) over tabs — **Overview · Concepts · Benchmarks · Understanding ·
+Connections · Papers**. Tab state lives on the `collectionView()` Alpine scope, so
+an HTMX panel re-render (belief accept, paper toggle, regenerate) preserves the
+active tab. "Render all + show/hide" (not per-tab HTMX) per the design call.
+
+- **Problems / Methods** are no longer tabs — the Overview landscape's "View all"
+  opens a **popup** (full clustered list with anchored papers + theme→map jump).
+- **Concepts** tab: the concept space with live attention scores + member papers.
+- **Benchmarks** tab (net-new): a **method × benchmark performance table**.
+  - `wiki.extract_benchmarks` (one LLM call, `benchmark-extract` skill) reads
+    abstracts + PDF excerpts and pulls reported numbers as
+    `(method, benchmark, metric, value, paper)` tuples. **Grounding gate in code:**
+    a result with no valid linked paper ref is dropped — no fabricated numbers.
+  - `wiki.load_benchmarks` shapes the table: methods as rows (top 5 by coverage,
+    "show all" toggle), benchmarks as columns, best-in-column highlighted, each
+    cell links to the citing paper. Stored in `wiki/sections/benchmarks.json`.
+- Header stats: `wiki.attention_counts` (highlights + notes); Connections from the
+  structural graph's edge count.
+- Tailwind compiled (`make css`) after each template change.
+
+## 2026-06-02 — Research Topics v2 (scientific-inquiry model)
+
+Research Topics were upgraded from "question + hypotheses + open-questions" to a
+full **scientific argument**: Question → Assumptions → Hypotheses → Evidence →
+Unknowns → Experiments, with a lifecycle (Exploration / Investigation / Active
+Project / Archived), notes, and an append-only timeline. A topic still **owns no
+papers** — it references collection papers as evidence.
+
+- **Data** (`db.py`): new tables `topic_assumptions`, `topic_evidence`,
+  `topic_unknowns`, `topic_experiments`, `topic_notes`, `topic_timeline`;
+  `research_topics.lifecycle` + `.generated` (JSON: next_steps/key_terms/
+  confidence); `topic_hypotheses.status/support_count/counter_count`. Idempotent
+  ALTERs — the existing topic migrated with no data loss.
+- **Generation** (`topic_view.generate_investigation` + `topic-investigate`
+  skill): one LLM call over the linked collections' field summaries + papers →
+  assumptions, hypotheses (agent-assigned status + counts), supporting/counter/
+  missing evidence, unknowns, experiments, next steps, key terms. **Grounding gate:**
+  supporting/counter evidence must cite a real linked-collection paper ref or it's
+  dropped (the agent is told to express un-citable gaps as *missing* evidence).
+  Confidence is **computed deterministically** from hypothesis statuses
+  (supported=1, mixed=.5, challenged=.15) — no fabricated trend sparklines.
+- **Decisions** (user, MCQ): agent writes directly (you edit/add/delete);
+  hypothesis status/counts are agent-assigned; real numbers, no sparklines; full
+  structure now. **Deferred:** the "living" auto-update-on-new-paper/highlight/note
+  triggers (spec marks them FUTURE).
+- **Page** (`topic.html`): purple workspace header (stats: Collections / Evidence
+  papers / Hypotheses / Unknowns / Experiments; actions Find evidence / Add
+  hypothesis / ⋯) + 7 tabs (Overview / Hypotheses / Evidence / Unknowns /
+  Experiments / Notes / Timeline). Overview = 7 sections (Question / Assumptions /
+  Hypotheses / Evidence Summary / Next Steps / Connected Collections / Key Terms).
+  Evidence tab is the 3-column Supporting/Counter/Missing view; each item is a
+  claim tied to a paper (or a gap) + linked hypothesis.
+- **Entry point:** the collection's `✦ Create topic` opens a modal seeding a topic
+  with that collection preselected. "Find evidence" = regenerate (replaces agent
+  content; manual edits since last gen are overwritten).
+- 184 tests pass (added topics v2 CRUD/lifecycle + generation-grounding tests).
+  Verified in real Safari/WebKit: clean single layout, tab switching, modals,
+  7-section Overview per the mockup, no console errors.

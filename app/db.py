@@ -222,6 +222,65 @@ CREATE TABLE IF NOT EXISTS topic_questions (
 );
 CREATE INDEX IF NOT EXISTS idx_topic_coll ON topic_collections(collection_slug);
 
+-- Research Topics v2 (scientific-inquiry model): assumptions → hypotheses →
+-- evidence → unknowns → experiments, plus notes + an append-only timeline. All
+-- agent-generated on demand, then user-editable. Evidence references collection
+-- papers (topics own no papers); a 'missing' evidence row has no paper.
+CREATE TABLE IF NOT EXISTS topic_assumptions (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS topic_evidence (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'supporting',     -- 'supporting' | 'counter' | 'missing'
+  claim TEXT NOT NULL,
+  paper_ref TEXT,                              -- agent-cited ref (NULL for missing)
+  paper_id INTEGER,                            -- resolved collection paper id (NULL for missing)
+  collection_slug TEXT,                        -- which linked collection the paper is in
+  hypothesis_id INTEGER REFERENCES topic_hypotheses(id) ON DELETE SET NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS topic_unknowns (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'medium',     -- high | medium | low
+  status TEXT NOT NULL DEFAULT 'open',         -- open | investigating | resolved
+  hypothesis_id INTEGER REFERENCES topic_hypotheses(id) ON DELETE SET NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS topic_experiments (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  hypothesis_id INTEGER REFERENCES topic_hypotheses(id) ON DELETE SET NULL,
+  method TEXT NOT NULL DEFAULT '',
+  metric TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'planned',      -- planned | running | done
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS topic_notes (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS topic_timeline (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  event TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_topic_evidence ON topic_evidence(topic_id);
+
 -- External-content FTS over paper_notes. First column is paper_id; paper_notes.paper_id
 -- is an INTEGER PRIMARY KEY so it *is* the rowid (content_rowid='rowid' stays correct).
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -358,3 +417,20 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute(
                 "ALTER TABLE pending_removals ADD COLUMN status TEXT NOT NULL DEFAULT 'graveyard'"
             )
+    # Research Topics v2: lifecycle (new status enum, no CHECK so it's flexible)
+    # and a JSON blob for generated extras (next_steps, key_terms, confidence).
+    # The old `status` column is left in place but unused by the v2 UI.
+    if "research_topics" in tables:
+        rtcols = {r[1] for r in con.execute("PRAGMA table_info(research_topics)")}
+        if "lifecycle" not in rtcols:
+            con.execute("ALTER TABLE research_topics ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'investigation'")
+        if "generated" not in rtcols:
+            con.execute("ALTER TABLE research_topics ADD COLUMN generated TEXT NOT NULL DEFAULT '{}'")
+    if "topic_hypotheses" in tables:
+        thcols = {r[1] for r in con.execute("PRAGMA table_info(topic_hypotheses)")}
+        if "status" not in thcols:
+            con.execute("ALTER TABLE topic_hypotheses ADD COLUMN status TEXT NOT NULL DEFAULT 'unknown'")
+        if "support_count" not in thcols:
+            con.execute("ALTER TABLE topic_hypotheses ADD COLUMN support_count INTEGER NOT NULL DEFAULT 0")
+        if "counter_count" not in thcols:
+            con.execute("ALTER TABLE topic_hypotheses ADD COLUMN counter_count INTEGER NOT NULL DEFAULT 0")

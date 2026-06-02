@@ -37,6 +37,61 @@ def test_title_defaults_to_question(db):
     assert topics.get_topic(slug)["title"].startswith("How should memory")
 
 
+def test_v2_lifecycle_and_timeline(db):
+    slug = topics.create_topic("T", "Q?")
+    assert topics.get_topic(slug)["lifecycle"] == "investigation"   # ALTER default
+    assert topics.set_lifecycle(slug, "active") is True
+    assert topics.set_lifecycle(slug, "bogus") is False
+    t = topics.get_topic(slug)
+    assert t["lifecycle"] == "active" and t["lifecycle_label"] == "Active Project"
+    # set_lifecycle logs a timeline event
+    assert any(e["event"] == "status_changed" for e in t["timeline"])
+
+
+def test_v2_inquiry_crud(db):
+    slug = topics.create_topic("T", "Q?")
+    assert topics.add_assumption(slug, "An assumption.")
+    assert topics.add_unknown(slug, "An unknown?", priority="high")
+    assert topics.add_experiment(slug, "Exp", method="m", metric="x")
+    assert topics.add_note(slug, "A note.")
+    assert topics.add_assumption(slug, "   ") is False          # blank rejected
+    t = topics.get_topic(slug)
+    assert [a["text"] for a in t["assumptions"]] == ["An assumption."]
+    assert t["unknowns"][0]["priority"] == "high"
+    assert t["experiments"][0]["metric"] == "x"
+    assert t["notes"][0]["body"] == "A note."
+    # deletes are topic-scoped
+    assert topics.delete_unknown(slug, t["unknowns"][0]["id"])
+    assert topics.get_topic(slug)["unknowns"] == []
+
+
+def test_replace_investigation_links_hypotheses(db):
+    slug = topics.create_topic("T", "Q?")
+    topics.replace_investigation(
+        slug,
+        assumptions=["A1"],
+        hypotheses=[{"text": "H one", "status": "supported", "support_count": 3, "counter_count": 0},
+                    {"text": "H two", "status": "mixed", "support_count": 1, "counter_count": 1}],
+        evidence=[{"kind": "supporting", "claim": "c1", "paper_ref": "R", "paper_id": 7,
+                   "collection": "c", "hyp_index": 0},
+                  {"kind": "missing", "claim": "gap", "hyp_index": 1}],
+        unknowns=[{"text": "u?", "priority": "high", "hyp_index": 1}],
+        experiments=[{"title": "e", "hyp_index": 0}],
+        generated={"key_terms": ["k"], "confidence": {"score": 0.75, "label": "High"}})
+    t = topics.get_topic(slug)
+    h0, h1 = t["hypotheses"][0], t["hypotheses"][1]
+    assert h0["status"] == "supported" and h0["support_count"] == 3
+    # hyp_index resolved to real hypothesis ids
+    sup = next(e for e in t["evidence"] if e["kind"] == "supporting")
+    assert sup["hypothesis_id"] == h0["id"] and sup["paper_id"] == 7
+    assert t["unknowns"][0]["hypothesis_id"] == h1["id"]
+    assert t["generated"]["confidence"]["label"] == "High"
+    # a second generate replaces (not appends)
+    topics.replace_investigation(slug, assumptions=[], hypotheses=[], evidence=[],
+                                 unknowns=[], experiments=[], generated={})
+    assert topics.get_topic(slug)["hypotheses"] == []
+
+
 def test_slug_uniqueness(db):
     a = topics.create_topic("Memory", "Q1?")
     b = topics.create_topic("Memory", "Q2?")
