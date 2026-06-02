@@ -124,3 +124,34 @@ def test_generate_investigation_grounds_and_persists(topicdb, monkeypatch):
     assert t["generated"]["confidence"]["label"] == "High"     # mean(1, .5) = .75
     assert t["generated"]["key_terms"] == ["Alpha", "Beta"]
     assert any(e["hypothesis_id"] for e in t["evidence"])       # linked to a hypothesis
+
+
+def test_generate_async_job_lifecycle(topicdb, monkeypatch):
+    """start_generate_async runs on a thread and publishes running → done state
+    that the overlay polls; clear removes it."""
+    import threading
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    release = threading.Event()
+
+    def slow_complete(*a, **k):
+        release.wait(2)                                  # hold the 'running' window open
+        return json.dumps({"assumptions": ["A premise."], "hypotheses": [
+            {"statement": "Online adaptation helps retention.", "status": "supported",
+             "support_count": 1, "counter_count": 0}]})
+    monkeypatch.setattr(topic_view.llm, "complete", slow_complete)
+
+    assert topic_view.start_generate_async(slug) is True
+    assert topic_view.start_generate_async(slug) is False      # already running → no double-start
+    job = topic_view.get_generate_job(slug)
+    assert job["status"] == "running"
+    assert topic_view.gen_stage_label(job)                     # honest label, no %
+    release.set()
+    for _ in range(100):                                       # wait for the worker to finish
+        job = topic_view.get_generate_job(slug)
+        if job and job["status"] == "done":
+            break
+        import time; time.sleep(0.02)
+    assert job["status"] == "done"
+    assert topics.get_topic(slug)["hypotheses"]                # it actually wrote
+    topic_view.clear_generate_job(slug)
+    assert topic_view.get_generate_job(slug) is None

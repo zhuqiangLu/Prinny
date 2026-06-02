@@ -16,7 +16,7 @@
 </style>
 <div class="flex h-full" x-data="topicShell()">
   {# ---- left: the topic content (header + tabs + panes) ---- #}
-  <div class="flex-1 min-w-0 overflow-y-auto">
+  <div class="relative flex-1 min-w-0 overflow-y-auto">
 
     {# ===== HEADER (purple-tinted workspace header) ===== #}
     <div class="bg-gradient-to-b from-violet-50 to-white border-b border-violet-100 px-6 pt-5">
@@ -89,6 +89,11 @@
     </div>{# /header #}
 
     <div class="px-6 py-6">
+    {% if gen_error %}
+    <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+      <b>Generation failed.</b> {{ gen_error }} — try <b>Find evidence</b> again.
+    </div>
+    {% endif %}
     {% if not has_content %}
     {# Empty investigation — prominent generate CTA #}
     <div class="rounded-xl border border-violet-200 bg-violet-50/40 p-6 text-center max-w-2xl mx-auto">
@@ -463,6 +468,60 @@
         </form>
       </div>
     </div>
+
+    {# ===== generation overlay (covers the investigation column only; the
+       sidebar + Prinny Assistant stay usable). Plain CSS so it lands reliably;
+       polls /generate/status and reloads on done/failed. ===== #}
+    {% if gen_running %}
+    <div id="tg-gen-cover" data-slug="{{ t.slug }}" role="status" aria-live="polite">
+      <div class="tg-gen-card">
+        <svg class="tg-gen-spin" viewBox="0 0 50 50" aria-hidden="true">
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5"
+                  stroke-linecap="round" stroke-dasharray="31 126"></circle>
+        </svg>
+        <div id="tg-gen-label" class="tg-gen-label">{{ gen_label }}</div>
+        <div class="tg-gen-sub">{% if gen_collections %}reading {{ gen_collections }} collection{{ 's' if gen_collections != 1 }}{% endif %}</div>
+        <div class="tg-gen-foot">One LLM pass — you can keep chatting on the right.</div>
+      </div>
+    </div>
+    <style>
+      #tg-gen-cover { position: absolute; inset: 0; z-index: 30; background: rgba(248,250,252,.72);
+        backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+      .tg-gen-card { position: sticky; top: 34%; margin: 34% auto 0; width: 18rem; max-width: calc(100% - 2rem);
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 1rem; box-shadow: 0 20px 40px -12px rgba(0,0,0,.18);
+        padding: 1.5rem; text-align: center; }
+      .tg-gen-spin { width: 3rem; height: 3rem; animation: tg-gen-rot 0.9s linear infinite; }
+      @keyframes tg-gen-rot { to { transform: rotate(360deg); } }
+      .tg-gen-label { margin-top: .9rem; font-size: .95rem; font-weight: 600; color: #0f172a; }
+      .tg-gen-sub { margin-top: .25rem; font-size: .78rem; color: #64748b; }
+      .tg-gen-sub:empty { display: none; }
+      .tg-gen-foot { margin-top: .75rem; font-size: .7rem; color: #94a3b8; }
+    </style>
+    <script>
+      (function () {
+        var cover = document.getElementById("tg-gen-cover");
+        if (!cover) return;
+        var slug = cover.getAttribute("data-slug");
+        function tick() {
+          if (!document.body.contains(cover)) return;
+          fetch("/t/" + slug + "/generate/status", { headers: { "Accept": "application/json" } })
+            .then(function (r) { return r.json(); })
+            .then(function (job) {
+              if (!document.body.contains(cover)) return;
+              if (job.status === "idle" || job.status === "done" || job.status === "failed") {
+                window.location.reload(); return;          // fresh render clears the job (+ shows content or error)
+              }
+              var l = document.getElementById("tg-gen-label");
+              if (l && job.label) l.textContent = job.label;
+              setTimeout(tick, 1200);
+            })
+            .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2000); });
+        }
+        setTimeout(tick, 1000);
+      })();
+    </script>
+    {% endif %}
 
   </div>{# /left scroll column #}
 

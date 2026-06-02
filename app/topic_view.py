@@ -301,7 +301,75 @@ def _confidence(hypotheses: list[dict]) -> dict | None:
     return {"score": score, "label": label}
 
 
-def generate_investigation(slug: str) -> dict:
+# ---- async generation job (mirrors wiki's start_draft_async) -----------------
+# In-memory only: a uvicorn restart wipes any in-flight job (the thread is gone
+# too), which is honest — the status endpoint then returns 'idle' and the user
+# re-runs. Generation is one opaque LLM call, so stages are coarse (no fake %).
+import threading
+
+_GEN_JOBS: dict[str, dict] = {}
+_GEN_LOCK = threading.Lock()
+_GEN_STAGES = {
+    "gathering": "Reading your collections…",
+    "drafting":  "Drafting the argument…",
+    "writing":   "Grounding the evidence & writing…",
+    "done":      "Done.",
+    "failed":    "Generation failed.",
+}
+
+
+def _set_gen(slug: str, **kw) -> None:
+    with _GEN_LOCK:
+        job = _GEN_JOBS.get(slug, {})
+        job.update(kw)
+        _GEN_JOBS[slug] = job
+
+
+def get_generate_job(slug: str) -> dict | None:
+    with _GEN_LOCK:
+        job = _GEN_JOBS.get(slug)
+        return dict(job) if job else None
+
+
+def clear_generate_job(slug: str) -> None:
+    with _GEN_LOCK:
+        _GEN_JOBS.pop(slug, None)
+
+
+def gen_stage_label(job: dict | None) -> str:
+    return _GEN_STAGES.get((job or {}).get("stage", "gathering"), "Working…")
+
+
+def start_generate_async(slug: str) -> bool:
+    """Kick off generate_investigation on a daemon thread. Returns False if a job
+    is already running for this slug. The overlay polls /generate/status."""
+    existing = get_generate_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    t = topics.get_topic(slug)
+    n_coll = len(t["collections"]) if t else 0
+    _set_gen(slug, status="running", stage="gathering", started_at=_now(),
+             n_collections=n_coll, error=None, finished_at=None)
+
+    def cb(stage):
+        _set_gen(slug, stage=stage)
+
+    def runner():
+        try:
+            res = generate_investigation(slug, stage_cb=cb)
+            if res.get("ok"):
+                _set_gen(slug, status="done", stage="done", finished_at=_now())
+            else:
+                _set_gen(slug, status="failed", stage="failed",
+                         error=res.get("error") or "no usable output", finished_at=_now())
+        except Exception as exc:  # noqa: BLE001 - publish, don't crash the worker
+            _set_gen(slug, status="failed", stage="failed", error=str(exc), finished_at=_now())
+
+    threading.Thread(target=runner, daemon=True, name=f"topicgen-{slug}").start()
+    return True
+
+
+def generate_investigation(slug: str, stage_cb=None) -> dict:
     """One LLM call → the full scientific investigation (assumptions, hypotheses
     with status/counts, supporting/counter/missing evidence, unknowns, candidate
     experiments, next steps, key terms), written directly into the topic.
@@ -309,12 +377,21 @@ def generate_investigation(slug: str) -> dict:
     The grounding gate is enforced in code: supporting/counter evidence MUST cite
     a paper ref that exists in a linked collection; anything ungrounded is dropped
     (the agent is told to express un-citable gaps as 'missing' evidence instead).
-    Returns ``{ok, error, counts}``."""
+    ``stage_cb(stage)`` is the optional progress callback (gathering/drafting/
+    writing) used by start_generate_async. Returns ``{ok, error, counts}``."""
+    def stage(name):
+        if stage_cb:
+            try:
+                stage_cb(name)
+            except Exception:  # noqa: BLE001
+                pass
+
     t = topics.get_topic(slug)
     if not t:
         return {"ok": False, "error": "Topic not found."}
     if not t["collections"]:
         return {"ok": False, "error": "Link at least one collection first."}
+    stage("gathering")
     digest, refmap = _topic_digest(t["collections"])
     if not digest.strip():
         return {"ok": False, "error": "Linked collections have no papers/field model yet."}
@@ -325,6 +402,7 @@ def generate_investigation(slug: str) -> dict:
             + "LINKED COLLECTIONS (field summaries + papers):\n\n" + digest
             + "\n\nVALID PAPER REFS (cite evidence ONLY with these exact tokens):\n"
             + valid_refs)
+    stage("drafting")
     system = (agent_skills.skill_body("topic-investigate")
               or 'Output STRICT JSON: {assumptions:[".."], hypotheses:[{statement,status,'
                  'support_count,counter_count}], supporting_evidence:[{claim,paper,hypothesis}],'
@@ -416,6 +494,7 @@ def generate_investigation(slug: str) -> dict:
     if not hypotheses and not assumptions:
         return {"ok": False, "error": "The agent produced no usable investigation."}
 
+    stage("writing")
     generated = {"next_steps": next_steps, "key_terms": key_terms,
                  "confidence": _confidence(hypotheses), "generated_at": _now()}
     topics.replace_investigation(slug, assumptions=assumptions, hypotheses=hypotheses,

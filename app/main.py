@@ -200,6 +200,15 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
     t = topics_mod.get_topic(slug)
     if not t:
         raise HTTPException(status_code=404, detail="Research topic not found")
+    # Observe the generation job: render the overlay while running; on a finished
+    # job clear it once and surface a one-time error banner on failure.
+    gen_job = topic_view.get_generate_job(slug)
+    gen_running = bool(gen_job and gen_job.get("status") == "running")
+    gen_error = None
+    if gen_job and gen_job.get("status") in ("done", "failed"):
+        if gen_job["status"] == "failed":
+            gen_error = gen_job.get("error")
+        topic_view.clear_generate_job(slug)
     thread_id = get_or_create_thread(f"topic:{t['slug']}", None)
     chat = [{"role": m["role"], "html": render_md(m["content"], "")}
             for m in get_messages(thread_id, limit=50)]
@@ -227,6 +236,10 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
         "stats": stats, "linked": linked,
+        "gen_running": gen_running,
+        "gen_label": topic_view.gen_stage_label(gen_job) if gen_running else "",
+        "gen_collections": (gen_job or {}).get("n_collections", 0) if gen_running else 0,
+        "gen_error": gen_error,
         "chat": chat,
         "model": load_config().get("model", ""),
     })
@@ -234,13 +247,26 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
 
 @app.post("/t/{slug}/generate")
 def topic_generate(slug: str) -> RedirectResponse:
-    """Generate (or refresh) the full investigation — one LLM call over the
-    linked collections. Also backs the header's 'Find evidence' action."""
-    try:
-        topic_view.generate_investigation(slug)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("paper_agent.topics").exception("topic generate failed")
+    """Kick off investigation generation on a background thread and redirect back
+    immediately. The page renders the in-column overlay (it polls /generate/status)
+    while the one LLM call runs. Backs Generate / Find evidence / Regenerate."""
+    if not topics_mod.get_topic(slug):
+        raise HTTPException(status_code=404, detail="Topic not found")
+    topic_view.start_generate_async(slug)
     return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.get("/t/{slug}/generate/status", response_class=JSONResponse)
+def topic_generate_status(slug: str) -> JSONResponse:
+    """Live state of the slug's generation job for the overlay to poll."""
+    job = topic_view.get_generate_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"),
+                         "stage": job.get("stage", "gathering"),
+                         "label": topic_view.gen_stage_label(job),
+                         "n_collections": job.get("n_collections", 0),
+                         "error": job.get("error")})
 
 
 @app.post("/t/{slug}/analyze")
