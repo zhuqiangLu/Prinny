@@ -728,11 +728,16 @@
   {% if overview.papers %}
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ themeFilter: 0 }">
-    <div class="flex items-baseline gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
+      <div class="ml-auto relative">
+        <input x-model="q" type="search" placeholder="Search papers…"
+               class="w-56 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="Filter by title or author">
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">⌕</span>
+      </div>
       <button type="button" @click="$dispatch('open-add')"
-              class="ml-auto rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50" title="Add a paper by arXiv id / URL">＋ Add paper</button>
+              class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Add a paper by arXiv id / URL">＋ Add paper</button>
     </div>
 
     {% if themelist %}

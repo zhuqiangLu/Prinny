@@ -54,22 +54,15 @@
       </div>
     </div>
 
-    {# stats strip + search #}
-    <div class="flex items-center gap-x-6 gap-y-2 flex-wrap mb-4">
-      {% if stats %}
-      <div class="flex items-center gap-6 text-sm">
-        <div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.papers }}</span> <span class="text-slate-400">📄 Papers</span></div>
-        {% if stats.highlights is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.highlights }}</span> <span class="text-slate-400">🖍 Highlights</span></div>{% endif %}
-        {% if stats.notes is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.notes }}</span> <span class="text-slate-400">🗒 Notes</span></div>{% endif %}
-        {% if stats.connections is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.connections }}</span> <span class="text-slate-400">🔗 Connections</span></div>{% endif %}
-      </div>
-      {% endif %}
-      <div class="ml-auto relative">
-        <input x-model="q" @keydown.enter="go('papers')" type="search" placeholder="Search in this collection…"
-               class="w-64 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="Filter papers by title or author (Enter → Papers tab)">
-        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">⌕</span>
-      </div>
+    {# stats strip #}
+    {% if stats %}
+    <div class="flex items-center gap-6 text-sm flex-wrap mb-4">
+      <div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.papers }}</span> <span class="text-slate-400">📄 Papers</span></div>
+      {% if stats.highlights is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.highlights }}</span> <span class="text-slate-400">🖍 Highlights</span></div>{% endif %}
+      {% if stats.notes is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.notes }}</span> <span class="text-slate-400">🗒 Notes</span></div>{% endif %}
+      {% if stats.connections is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.connections }}</span> <span class="text-slate-400">🔗 Connections</span></div>{% endif %}
     </div>
+    {% endif %}
 
     {# tab bar #}
     {% set TABS = [
