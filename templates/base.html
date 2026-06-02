@@ -122,10 +122,16 @@
   {% set nav = pa_nav() %}
   <!-- App shell sidebar: collections + research topics + settings. Rendered on
        every page via base.html; data from the pa_nav() Jinja global. -->
-  <!-- floating reopen handle (shown only when the sidebar is hidden) -->
-  <button type="button" x-show="!navOpen" x-cloak @click="toggleNav()"
-          class="fixed top-3 left-3 z-40 grid place-items-center w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-100"
-          title="Show sidebar" aria-label="Show sidebar">☰</button>
+  <!-- Collapsed rail (shown only when the sidebar is hidden). In-flow flex child
+       so the main content sits beside it — a fixed/floating reopen button would
+       overlap each page's top-left content (breadcrumb / back arrow). -->
+  <div x-show="!navOpen" x-cloak class="w-12 shrink-0 h-full flex flex-col items-center gap-2 border-r border-slate-200 bg-white py-3">
+    <a href="/" class="grid place-items-center w-9 h-9" title="{{ b.app_name }}">
+      {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-6">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
+    </a>
+    <button type="button" @click="toggleNav()" class="grid place-items-center w-9 h-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            title="Show sidebar" aria-label="Show sidebar">☰</button>
+  </div>
   <aside x-show="navOpen" class="w-60 shrink-0 h-full flex flex-col border-r border-slate-200 bg-white">
     <div class="flex items-center gap-2 px-4 h-14 shrink-0 border-b border-slate-100">
       <a href="/" class="flex items-center gap-2 font-semibold tracking-tight text-slate-900 min-w-0">
