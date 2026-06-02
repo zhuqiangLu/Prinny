@@ -4,7 +4,34 @@
 {% block main_pad %}p-0{% endblock %}
 {% block main_inner %}h-full{% endblock %}
 {% block content %}
-<div x-data='collectionView()' @open-add.window="addOpen = true" class="flex flex-col h-full min-h-0">
+<div x-data='collectionView()' @open-add.window="addOpen = true"
+     @open-create-topic.window="topicOpen = true"
+     @wiki-jump.window="lsModal = ''; tab = 'connections'; $nextTick(() => { window.kgRender && window.kgRender(); setTimeout(() => { window.kgFocus && window.kgFocus($event.detail.id); }, 420); })"
+     class="flex flex-col h-full min-h-0">
+
+  <!-- Create-topic modal: a Research Topic seeded from this collection (preselected). -->
+  <div x-show="topicOpen" x-cloak @keydown.escape.window="topicOpen = false" @click.self="topicOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
+    <div class="bg-white rounded-xl shadow-xl w-[min(560px,95vw)] p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="font-semibold">✦ New research topic</h2>
+        <button type="button" @click="topicOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3">A topic is a scientific <b>investigation</b> — a question this collection (and others) helps answer. It references papers as evidence; it never owns them.</p>
+      <form method="post" action="/topics" class="space-y-2">
+        <input type="hidden" name="collections" value="{{ slug }}">
+        <label class="block text-xs font-medium text-slate-500">Research question <span class="text-rose-500">*</span></label>
+        <textarea name="question" rows="2" required placeholder="e.g. Can test-time adaptation improve long-video reasoning?"
+                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <label class="block text-xs font-medium text-slate-500">Title (optional)</label>
+        <input name="title" placeholder="Short name (defaults to the question)" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <label class="block text-xs font-medium text-slate-500">Description (optional)</label>
+        <textarea name="description" rows="2" class="w-full rounded border border-slate-300 px-3 py-1.5 text-xs"></textarea>
+        <p class="text-[11px] text-slate-400">Linked: <b>{{ name }}</b>. You can link more collections and generate the investigation on the topic page.</p>
+        <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-4 py-1.5 text-sm text-white hover:bg-violet-700">Create topic →</button></div>
+      </form>
+    </div>
+  </div>
 
   <!-- Pull-from-Zotero modal (body loaded via HTMX) -->
   <div x-show="syncWith" x-cloak @keydown.escape.window="syncWith = false" @click.self="syncWith = false"
@@ -96,35 +123,6 @@
        column so the chat panel fills top-to-bottom (no gap above it). -->
   <div class="flex flex-1 min-h-0" x-ref="split">
     <div class="flex-1 min-w-0 h-full overflow-y-auto px-6 py-6">
-      <!-- header: collection name + source actions (icon-only, label on hover) -->
-      <div class="mb-4">
-        <a href="/" class="text-sm text-slate-500 hover:text-slate-900">← Collections</a>
-        <div class="flex items-center gap-2 mt-1">
-          <h1 class="text-xl font-semibold">{{ name }}</h1>
-          {% macro icon_label(icon, label) %}
-            <span class="text-base leading-none">{{ icon }}</span>
-            <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">{{ label }}</span>
-          {% endmacro %}
-          {% set btncls = "group relative grid place-items-center w-8 h-8 rounded border border-slate-200 bg-white text-slate-700 hover:bg-slate-50" %}
-          <button type="button" @click="syncOpen = true" class="{{ btncls }}">{{ icon_label("⇪", "Export…") }}</button>
-          {% if dup_count %}
-          <button type="button" @click="dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })"
-                  class="{{ btncls }} relative">{{ icon_label("⧉", "Resolve duplicates") }}
-            <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-amber-300 text-amber-900 text-[10px] leading-none">{{ dup_count }}</span>
-          </button>
-          {% endif %}
-          {% if graveyard_count %}
-          <button type="button" @click="graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })"
-                  class="{{ btncls }} relative">{{ icon_label("🪦", "Graveyard (recently removed)") }}
-            <span class="absolute -top-1.5 -right-1.5 grid place-items-center min-w-4 h-4 px-1 rounded-full bg-slate-500 text-white text-[10px] leading-none">{{ graveyard_count }}</span>
-          </button>
-          {% endif %}
-          {% if col and col.copy_mode == "lazy" %}
-          <form method="post" action="/c/{{ slug }}/download-all"><button type="submit" class="{{ btncls }}">{{ icon_label("⤓", "Download all PDFs") }}</button></form>
-          {% endif %}
-        </div>
-      </div>
-
       <!-- Duplicate review modal (body loaded via HTMX) -->
       <div x-show="dupOpen" x-cloak @keydown.escape.window="dupOpen = false" @click.self="dupOpen = false"
            class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
@@ -214,20 +212,13 @@
     <!-- right pane: Chat / Thoughts -->
     <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
          class="shrink-0 h-full flex flex-col min-h-0 border-l border-slate-200 bg-white overflow-hidden">
-      <div class="shrink-0 border-b border-slate-200 px-3 flex items-center gap-2 text-sm">
+      <div class="shrink-0 border-b border-slate-200 px-3 py-2.5 flex items-center gap-2 text-sm">
         <span class="text-violet-500">✦</span>
         <span class="font-semibold text-slate-900 shrink-0">Prinny Assistant</span>
-        <div class="ml-2 flex items-center gap-1 text-xs">
-          <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
-          <button @click="tab='thoughts'" :class="tabCls('thoughts')">Thoughts</button>
-        </div>
         <span class="ml-auto text-[10px] text-slate-400">read-only</span>
       </div>
       <div class="flex-1 min-h-0">
-        <div x-show="tab==='chat'" class="h-full">{% include "_chat.html" %}</div>
-        <div x-show="tab==='thoughts'" x-cloak class="h-full overflow-auto p-4">
-          <div id="thoughts-tab-body"><span class="text-sm text-slate-400">Loading…</span></div>
-        </div>
+        <div class="h-full">{% include "_chat.html" %}</div>
       </div>
     </div>
 
@@ -261,37 +252,41 @@
 
   function collectionView() {
     return {
-      tab: localStorage.getItem("cc.tab") || "chat",
       paneOpen: localStorage.getItem("cc.open") !== "0",
       paneW: parseInt(localStorage.getItem("cc.w") || "420", 10),
-      thoughtsLoaded: false,
-      // Page-level modals (tab-independent).
+      // Wiki tab state (held here, not in the HTMX-swapped panel, so a panel
+      // re-render preserves the active tab automatically).
+      tab: localStorage.getItem("cc.wikitab") || "overview",
+      q: "",
+      starred: localStorage.getItem("cc.star.{{ slug }}") === "1",
+      lsModal: "",          // '' | 'problems' | 'methods' — landscape "View all" popup
+      // Page-level modals.
       addOpen: false,
+      topicOpen: false,
       syncOpen: false,
       syncWith: false,     // ⇅ Pull-from-Zotero sync-preview modal
       graveOpen: false,
       dupOpen: false,
       init() {
-        this.$watch("tab", (v) => { localStorage.setItem("cc.tab", v); if (v === "thoughts") this.loadThoughts(); });
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));
         this.$watch("paneW", (v) => localStorage.setItem("cc.w", v));
-        if (this.tab === "thoughts") this.loadThoughts();
+        this.$watch("tab", (v) => localStorage.setItem("cc.wikitab", v));
         // The collection's single left surface is the wiki (papers live inside
         // it). Load it on init.
         this.loadPanel("/c/{{ slug }}/wiki/panel");
       },
+      go(t) {
+        this.tab = t;
+        // The Connections map can't size itself while its pane is display:none;
+        // render it the moment that tab becomes visible.
+        if (t === "connections") this.$nextTick(() => window.kgRender && window.kgRender());
+      },
+      toggleStar() {
+        this.starred = !this.starred;
+        try { localStorage.setItem("cc.star.{{ slug }}", this.starred ? "1" : "0"); } catch (e) {}
+      },
       loadPanel(url) {
         window.htmx && htmx.ajax("GET", url, { target: "#left-panel", swap: "innerHTML" });
-      },
-      loadThoughts() {
-        if (this.thoughtsLoaded) return;
-        this.thoughtsLoaded = true;
-        window.htmx && htmx.ajax("GET", "/c/{{ slug }}/thoughts/panel", { target: "#thoughts-tab-body", swap: "innerHTML" });
-      },
-      tabCls(t) {
-        return "px-3 py-2 border-b-2 " + (this.tab === t
-          ? "border-slate-800 text-slate-900 font-medium"
-          : "border-transparent text-slate-500 hover:text-slate-800");
       },
       startDrag(e) {
         const split = this.$refs.split.getBoundingClientRect();
@@ -317,5 +312,14 @@
       },
     };
   }
+
+  // After any #left-panel swap (initial load or an in-panel mutation), (re)draw
+  // the Connections map if its tab is showing. kgRender is idempotent and bails
+  // when the map element is hidden, so this is safe to fire on every swap.
+  document.body.addEventListener("htmx:afterSwap", function (e) {
+    if (e.target && e.target.id === "left-panel") {
+      setTimeout(function () { window.kgRender && window.kgRender(); }, 0);
+    }
+  });
 </script>
 {% endblock %}

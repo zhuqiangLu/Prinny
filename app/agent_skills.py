@@ -30,8 +30,8 @@ _HOMES: dict[str, list[str]] = {
     # The "wiki" agent is the one-shot cognitive-model drafter: Field Model
     # (field-model) + belief candidates (belief-draft). The old notes-pipeline
     # homes (organizer/debt/brainstorm/lint) were removed with the pipeline.
-    "wiki": ["field-model", "belief-draft", "theme-name"],
-    "topic": ["topic-seed"],
+    "wiki": ["field-model", "belief-draft", "theme-name", "benchmark-extract"],
+    "topic": ["topic-seed", "topic-investigate"],
 }
 
 

@@ -8,25 +8,86 @@
    sibling of the panel content and absolute-positioned inside the wrapper). Polling
    the status endpoint updates the agent's "current action" line; on completion the
    polling reloads the panel via HTMX. `relative` here is what scopes the overlay. #}
-<div class="relative p-3" x-data="{}">
-  <div class="flex items-center gap-2 mb-2">
-    <h2 class="text-sm font-semibold text-slate-700">Wiki</h2>
-    {% if draft_job %}
-    <span class="text-[10px] rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5"
-          title="A starter-wiki draft is running in the background.">drafting…</span>
-    {% endif %}
-  </div>
+<div class="relative">
 
   {% if draft_error %}
-  <div class="mb-2 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
+  <div class="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
     <b>The last draft failed.</b> {{ draft_error }} — try ↻ Regenerate again.
   </div>
   {% endif %}
 
-  {# --- starter wiki (llm_wiki pattern: index + 3-7 top picks) --- #}
+  {% set has_field_model = overview and not overview.needs_migration and (overview.thesis.one_paragraph
+        or overview.landscape.problems or overview.landscape.methods or overview.papers) %}
+
+  {# === HEADER (breadcrumb · title · actions · stats · search · tabs) ========
+     Inherits the collectionView() Alpine scope (tab/q/starred/go/toggleStar and
+     the modal flags addOpen/syncOpen/dupOpen/graveOpen). Lives inside #left-panel
+     so an HTMX re-render keeps it in sync with the panel below. #}
+  {% if has_field_model %}
+  <div class="mb-5">
+    <div class="text-sm text-slate-500 mb-1.5">
+      <a href="/" class="hover:text-slate-900">Collections</a>
+      <span class="text-slate-300 mx-1">›</span>
+      <span class="text-slate-700">{{ collection_name }}</span>
+    </div>
+    <div class="flex items-center gap-2.5 mb-4">
+      <h1 class="text-2xl font-bold text-slate-900">{{ collection_name }}</h1>
+      <button type="button" @click="toggleStar()" :class="starred ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'"
+              class="text-xl leading-none" title="Star this collection (local)"><span x-text="starred ? '★' : '☆'"></span></button>
+      <div class="ml-auto flex items-center gap-2">
+        <button type="button" @click="$dispatch('open-add')"
+                class="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add paper</button>
+        <button type="button" @click="$dispatch('open-create-topic')" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">✦ Create topic</button>
+        <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+          <button type="button" @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More">⋯</button>
+          <div x-show="open" x-cloak class="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
+            {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
+            <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="open = false">
+              <button class="{{ mi }}" title="Re-draft the Field Model from the current collection (runs in the background).">↻ Regenerate Field Model</button>
+            </form>
+            <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
+            {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
+            {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
+            {% if col and col.copy_mode == "lazy" %}<form method="post" action="/c/{{ slug }}/download-all" @submit="open = false"><button class="{{ mi }}">⤓ Download all PDFs</button></form>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# stats strip + search #}
+    <div class="flex items-center gap-x-6 gap-y-2 flex-wrap mb-4">
+      {% if stats %}
+      <div class="flex items-center gap-6 text-sm">
+        <div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.papers }}</span> <span class="text-slate-400">📄 Papers</span></div>
+        {% if stats.highlights is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.highlights }}</span> <span class="text-slate-400">🖍 Highlights</span></div>{% endif %}
+        {% if stats.notes is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.notes }}</span> <span class="text-slate-400">🗒 Notes</span></div>{% endif %}
+        {% if stats.connections is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.connections }}</span> <span class="text-slate-400">🔗 Connections</span></div>{% endif %}
+      </div>
+      {% endif %}
+      <div class="ml-auto relative">
+        <input x-model="q" @keydown.enter="go('papers')" type="search" placeholder="Search in this collection…"
+               class="w-64 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="Filter papers by title or author (Enter → Papers tab)">
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">⌕</span>
+      </div>
+    </div>
+
+    {# tab bar #}
+    {% set TABS = [
+      ('overview', '▢ Overview'), ('concepts', '◈ Concepts'), ('benchmarks', '▦ Benchmarks'),
+      ('understanding', '◆ Understanding'), ('connections', '⚯ Connections'), ('papers', '▤ Papers')
+    ] %}
+    <div class="border-b border-slate-200 flex items-center gap-1 overflow-x-auto -mb-px">
+      {% for key, label in TABS %}
+      <button type="button" @click="go('{{ key }}')"
+              :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
+              class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# --- panel body --- #}
   {% if overview and overview.needs_migration %}
-  {# Legacy overview.json detected (pre-2026-05-30) — the old JSON shape can't
-     be re-rendered safely under the new tree. Show a one-time regenerate prompt. #}
   <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
     <p class="text-sm font-medium text-amber-900">The starter wiki format changed.</p>
     <p class="text-xs text-amber-800 mt-1">Your previous starter wiki was a single JSON file; the new one is a small set of curated paper pages. Regenerate to upgrade — your notes-based wiki is untouched.</p>
@@ -35,11 +96,12 @@
       <button class="rounded bg-amber-600 text-white px-3 py-1.5 text-xs hover:bg-amber-700">↻ Regenerate starter wiki</button>
     </form>
   </div>
-  {% elif overview and (overview.thesis.one_paragraph or overview.landscape.problems
-                         or overview.landscape.methods or overview.papers) %}
+  {% elif has_field_model %}
     {% include "_wiki_overview.html" %}
   {% else %}
-  <div class="rounded border border-slate-200 bg-white p-3">
+  <div class="rounded border border-slate-200 bg-white p-5">
+    <div class="text-sm text-slate-500 mb-1"><a href="/" class="hover:text-slate-900">Collections</a> <span class="text-slate-300 mx-1">›</span> <span class="text-slate-700">{{ collection_name }}</span></div>
+    <h1 class="text-xl font-semibold text-slate-900 mb-3">{{ collection_name }}</h1>
     <p class="text-sm text-slate-600">No wiki yet.</p>
     <p class="text-xs text-slate-400 mt-1">Draft the Field Model for this collection — a one-paragraph thesis + a four-column research landscape, in one pass:</p>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"

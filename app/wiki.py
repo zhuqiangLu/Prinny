@@ -231,6 +231,14 @@ def _concepts_path(slug: str) -> Path:
     return _sections_dir(slug) / "concepts.json"
 
 
+def _benchmarks_path(slug: str) -> Path:
+    """Extracted benchmark results (method × benchmark performance). Filled on
+    demand by extract_benchmarks() (one LLM call); read live by load_benchmarks().
+    Each result is grounded in a paper that reported it — no result without a
+    citing paper survives the validator."""
+    return _sections_dir(slug) / "benchmarks.json"
+
+
 def _themes_path(slug: str) -> Path:
     """Cached theme names+descriptions, keyed by cluster signature. Filled on
     demand by name_themes() (one LLM call); read live by connection_view().
@@ -756,6 +764,163 @@ def dismiss_belief(slug: str, candidate_id: str) -> bool:
     return True
 
 
+# --- Benchmarks (method × benchmark performance table) ----------------------
+# Net-new extraction layer (2026-06-02). One LLM call reads the collection's
+# abstracts + PDF excerpts and pulls out reported benchmark numbers as
+# (method, benchmark, metric, value) tuples, each citing the paper that
+# reported it. The grounding rule is enforced in code: a result with no valid
+# supporting paper is dropped (no fabricated numbers reach the table).
+_BENCHMARK_RESULTS_MAX = 240
+
+
+def _num(value) -> float | None:
+    """Parse a leading number out of a value string ('56.3', '56.3%', '0.71') for
+    best-in-column comparison. None when there's no parseable number."""
+    if value is None:
+        return None
+    m = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    return float(m.group()) if m else None
+
+
+def _validate_benchmarks(data: dict, valid_refs: set[str]) -> list[dict]:
+    """Keep only well-formed, paper-grounded results. Each surviving row has a
+    non-empty method, benchmark, value, and a supporting paper ref that exists in
+    the collection. Deduped by (method, benchmark, paper); capped."""
+    out, seen = [], set()
+    for r in (data or {}).get("results") or []:
+        if not isinstance(r, dict):
+            continue
+        method = (r.get("method") or "").strip()
+        bench = (r.get("benchmark") or "").strip()
+        value = (str(r.get("value")) if r.get("value") is not None else "").strip()
+        ref = (r.get("paper") or "").strip()
+        if not (method and bench and value) or ref not in valid_refs:
+            continue            # un-grounded or incomplete → drop (the honesty gate)
+        if _num(value) is None:
+            continue            # not a number we can put in a cell / compare
+        key = (method.lower(), bench.lower(), ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "method": method[:60], "benchmark": bench[:48],
+            "metric": (r.get("metric") or "").strip()[:24],
+            "value": value[:16], "paper": ref,
+            "higher_is_better": r.get("higher_is_better", True) is not False,
+        })
+        if len(out) >= _BENCHMARK_RESULTS_MAX:
+            break
+    return out
+
+
+def extract_benchmarks(slug: str) -> dict:
+    """One LLM call → method × benchmark performance numbers, written to
+    wiki/sections/benchmarks.json. The agent sees the same abstract + PDF-excerpt
+    digest the Field Model does, and is told to report ONLY numbers stated in the
+    text, each citing the paper that reported it. Returns ``{results, error}``."""
+    papers = _collection_abstracts(slug)
+    with_abs = [p for p in papers if p["abstract"]]
+    for p in with_abs:
+        p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
+    digest, included_refs, _pdf_refs = _overview_digest(with_abs)
+    if not digest.strip():
+        return {"results": 0, "error": "No paper abstracts to read yet."}
+
+    from . import agent_skills
+    system = (agent_skills.skill_body("benchmark-extract")
+              or "Output JSON: {results:[{method, benchmark, metric, value, "
+                 "higher_is_better, paper}]}. Report ONLY numbers explicitly "
+                 "stated in the provided text; cite the paper ref each came from.")
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": "Papers:\n\n" + digest}])
+        data = _extract_json(out)
+    except Exception:  # noqa: BLE001
+        return {"results": 0, "error": "The LLM call failed."}
+
+    results = _validate_benchmarks(data or {}, included_refs)
+    _sections_dir(slug).mkdir(parents=True, exist_ok=True)
+    _benchmarks_path(slug).write_text(
+        json.dumps({"results": results, "generated_by": "agent",
+                    "generator": "benchmark-extract", "generated_at": _now()},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    _append_log(slug, f"extracted {len(results)} benchmark result(s)", digest)
+    return {"results": len(results), "error": None}
+
+
+def load_benchmarks(slug: str) -> dict | None:
+    """Shape benchmarks.json into the table the template renders:
+
+      {benchmarks: [name,...],                 # column order (most-covered first)
+       methods: [{name, n, cells: [cell|None per benchmark]}],  # row per method
+       n_results, generated_at}
+
+    where a cell is {value, metric, paper:{id,title}, best}. ``best`` flags the
+    leading value in its column (max if higher_is_better, else min). Methods are
+    ordered by coverage (cells filled) desc — the template shows the top 5 and
+    reveals the rest on demand. Returns None when nothing has been extracted."""
+    p = _benchmarks_path(slug)
+    if not p.is_file():
+        return None
+    try:
+        results = json.loads(p.read_text(encoding="utf-8")).get("results") or []
+        generated_at = json.loads(p.read_text(encoding="utf-8")).get("generated_at")
+    except (ValueError, OSError):
+        return None
+    if not results:
+        return {"benchmarks": [], "methods": [], "n_results": 0,
+                "generated_at": None}
+
+    rmap = _ref_map(slug)
+    # Column order: benchmarks by number of methods reporting them (desc).
+    bench_methods: dict[str, set[str]] = defaultdict(set)
+    bench_dir: dict[str, list[bool]] = defaultdict(list)
+    for r in results:
+        bench_methods[r["benchmark"]].add(r["method"])
+        bench_dir[r["benchmark"]].append(bool(r["higher_is_better"]))
+    benchmarks = sorted(bench_methods, key=lambda b: (-len(bench_methods[b]), b.lower()))
+    # Per-benchmark direction by majority vote of its rows.
+    higher = {b: (sum(d) >= len(d) / 2) for b, d in bench_dir.items()}
+
+    # Best (method,benchmark) cell — if a method reports a benchmark from several
+    # papers, keep the leading value for that direction.
+    cell_by: dict[tuple[str, str], dict] = {}
+    for r in results:
+        k = (r["method"], r["benchmark"])
+        cur = cell_by.get(k)
+        n = _num(r["value"])
+        if cur is None or (n is not None and (
+                (higher[r["benchmark"]] and n > (_num(cur["value"]) or float("-inf")))
+                or (not higher[r["benchmark"]] and n < (_num(cur["value"]) or float("inf"))))):
+            pinfo = rmap.get(r["paper"])
+            cell_by[k] = {
+                "value": r["value"], "metric": r["metric"],
+                "paper": {"id": pinfo["id"], "title": pinfo["title"]} if pinfo else None,
+                "best": False,
+            }
+
+    # Flag the best value per benchmark column.
+    for b in benchmarks:
+        vals = [(m, cell_by[(m, b)]) for m in bench_methods[b] if (m, b) in cell_by]
+        nums = [(m, _num(c["value"])) for m, c in vals if _num(c["value"]) is not None]
+        if nums:
+            best_m = (max if higher[b] else min)(nums, key=lambda x: x[1])[0]
+            cell_by[(best_m, b)]["best"] = True
+
+    method_names = {r["method"] for r in results}
+    methods = []
+    for m in method_names:
+        cells = [cell_by.get((m, b)) for b in benchmarks]
+        n = sum(1 for c in cells if c)
+        methods.append({"name": m, "n": n, "cells": cells})
+    # Most-covered methods first; tie-break by how many columns they lead.
+    methods.sort(key=lambda r: (-r["n"], -sum(1 for c in r["cells"] if c and c["best"]),
+                                r["name"].lower()))
+    return {"benchmarks": benchmarks, "methods": methods,
+            "n_results": len(results), "generated_at": generated_at}
+
+
 def _add_seed(slug: str) -> str:
     """Free-text 'what this collection is about' for the add-paper recommender:
     the thesis paragraph + concept names + open questions + problem statements."""
@@ -1182,6 +1347,23 @@ def papers_to_concepts(slug: str, concepts: list[dict], max_tags: int = 2) -> di
     return out
 
 
+def attention_counts(slug: str) -> tuple[int, int]:
+    """``(highlights, non_empty_notes)`` for the collection — the raw attention
+    signal counts shown in the header stat strip. Cheap; no LLM."""
+    con = connect()
+    try:
+        h = con.execute(
+            "SELECT COUNT(*) FROM annotations "
+            "WHERE collection_slug=? AND kind='highlight'", (slug,)).fetchone()[0]
+        n = con.execute(
+            "SELECT COUNT(*) FROM paper_notes WHERE collection_slug=? AND ("
+            "  COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' "
+            "  OR COALESCE(key_quotes,'')<>'')", (slug,)).fetchone()[0]
+        return h, n
+    finally:
+        con.close()
+
+
 def attention_changed_since(slug: str, since: str | None) -> set[int]:
     """Paper ids whose highlights/notes were created or updated after ``since``. Used to
     flag cards "new since last view" on the wiki page. ``since`` None → empty (no recency
@@ -1463,6 +1645,8 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
         # paper-anchored items become graph nodes; others get node_key=None.
         graph_ids = {n["id"] for n in connections.get("graph", {}).get("nodes", [])}
         entity_themes = connections.get("entity_themes", {})
+        _rmap_ls = _ref_map(slug)
+        _pbyid_ls = {p["id"]: p for p in papers}
         for _kind in ("problem", "method"):
             for item in landscape.get(_kind + "s") or []:
                 if not isinstance(item, dict):
@@ -1470,15 +1654,43 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
                 key = f"{_kind}:" + (_SLUG_RE.sub("-", item["text"].lower()).strip("-")[:60] or _kind)
                 item["node_key"] = key if key in graph_ids else None
                 item["theme"] = entity_themes.get(key)
+                # Resolve anchored papers (landscape.json carries refs) to live
+                # paper objects for the dedicated Problems/Methods tab cards.
+                seen_pids, papers_full = set(), []
+                for ref in item.get("papers") or []:
+                    pinfo = _rmap_ls.get(ref)
+                    if pinfo and pinfo["id"] in _pbyid_ls and pinfo["id"] not in seen_pids:
+                        seen_pids.add(pinfo["id"])
+                        papers_full.append(_pbyid_ls[pinfo["id"]])
+                item["papers_full"] = papers_full
     else:
         for p in papers:
             p["themes"] = []
+
+    # --- Concept space (full list w/ attention score + member papers) for the
+    # Concepts tab. Score is the same deterministic per-concept attention the
+    # Focus sidebar uses; papers are the live objects mapped via synonym/LLM. ---
+    concept_view: list[dict] = []
+    if concept_list:
+        cscores = attention_per_concept(slug, concept_list)
+        cp: dict[str, list] = defaultdict(list)
+        for p in papers:
+            for t in p.get("tags") or []:
+                cp[t["slug"]].append(p)
+        for c in concept_list:
+            concept_view.append({
+                "name": c.get("name", c["slug"]), "slug": c["slug"],
+                "blurb": c.get("blurb", ""),
+                "score": cscores.get(c["slug"], 0),
+                "papers": cp.get(c["slug"], []),
+            })
+        concept_view.sort(key=lambda c: (-c["score"], -len(c["papers"]), c["name"].lower()))
 
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
             "papers": papers, "focus": focus, "add_candidates": add_candidates,
             "belief_candidates": belief_candidates, "beliefs": beliefs,
             "can_suggest_beliefs": can_suggest_beliefs(slug),
-            "connections": connections,
+            "connections": connections, "concepts": concept_view,
             "meta": meta_out}
 
 
