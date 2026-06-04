@@ -126,7 +126,7 @@ def get_topic(slug: str) -> dict | None:
             {"id": row["id"], "kind": row["kind"], "claim": row["claim"],
              "paper_id": row["paper_id"], "paper_ref": row["paper_ref"],
              "collection": row["collection_slug"], "hypothesis_id": row["hypothesis_id"],
-             "paper_title": row["paper_title"]}
+             "paper_title": row["paper_title"], "unverified": bool(row["unverified"])}
             for row in con.execute(
             "SELECT e.*, p.title AS paper_title FROM topic_evidence e "
             "LEFT JOIN papers p ON p.id = e.paper_id "
@@ -501,6 +501,151 @@ def _delete_row(slug: str, table: str, rid: int) -> bool:
         con.close()
 
 
+# --- Suggested reading (topic-scoped external candidates) -------------------
+
+def add_suggestion(slug: str, *, arxiv_id: str, title: str, authors: str = "",
+                   abstract: str = "", note: str = "", purpose: str = "broaden",
+                   target_kind: str = "", target_id=None, target_label: str = "",
+                   stance: str = "") -> int | None:
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return None
+        cur = con.execute(
+            "INSERT INTO topic_suggestions(topic_id, arxiv_id, title, authors, abstract, "
+            "note, purpose, target_kind, target_id, target_label, stance, status) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?, 'pending')",
+            (tid, arxiv_id, title, authors, abstract, note, purpose, target_kind,
+             target_id, target_label, stance))
+        _touch(con, slug)
+        con.commit()
+        return cur.lastrowid
+    finally:
+        con.close()
+
+
+def list_suggestions(slug: str, status: str = "pending") -> list[dict]:
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return []
+        return [dict(r) for r in con.execute(
+            "SELECT * FROM topic_suggestions WHERE topic_id=? AND status=? "
+            "ORDER BY created_at DESC, id DESC", (tid, status))]
+    finally:
+        con.close()
+
+
+def pending_suggestion_arxiv(slug: str) -> set:
+    return {s["arxiv_id"] for s in list_suggestions(slug, "pending") if s["arxiv_id"]}
+
+
+def get_suggestion(slug: str, sid: int) -> dict | None:
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return None
+        r = con.execute("SELECT * FROM topic_suggestions WHERE id=? AND topic_id=?",
+                        (sid, tid)).fetchone()
+        return dict(r) if r else None
+    finally:
+        con.close()
+
+
+def dismiss_suggestion(slug: str, sid: int) -> bool:
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        cur = con.execute("UPDATE topic_suggestions SET status='dismissed' "
+                          "WHERE id=? AND topic_id=?", (sid, tid))
+        _touch(con, slug)
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def add_evidence(slug: str, *, kind: str, claim: str, paper_id=None, collection=None,
+                 hypothesis_id=None, unverified: bool = False) -> bool:
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        pos = con.execute("SELECT COALESCE(MAX(position),0)+1 FROM topic_evidence "
+                          "WHERE topic_id=?", (tid,)).fetchone()[0]
+        con.execute(
+            "INSERT INTO topic_evidence(topic_id, kind, claim, paper_id, collection_slug, "
+            "hypothesis_id, unverified, position) VALUES(?,?,?,?,?,?,?,?)",
+            (tid, kind, claim, paper_id, collection, hypothesis_id, 1 if unverified else 0, pos))
+        _touch(con, slug)
+        con.commit()
+        return True
+    finally:
+        con.close()
+
+
+def verify_evidence(slug: str, eid: int) -> bool:
+    """Promote an unverified evidence row to verified (the user vouches for it)."""
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        cur = con.execute("UPDATE topic_evidence SET unverified=0 WHERE id=? AND topic_id=?",
+                          (eid, tid))
+        _touch(con, slug)
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def accept_suggestion(slug: str, sid: int, collection_slug: str = "") -> dict:
+    """Import a suggested paper into a linked collection; for a hypothesis-targeted
+    suggestion, also create an UNVERIFIED evidence row on that hypothesis (re-resolved
+    by label, since ids change across a regenerate). Returns ``{ok, error, ...}``."""
+    from . import triage
+    s = get_suggestion(slug, sid)
+    if not s or s["status"] != "pending":
+        return {"ok": False, "error": "Suggestion not found."}
+    t = get_topic(slug)
+    linked = t["collections"] if t else []
+    if not linked:
+        return {"ok": False, "error": "Link a collection first."}
+    coll = collection_slug if collection_slug in linked else (linked[0] if len(linked) == 1 else "")
+    if not coll:
+        return {"ok": False, "error": "Choose which collection to add it to."}
+    try:
+        pid = triage.accept_arxiv_into_collection(
+            coll, s["arxiv_id"], s.get("title", ""), s.get("authors", ""), s.get("abstract", ""))
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"Import failed: {exc}"}
+    linked_ev = False
+    if s["target_kind"] == "hypothesis":
+        hid = next((h["id"] for h in (t["hypotheses"] or []) if h["text"] == s["target_label"]), None)
+        hid = hid or s["target_id"]
+        if hid:
+            add_evidence(slug, kind=(s["stance"] or "supporting"),
+                         claim=(s.get("note") or "").strip() or "From suggested reading — confirm against the paper.",
+                         paper_id=pid, collection=coll, hypothesis_id=hid, unverified=True)
+            linked_ev = True
+    con = connect()
+    try:
+        con.execute("UPDATE topic_suggestions SET status='added' WHERE id=?", (sid,))
+        con.commit()
+    finally:
+        con.close()
+    log_event(slug, "added", f"suggested reading → {coll}"
+              + (f" · unverified evidence on “{s['target_label'][:40]}”" if linked_ev else ""))
+    return {"ok": True, "paper_id": pid, "collection": coll, "linked_evidence": linked_ev}
+
+
 def replace_investigation(slug: str, *, assumptions: list, hypotheses: list,
                           evidence: list, unknowns: list, experiments: list,
                           generated: dict) -> bool:
@@ -518,9 +663,17 @@ def replace_investigation(slug: str, *, assumptions: list, hypotheses: list,
         tid = _topic_id(con, slug)
         if tid is None:
             return False
-        for table in ("topic_assumptions", "topic_evidence", "topic_unknowns",
+        # Preserve user-accepted UNVERIFIED evidence (from Suggested reading) across
+        # a regenerate, re-linking it to the rebuilt hypotheses by TEXT (the rebuilt
+        # rows get fresh ids). Capture old hyp text + each kept row's old hyp_id now.
+        old_hyp_text = {r["id"]: r["text"] for r in con.execute(
+            "SELECT id, text FROM topic_hypotheses WHERE topic_id=?", (tid,))}
+        kept = [dict(r) for r in con.execute(
+            "SELECT id, hypothesis_id FROM topic_evidence WHERE topic_id=? AND unverified=1", (tid,))]
+        for table in ("topic_assumptions", "topic_unknowns",
                       "topic_experiments", "topic_hypotheses"):
             con.execute(f"DELETE FROM {table} WHERE topic_id=?", (tid,))
+        con.execute("DELETE FROM topic_evidence WHERE topic_id=? AND unverified=0", (tid,))
 
         for i, a in enumerate(assumptions):
             con.execute("INSERT INTO topic_assumptions(topic_id, text, position) VALUES(?,?,?)",
@@ -537,6 +690,14 @@ def replace_investigation(slug: str, *, assumptions: list, hypotheses: list,
 
         def hyp_id(idx):
             return hyp_ids[idx] if isinstance(idx, int) and 0 <= idx < len(hyp_ids) else None
+
+        # Re-attach preserved unverified evidence to the rebuilt hypothesis by text
+        # (its hypothesis_id was NULLed by the FK when the old hypotheses were deleted).
+        new_id_by_text = {h["text"]: hid for h, hid in zip(hypotheses, hyp_ids)}
+        for k in kept:
+            new_hid = new_id_by_text.get(old_hyp_text.get(k["hypothesis_id"]))
+            con.execute("UPDATE topic_evidence SET hypothesis_id=? WHERE id=?",
+                        (new_hid, k["id"]))
 
         for i, e in enumerate(evidence):
             con.execute(

@@ -576,6 +576,109 @@ def _now() -> str:
     return wnow()
 
 
+# ---- suggested reading: purpose-driven external (arXiv) discovery ------------
+
+TOPIC_READING_PURPOSES = ("missing", "challenge", "support", "unknown", "broaden", "custom")
+
+
+def _topic_reading_focus(t: dict) -> str:
+    """Free-text focus seeded from the inquiry + a thin slice of linked-collection
+    concept vocabulary (decision: inquiry-driven, lightly grounded)."""
+    from . import wiki
+    parts = [f"RESEARCH QUESTION: {t['question']}"]
+    if t.get("description"):
+        parts.append(t["description"])
+    names: list[str] = []
+    for cs in t["collections"]:
+        names += wiki._concept_names(cs)
+    names = list(dict.fromkeys(names))[:20]
+    if names:
+        parts.append("Collection concepts: " + ", ".join(names))
+    return "\n".join(parts)
+
+
+def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
+                    custom: str = "") -> dict:
+    """Purpose-driven arXiv discovery for a topic. Stores candidates in
+    topic_suggestions (pending), tagged with the target so Accept can link them.
+    Returns ``{added, error}``."""
+    from . import library, discover
+    from .config import load_config
+    t = topics.get_topic(slug)
+    if not t:
+        return {"added": 0, "error": "Topic not found."}
+    if not t["collections"]:
+        return {"added": 0, "error": "Link at least one collection first."}
+    if purpose not in TOPIC_READING_PURPOSES:
+        purpose = "broaden"
+    focus = _topic_reading_focus(t)
+    target_kind = target_label = stance = intent = ""
+    tid_out = None
+
+    if purpose in ("challenge", "support"):
+        h = next((x for x in t["hypotheses"] if x["id"] == target_id), None)
+        if not h:
+            return {"added": 0, "error": "Pick a hypothesis to target."}
+        target_kind, target_label, tid_out = "hypothesis", h["text"], h["id"]
+        stance = "counter" if purpose == "challenge" else "supporting"
+        verb = "challenge or provide counter-evidence to" if purpose == "challenge" else "support or provide evidence for"
+        intent = f"{verb} the claim: “{h['text']}”"
+        focus += f"\n\nHYPOTHESIS: {h['text']}"
+    elif purpose == "unknown":
+        u = next((x for x in t["unknowns"] if x["id"] == target_id), None)
+        if not u:
+            return {"added": 0, "error": "Pick an unknown to target."}
+        target_kind, target_label, tid_out = "unknown", u["text"], u["id"]
+        intent = f"help answer the open question: “{u['text']}”"
+        focus += f"\n\nOPEN QUESTION: {u['text']}"
+    elif purpose == "missing":
+        target_kind = "missing"
+        m = next((e for e in t["evidence"] if e["kind"] == "missing" and e["id"] == target_id), None)
+        if m:
+            target_label, tid_out = m["claim"], m["id"]
+            intent = f"provide the missing evidence: “{m['claim']}”"
+            focus += f"\n\nMISSING EVIDENCE NEEDED: {m['claim']}"
+        else:
+            miss = [e["claim"] for e in t["evidence"] if e["kind"] == "missing"]
+            intent = "fill an evidence gap this investigation still needs"
+            if miss:
+                focus += "\n\nMISSING EVIDENCE: " + "; ".join(miss[:5])
+    elif purpose == "custom":
+        intent = (custom or "").strip() or "be worth reading for this investigation"
+    else:  # broaden
+        intent = "broaden the field around this research question"
+        if t["hypotheses"]:
+            focus += "\n\nHYPOTHESES: " + "; ".join(h["text"] for h in t["hypotheses"][:5])
+
+    have_titles = set()
+    for cs in t["collections"]:
+        for p in library.list_papers(cs):
+            have_titles.add((p.get("title") or "").lower())
+    try:
+        limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
+    except (TypeError, ValueError):
+        limit = 10
+    try:
+        cands = discover.find_related_papers(focus, exclude_titles=have_titles,
+                                             limit=limit, intent=intent)
+    except Exception as exc:  # noqa: BLE001
+        return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
+    pending = topics.pending_suggestion_arxiv(slug)
+    added = 0
+    for c in cands:
+        aid = c.get("arxiv_id")
+        if not aid or aid in pending:
+            continue
+        if topics.add_suggestion(slug, arxiv_id=aid, title=c.get("title", ""),
+                                 authors=c.get("authors", ""), abstract=c.get("summary", ""),
+                                 note=c.get("note", ""), purpose=purpose, target_kind=target_kind,
+                                 target_id=tid_out, target_label=target_label, stance=stance):
+            pending.add(aid)
+            added += 1
+    topics.log_event(slug, "suggested_reading", f"{purpose}: {added} paper(s)")
+    return {"added": added, "error": None}
+
+
 # ---- agent open-questions (one LLM call) -------------------------------------
 
 def suggest_questions(slug: str) -> dict:

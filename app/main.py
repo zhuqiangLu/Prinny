@@ -243,6 +243,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
         "stats": stats, "linked": linked,
+        "suggestions": topics_mod.list_suggestions(slug, "pending"),
         "basics_undo": topic_view.has_basics_undo(slug),
         "gen_running": gen_running,
         "gen_label": topic_view.gen_stage_label(gen_job) if gen_running else "",
@@ -378,6 +379,36 @@ def topic_question_apply(slug: str, question: str = Form(""),
 @app.post("/t/{slug}/question/undo")
 def topic_question_undo(slug: str) -> RedirectResponse:
     topic_view.undo_basics_edit(slug)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+# --- topic suggested reading (purpose-driven external discovery) ------------
+@app.post("/t/{slug}/reading/suggest")
+def topic_reading_suggest(slug: str, purpose: str = Form("broaden"),
+                          target: str = Form(""), custom: str = Form("")) -> RedirectResponse:
+    try:
+        tgt = int(target) if (target or "").strip().isdigit() else None
+        topic_view.suggest_reading(slug, purpose=purpose, target_id=tgt, custom=custom)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("paper_agent.topics").exception("topic suggest_reading failed")
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/reading/{sid}/accept")
+def topic_reading_accept(slug: str, sid: int, collection: str = Form("")) -> RedirectResponse:
+    topics_mod.accept_suggestion(slug, sid, collection)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/reading/{sid}/dismiss")
+def topic_reading_dismiss(slug: str, sid: int) -> RedirectResponse:
+    topics_mod.dismiss_suggestion(slug, sid)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/evidence/{eid}/verify")
+def topic_evidence_verify(slug: str, eid: int) -> RedirectResponse:
+    topics_mod.verify_evidence(slug, eid)
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 

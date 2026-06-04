@@ -126,6 +126,55 @@ def test_generate_investigation_grounds_and_persists(topicdb, monkeypatch):
     assert any(e["hypothesis_id"] for e in t["evidence"])       # linked to a hypothesis
 
 
+def test_suggest_reading_accept_links_unverified_and_survives_regenerate(topicdb, monkeypatch):
+    """Purpose=challenge stores a hypothesis-targeted suggestion; Accept imports the
+    paper and files an UNVERIFIED counter-evidence row; a later regenerate preserves
+    that row and re-links it to the rebuilt hypothesis by text."""
+    import app.discover as discover, app.library as library, app.triage as triage
+    slug = topics.create_topic("T", "Can TTT help?", collections=["vlms"])
+    # one hypothesis to target (no LLM)
+    topics.replace_investigation(slug, assumptions=[],
+        hypotheses=[{"text": "Adapting memory beats full model.", "status": "mixed",
+                     "support_count": 1, "counter_count": 1}],
+        evidence=[], unknowns=[], experiments=[], generated={})
+    hyp = topics.get_topic(slug)["hypotheses"][0]
+
+    monkeypatch.setattr(library, "list_papers", lambda s: [])
+    monkeypatch.setattr(discover, "find_related_papers",
+                        lambda focus, exclude_titles=None, limit=10, intent="": [
+                            {"arxiv_id": "2502.0001", "title": "Counter Paper",
+                             "summary": "abs", "note": "argues full-model adaptation wins"}])
+    res = topic_view.suggest_reading(slug, purpose="challenge", target_id=hyp["id"])
+    assert res["added"] == 1
+    sug = topics.list_suggestions(slug)[0]
+    assert sug["target_kind"] == "hypothesis" and sug["stance"] == "counter"
+
+    # Accept → import (stubbed) + unverified counter-evidence on the hypothesis
+    monkeypatch.setattr(triage, "accept_arxiv_into_collection",
+                        lambda *a, **k: 4242)
+    acc = topics.accept_suggestion(slug, sug["id"], "vlms")
+    assert acc["ok"] and acc["linked_evidence"] is True
+    ev = topics.get_topic(slug)["evidence"]
+    unv = [e for e in ev if e["unverified"]]
+    assert len(unv) == 1 and unv[0]["kind"] == "counter" and unv[0]["hypothesis_id"] == hyp["id"]
+    assert topics.list_suggestions(slug) == []          # no longer pending
+
+    # Regenerate with the target hypothesis SECOND (so it gets a different id) —
+    # the unverified row must survive and re-link to it BY TEXT, not by old id.
+    topics.replace_investigation(slug, assumptions=["A"],
+        hypotheses=[{"text": "An unrelated new hypothesis.", "status": "unknown",
+                     "support_count": 0, "counter_count": 0},
+                    {"text": "Adapting memory beats full model.", "status": "supported",
+                     "support_count": 3, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[], generated={})
+    t2 = topics.get_topic(slug)
+    target = next(h for h in t2["hypotheses"] if h["text"] == "Adapting memory beats full model.")
+    other = next(h for h in t2["hypotheses"] if h["text"] == "An unrelated new hypothesis.")
+    unv2 = [e for e in t2["evidence"] if e["unverified"]]
+    assert len(unv2) == 1
+    assert unv2[0]["hypothesis_id"] == target["id"] != other["id"]   # re-linked by text
+
+
 def test_generate_async_job_lifecycle(topicdb, monkeypatch):
     """start_generate_async runs on a thread and publishes running → done state
     that the overlay polls; clear removes it."""

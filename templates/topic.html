@@ -78,7 +78,7 @@
       </div>
 
       {# tab bar #}
-      {% set TABS = [('overview','▢ Overview'),('hypotheses','🧪 Hypotheses'),('evidence','◈ Evidence'),('unknowns','❓ Unknowns'),('experiments','⚗ Experiments'),('notes','🗒 Notes'),('timeline','◷ Timeline')] %}
+      {% set TABS = [('overview','▢ Overview'),('hypotheses','🧪 Hypotheses'),('evidence','◈ Evidence'),('unknowns','❓ Unknowns'),('experiments','⚗ Experiments'),('reading','✦ Suggested reading'),('notes','🗒 Notes'),('timeline','◷ Timeline')] %}
       <div class="flex items-center gap-1 overflow-x-auto -mb-px">
         {% for key, label in TABS %}
         <button @click="go('{{ key }}')"
@@ -304,6 +304,7 @@
             <span class="shrink-0">{% if e.kind=='supporting' %}<span class="text-emerald-600">＋</span>{% elif e.kind=='counter' %}<span class="text-rose-600">－</span>{% else %}<span class="text-amber-500">?</span>{% endif %}</span>
             <span class="text-slate-600">{{ e.claim }}</span>
             {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="text-violet-600 hover:underline shrink-0">[paper]</a>{% endif %}
+            {% if e.unverified %}<span class="shrink-0 text-[10px] text-amber-700" title="From suggested reading — confirm in the Evidence tab">⚠</span>{% endif %}
           </div>
           {% endfor %}
         </div>
@@ -322,7 +323,7 @@
           <h3 class="text-sm font-semibold text-{{ tint }}-700 mb-2 pb-1.5 border-b border-slate-100">{{ col }}</h3>
           <div class="space-y-2">
             {% for e in t.evidence if e.kind == kind %}
-            <div class="rounded-lg border border-{{ tint }}-100 bg-{{ tint }}-50/40 p-2.5 group"
+            <div class="rounded-lg border border-{{ tint }}-100 bg-{{ tint }}-50/40 p-2.5 group {% if e.unverified %}ring-1 ring-amber-300{% endif %}"
                  data-s="{{ (e.claim ~ ' ' ~ (e.paper_title or ''))|lower }}"
                  x-show="q.trim()==='' || $el.dataset.s.includes(q.trim().toLowerCase())">
               <div class="flex items-start gap-1.5">
@@ -332,6 +333,10 @@
               <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
                 {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">{{ (e.paper_title or 'paper')|truncate(32) }}</a>{% endif %}
                 {% if e.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == e.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
+                {% if e.unverified %}
+                <span class="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800" title="From suggested reading — not yet grounded against the paper">⚠ unverified</span>
+                <form method="post" action="/t/{{ t.slug }}/evidence/{{ e.id }}/verify"><button class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200">✓ confirm</button></form>
+                {% endif %}
               </div>
             </div>
             {% else %}<p class="text-[12px] text-slate-400">None.</p>{% endfor %}
@@ -391,6 +396,85 @@
         </div>
       </div>
       {% else %}<p class="text-sm text-slate-400">No experiments yet — lightweight candidate studies that would test a hypothesis.</p>{% endfor %}
+    </div>
+
+    {# ============================ SUGGESTED READING ============================ #}
+    <div x-show="tab==='reading'" x-cloak class="space-y-3" x-data="{ purpose: 'broaden' }">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>✦</span> Suggested reading</h2>
+      <p class="text-xs text-slate-500">External papers (arXiv) for this investigation. Pick a <b>purpose</b> — targeting a hypothesis or unknown — and the agent finds papers that serve it. Adding a paper imports it into a linked collection{% if t.hypotheses %}; for a hypothesis purpose it also files an <b>unverified</b> evidence link you can confirm{% endif %}.</p>
+
+      <form method="post" action="/t/{{ t.slug }}/reading/suggest" class="rounded-xl border border-slate-200 bg-white p-4 space-y-2"
+            onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('.sr-busy').classList.remove('hidden'); this.querySelector('.sr-idle').classList.add('hidden');">
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="text-xs font-medium text-slate-500">Purpose</label>
+          <select name="purpose" x-model="purpose" class="rounded border border-slate-300 px-2 py-1 text-sm">
+            <option value="missing">Fill missing evidence</option>
+            <option value="challenge">Challenge a hypothesis</option>
+            <option value="support">Support a hypothesis</option>
+            <option value="unknown">Address an unknown</option>
+            <option value="broaden">Broaden the field</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <template x-if="purpose === 'challenge' || purpose === 'support'">
+            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
+              {% for h in t.hypotheses %}<option value="{{ h.id }}">H{{ loop.index }}: {{ h.text|truncate(48) }}</option>{% endfor %}
+            </select>
+          </template>
+          <template x-if="purpose === 'unknown'">
+            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
+              {% for u in t.unknowns %}<option value="{{ u.id }}">{{ u.text|truncate(52) }}</option>{% endfor %}
+            </select>
+          </template>
+          <template x-if="purpose === 'missing'">
+            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
+              <option value="">Any gap</option>
+              {% for e in t.evidence if e.kind == 'missing' %}<option value="{{ e.id }}">{{ e.claim|truncate(52) }}</option>{% endfor %}
+            </select>
+          </template>
+          <button type="submit" class="ml-auto rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-60">
+            <span class="sr-idle">✦ Find reading</span>
+            <span class="sr-busy hidden items-center gap-1"><span class="inline-block animate-spin">⟳</span> Searching arXiv…</span>
+          </button>
+        </div>
+        <template x-if="purpose === 'custom'">
+          <input name="custom" placeholder="What should the agent look for?" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
+        </template>
+        <p class="text-[11px] text-slate-400">Network call to arXiv — may take ~20s; results land below as pending.</p>
+      </form>
+
+      {% if not suggestions %}
+      <p class="text-sm text-slate-400">No pending suggestions. Pick a purpose above and click <b>✦ Find reading</b>.</p>
+      {% else %}
+      {% set PLABEL = {'missing':'fill missing evidence','challenge':'challenge','support':'support','unknown':'address unknown','broaden':'broaden','custom':'custom'} %}
+      <ul class="space-y-2">
+        {% for s in suggestions %}
+        <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ s.title|default('(untitled)') }}</p>
+            {% if s.arxiv_id %}<a href="https://arxiv.org/abs/{{ s.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ s.arxiv_id }} ↗</a>{% endif %}
+          </div>
+          <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">{{ PLABEL.get(s.purpose, s.purpose) }}</span>
+            {% if s.target_label %}<span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-600">→ {{ s.target_label|truncate(46) }}</span>{% endif %}
+          </div>
+          {% if s.note %}<p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why:</span> {{ s.note }}</p>{% endif %}
+          <div class="mt-2 flex items-center gap-1.5">
+            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/accept" class="flex items-center gap-1.5">
+              {% if linked|length > 1 %}
+              <select name="collection" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+                {% for c in linked %}<option value="{{ c.slug }}">{{ c.name }}</option>{% endfor %}
+              </select>
+              {% else %}<input type="hidden" name="collection" value="{{ linked[0].slug if linked else '' }}">{% endif %}
+              <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add{% if s.target_kind == 'hypothesis' %} + link{% endif %}</button>
+            </form>
+            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/dismiss">
+              <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
+            </form>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
     </div>
 
     {# ============================ NOTES ============================ #}
