@@ -2039,12 +2039,13 @@ def wiki_benchmarks_extract(request: Request, slug: str) -> HTMLResponse:
 # --- Recommended-papers-to-add (arXiv discovery → triage → collection) --------
 
 @app.post("/c/{slug}/wiki/recommend-add", response_class=HTMLResponse)
-def wiki_recommend_add(request: Request, slug: str) -> HTMLResponse:
-    """Run arXiv discovery seeded by the field model and enqueue new candidates
-    into triage (synchronous network action). Re-renders the panel."""
+def wiki_recommend_add(request: Request, slug: str, purpose: str = Form("gaps"),
+                       target: str = Form(""), custom: str = Form("")) -> HTMLResponse:
+    """Run arXiv discovery for the chosen purpose and enqueue new candidates into
+    triage (synchronous network action). Re-renders the panel."""
     _require_collection(slug)
     try:
-        wiki.suggest_papers_to_add(slug)
+        wiki.suggest_papers_to_add(slug, purpose=purpose, target=target, custom=custom)
     except Exception:  # noqa: BLE001
         logging.getLogger("paper_agent.wiki").exception("suggest_papers_to_add failed")
     return _wiki_panel(request, slug)

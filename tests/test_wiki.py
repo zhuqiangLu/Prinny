@@ -550,7 +550,7 @@ def test_suggest_papers_to_add_enqueues_arxiv_candidates(tmp_path, monkeypatch):
     wiki.generate_overview("vlms")
     # Stub the network discovery: two candidates, one a dupe title of an existing paper.
     monkeypatch.setattr(discover, "find_related_papers",
-                        lambda seed, exclude_titles=None, limit=10: [
+                        lambda seed, exclude_titles=None, limit=10, intent="": [
                             {"arxiv_id": "2501.11111", "title": "Brand New Paper",
                              "summary": "x", "note": "fills the eval gap"},
                             {"arxiv_id": "2501.22222", "title": "Another New One",
@@ -580,7 +580,7 @@ def test_suggest_papers_to_add_passes_configured_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: {"recommend_count": "7"})
     wiki.generate_overview("vlms")
     seen = {}
-    def _capture(seed, exclude_titles=None, limit=10):
+    def _capture(seed, exclude_titles=None, limit=10, intent=""):
         seen["limit"] = limit
         return []
     monkeypatch.setattr(discover, "find_related_papers", _capture)

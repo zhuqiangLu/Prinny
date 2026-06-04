@@ -1047,15 +1047,52 @@ def _add_seed(slug: str) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
-def suggest_papers_to_add(slug: str) -> dict:
-    """On-demand arXiv discovery seeded by the field model (concepts + gaps).
-    New candidates (not already in the collection, not already pending) are
-    enqueued into triage as 'pending'. Network action — gated behind an explicit
-    button. Returns ``{added, error}``."""
+# Collection "Suggested reading" purposes → (seed, intent) for the arXiv search.
+COLLECTION_PURPOSES = ("gaps", "concept", "thesis", "adjacent", "custom")
+
+
+def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -> tuple[str, str]:
+    """Build (seed, intent) for a collection suggested-reading purpose. seed = the
+    free-text focus; intent = what to look for / how to judge fit."""
+    ls = _load_landscape(slug)
+    thesis = current_thesis(slug) or {}
+    para = thesis.get("one_paragraph", "")
+    concepts = _concept_names(slug)
+    if purpose == "gaps":
+        bits = []
+        if ls.get("open_questions"):
+            bits.append("Open questions: " + "; ".join(ls["open_questions"]))
+        if ls.get("problems"):
+            bits.append("Problems: " + "; ".join(p["text"] for p in ls["problems"]))
+        return ("\n".join(bits) or para, "address an open problem or stated gap in this collection")
+    if purpose == "concept":
+        name = target.strip() or (concepts[0] if concepts else "")
+        return (f"{para}\n\nConcept of interest: {name}".strip(),
+                f"deepen or extend the concept “{name}”")
+    if purpose == "thesis":
+        return (para or _add_seed(slug),
+                "represent recent or state-of-the-art work directly relevant to this thesis")
+    if purpose == "adjacent":
+        return (f"{para}\n\nConcepts: {', '.join(concepts)}".strip(),
+                "come from an adjacent area this collection doesn't yet cover but that connects to it")
+    if purpose == "custom":
+        return (_add_seed(slug), custom.strip() or "be worth reading next for this collection")
+    return (_add_seed(slug), "")        # default: original 'extend/fill gaps' framing
+
+
+def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
+                          custom: str = "") -> dict:
+    """On-demand arXiv discovery for a chosen PURPOSE (Fill field gaps / Extend a
+    concept / Latest on the thesis / Broaden-adjacent / Custom). New candidates
+    (not already in the collection, not already pending) are enqueued into triage
+    as 'pending'. Network action — gated behind an explicit button.
+    Returns ``{added, error}``."""
     from . import discover, library, triage
     from .config import load_config
-    seed = _add_seed(slug)
-    if not seed:
+    if purpose not in COLLECTION_PURPOSES:
+        purpose = "gaps"
+    seed, intent = _purpose_seed(slug, purpose, target, custom)
+    if not seed.strip():
         return {"added": 0, "error": "Draft the Field Model first — there's no focus to search from."}
     try:
         limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
@@ -1065,7 +1102,8 @@ def suggest_papers_to_add(slug: str) -> dict:
     have_arxiv = {p.get("arxiv_id") for p in library.list_papers(slug) if p.get("arxiv_id")}
     pending_arxiv = {c.get("arxiv_id") for c in triage.list_triage(slug, "pending") if c.get("arxiv_id")}
     try:
-        cands = discover.find_related_papers(seed, exclude_titles=have_titles, limit=limit)
+        cands = discover.find_related_papers(seed, exclude_titles=have_titles,
+                                             limit=limit, intent=intent)
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     added = 0
@@ -1076,7 +1114,7 @@ def suggest_papers_to_add(slug: str) -> dict:
         if triage.add_from_arxiv(slug, aid, c.get("title", ""), c.get("note", "")):
             pending_arxiv.add(aid)
             added += 1
-    _append_log(slug, f"suggested {added} paper(s) to add (arXiv discovery)", seed)
+    _append_log(slug, f"suggested {added} paper(s) [{purpose}]", seed)
     return {"added": added, "error": None}
 
 

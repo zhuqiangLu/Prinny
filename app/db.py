@@ -281,6 +281,27 @@ CREATE TABLE IF NOT EXISTS topic_timeline (
 );
 CREATE INDEX IF NOT EXISTS idx_topic_evidence ON topic_evidence(topic_id);
 
+-- Suggested reading for a topic: external papers (arXiv) the agent surfaced for a
+-- chosen PURPOSE (fill missing evidence / challenge|support a hypothesis / address
+-- an unknown / broaden / custom). Topic-scoped (a topic owns no papers); on Accept
+-- the paper imports into a chosen LINKED collection and — for a targeted purpose —
+-- gets an UNVERIFIED evidence row on the target. target_label snapshots the
+-- hypothesis/unknown text so the link survives a regenerate (remap by text).
+CREATE TABLE IF NOT EXISTS topic_suggestions (
+  id INTEGER PRIMARY KEY,
+  topic_id INTEGER NOT NULL REFERENCES research_topics(id) ON DELETE CASCADE,
+  arxiv_id TEXT, title TEXT, authors TEXT, abstract TEXT,
+  note TEXT,                              -- LLM "why this fits / what it addresses"
+  purpose TEXT NOT NULL DEFAULT 'broaden',
+  target_kind TEXT NOT NULL DEFAULT '',   -- 'hypothesis' | 'unknown' | 'missing' | ''
+  target_id INTEGER,                      -- hypothesis/unknown id at suggest time (best-effort)
+  target_label TEXT NOT NULL DEFAULT '',  -- text snapshot of the target
+  stance TEXT NOT NULL DEFAULT '',        -- 'supporting' | 'counter' | '' (for hypothesis purposes)
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | added | dismissed
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_topic_suggestions ON topic_suggestions(topic_id);
+
 -- External-content FTS over paper_notes. First column is paper_id; paper_notes.paper_id
 -- is an INTEGER PRIMARY KEY so it *is* the rowid (content_rowid='rowid' stays correct).
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -426,6 +447,12 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE research_topics ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'investigation'")
         if "generated" not in rtcols:
             con.execute("ALTER TABLE research_topics ADD COLUMN generated TEXT NOT NULL DEFAULT '{}'")
+    if "topic_evidence" in tables:
+        tecols = {r[1] for r in con.execute("PRAGMA table_info(topic_evidence)")}
+        if "unverified" not in tecols:
+            # Suggested-reading Accept can create an UNVERIFIED evidence link (a
+            # candidate from search, not yet grounded against the paper text).
+            con.execute("ALTER TABLE topic_evidence ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0")
     if "topic_hypotheses" in tables:
         thcols = {r[1] for r in con.execute("PRAGMA table_info(topic_hypotheses)")}
         if "status" not in thcols:

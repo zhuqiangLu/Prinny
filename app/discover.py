@@ -227,13 +227,14 @@ def find_gaps(slug: str) -> list[dict]:
 
 
 def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
-                        limit: int = 10) -> list[dict]:
-    """Recommend arXiv papers to ADD to a collection, seeded by a free-text
-    description of what the collection is about (the cognitive-model field
-    model — thesis + concepts + open questions). Two LLM steps: build an arXiv
-    query from the seed, then pick up to ``limit`` of the most relevant results,
-    each with a CONCRETE reason it fits this collection. Results already in the
-    collection (by title) are dropped.
+                        limit: int = 10, intent: str = "") -> list[dict]:
+    """Recommend arXiv papers, seeded by a free-text FOCUS. Two LLM steps: build
+    an arXiv query from the focus, then pick up to ``limit`` of the most relevant
+    results, each with a CONCRETE reason. Results already present (by title) are
+    dropped. ``intent`` (optional) states the PURPOSE — what to look for and how
+    to judge fit (e.g. "challenge the claim: <hypothesis>"); when omitted it
+    defaults to the original collection 'extend/fill gaps' framing so existing
+    callers are unchanged.
 
     Returns ``[{arxiv_id, title, summary, authors, note}]`` (note = the reason).
     Network action (arXiv) — callers gate it behind an explicit user click."""
@@ -241,19 +242,21 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     if not seed:
         return []
     limit = max(1, int(limit))
+    intent = (intent or "").strip()
+    q_goal = intent or "a researcher building this collection would want to read or cite next"
+    pick_goal = intent or "best extend or fill gaps in this collection"
     exclude = {t.lower() for t in (exclude_titles or set())}
     try:
         query_resp = llm.complete([
             {"role": "system", "content": "Output only a short arXiv search query string."},
-            {"role": "user", "content": f"COLLECTION FOCUS:\n{seed}\n\n"
-             "Give a concise arXiv search query (keywords) for recent papers a "
-             "researcher building this collection would want to read or cite next."},
+            {"role": "user", "content": f"FOCUS:\n{seed}\n\n"
+             f"Give a concise arXiv search query (keywords) for recent papers that {q_goal}."},
         ]).strip().strip('"')
     except Exception:  # noqa: BLE001
         return []
     query = f"all:{query_resp}" if ":" not in query_resp else query_resp
     # Fetch a wider candidate pool than `limit` so the LLM has room to pick the
-    # best `limit` after dropping papers already in the collection.
+    # best `limit` after dropping papers already present.
     pool = max(limit * 2, 20)
     results = [r for r in _arxiv_search(query, max_results=pool)
                if r["title"].lower() not in exclude]
@@ -265,12 +268,11 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
         pick = llm.complete([
             {"role": "system", "content": "You output only valid JSON."},
             {"role": "user", "content": (
-                f"COLLECTION FOCUS:\n{seed}\n\nCANDIDATES:\n{listing}\n\n"
-                f"Pick up to {limit} candidates that best extend or fill gaps in this "
-                "collection. For EACH, give a concrete one-sentence reason it fits "
-                "THIS collection (what it adds / which gap or concept it speaks to) — "
-                "not a generic summary. Respond JSON: "
-                '{"picks": [{"index": 0, "note": "why it fits this collection"}]}')},
+                f"FOCUS:\n{seed}\n\nCANDIDATES:\n{listing}\n\n"
+                f"Pick up to {limit} candidates that {pick_goal}. For EACH, give a "
+                "concrete one-sentence reason it fits this goal (what it adds / which "
+                "gap, concept, hypothesis or unknown it speaks to) — not a generic "
+                'summary. Respond JSON: {"picks": [{"index": 0, "note": "why it fits"}]}')},
         ])
         import json
         data = json.loads(pick[pick.find("{"): pick.rfind("}") + 1])
