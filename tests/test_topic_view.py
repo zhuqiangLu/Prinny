@@ -175,6 +175,15 @@ def test_suggest_reading_accept_links_unverified_and_survives_regenerate(topicdb
     assert unv2[0]["hypothesis_id"] == target["id"] != other["id"]   # re-linked by text
 
 
+def test_recommend_collection_returns_linked_or_empty(topicdb):
+    """Best-fit picker default: returns a linked collection (overlap or fallback),
+    and '' when nothing is linked."""
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    assert topic_view.recommend_collection(slug, "vision language models", "about VLMs") == "vlms"
+    bare = topics.create_topic("T2", "Q?")
+    assert topic_view.recommend_collection(bare, "x", "y") == ""
+
+
 def test_generate_async_job_lifecycle(topicdb, monkeypatch):
     """start_generate_async runs on a thread and publishes running → done state
     that the overlay polls; clear removes it."""

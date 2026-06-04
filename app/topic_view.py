@@ -578,7 +578,7 @@ def _now() -> str:
 
 # ---- suggested reading: purpose-driven external (arXiv) discovery ------------
 
-TOPIC_READING_PURPOSES = ("missing", "challenge", "support", "unknown", "broaden", "custom")
+TOPIC_READING_PURPOSES = ("missing", "challenge", "support", "unknown", "broaden", "related", "custom")
 
 
 def _topic_reading_focus(t: dict) -> str:
@@ -595,6 +595,24 @@ def _topic_reading_focus(t: dict) -> str:
     if names:
         parts.append("Collection concepts: " + ", ".join(names))
     return "\n".join(parts)
+
+
+def recommend_collection(slug: str, title: str, abstract: str) -> str:
+    """Best-fit linked collection for a candidate paper: the one whose field-model
+    concept names most overlap the paper's title+abstract (deterministic, no LLM).
+    Falls back to the first linked collection. '' if none linked."""
+    from . import wiki
+    t = topics.get_topic(slug)
+    linked = (t["collections"] if t else []) or []
+    if not linked:
+        return ""
+    text = f"{title} {abstract}".lower()
+    best, best_score = linked[0], -1
+    for cs in linked:
+        score = sum(1 for n in wiki._concept_names(cs) if n and n.lower() in text)
+        if score > best_score:
+            best, best_score = cs, score
+    return best
 
 
 def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
@@ -645,8 +663,8 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
                 focus += "\n\nMISSING EVIDENCE: " + "; ".join(miss[:5])
     elif purpose == "custom":
         intent = (custom or "").strip() or "be worth reading for this investigation"
-    else:  # broaden
-        intent = "broaden the field around this research question"
+    else:  # broaden / related — most relevant work for the question
+        intent = "be the most relevant key or recent work for this research question"
         if t["hypotheses"]:
             focus += "\n\nHYPOTHESES: " + "; ".join(h["text"] for h in t["hypotheses"][:5])
 

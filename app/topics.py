@@ -606,21 +606,33 @@ def verify_evidence(slug: str, eid: int) -> bool:
         con.close()
 
 
-def accept_suggestion(slug: str, sid: int, collection_slug: str = "") -> dict:
+def accept_suggestion(slug: str, sid: int, collection_slug: str = "",
+                      new_name: str = "") -> dict:
     """Import a suggested paper into a linked collection; for a hypothesis-targeted
-    suggestion, also create an UNVERIFIED evidence row on that hypothesis (re-resolved
-    by label, since ids change across a regenerate). Returns ``{ok, error, ...}``."""
-    from . import triage
+    suggestion, also create an UNVERIFIED (or grounded, if validator-passed) evidence
+    row on that hypothesis. ``collection_slug == '__new__'`` creates a new collection
+    from ``new_name``, links it to the topic, and uses it. Returns ``{ok, error, ...}``."""
+    from . import triage, library
     s = get_suggestion(slug, sid)
     if not s or s["status"] != "pending":
         return {"ok": False, "error": "Suggestion not found."}
     t = get_topic(slug)
     linked = t["collections"] if t else []
-    if not linked:
-        return {"ok": False, "error": "Link a collection first."}
-    coll = collection_slug if collection_slug in linked else (linked[0] if len(linked) == 1 else "")
-    if not coll:
-        return {"ok": False, "error": "Choose which collection to add it to."}
+    if collection_slug == "__new__":
+        name = (new_name or "").strip()
+        if not name:
+            return {"ok": False, "error": "Name the new collection."}
+        if library.name_taken(name):
+            return {"ok": False, "error": f"A collection named “{name}” already exists."}
+        coll = library.create_local_collection(name)
+        set_collections(slug, list(linked) + [coll])      # link it to the topic
+        log_event(slug, "linked", f"new collection “{name}”")
+    else:
+        if not linked:
+            return {"ok": False, "error": "Link a collection first."}
+        coll = collection_slug if collection_slug in linked else (linked[0] if len(linked) == 1 else "")
+        if not coll:
+            return {"ok": False, "error": "Choose which collection to add it to."}
     try:
         pid = triage.accept_arxiv_into_collection(
             coll, s["arxiv_id"], s.get("title", ""), s.get("authors", ""), s.get("abstract", ""))

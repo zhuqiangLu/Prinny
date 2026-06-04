@@ -91,6 +91,21 @@ def test_accept_suggestion_grounds_when_validated(db, monkeypatch):
     assert len([e for e in topics.get_topic(slug)["evidence"] if e["unverified"]]) == 1
 
 
+def test_accept_suggestion_creates_and_links_new_collection(db, monkeypatch):
+    """'__new__' creates a collection, links it to the topic, and imports there."""
+    import app.triage as triage, app.library as library
+    monkeypatch.setattr(library, "name_taken", lambda n: False)
+    monkeypatch.setattr(library, "create_local_collection", lambda name, **k: "new-col")
+    monkeypatch.setattr(triage, "accept_arxiv_into_collection", lambda *a, **k: 55)
+    slug = topics.create_topic("T", "Q?", collections=["c1"])
+    sid = topics.add_suggestion(slug, arxiv_id="7", title="P", purpose="related")
+    res = topics.accept_suggestion(slug, sid, "__new__", new_name="My New Coll")
+    assert res["ok"] and res["collection"] == "new-col"
+    assert "new-col" in topics.get_topic(slug)["collections"]      # auto-linked
+    sid2 = topics.add_suggestion(slug, arxiv_id="8", title="P2", purpose="related")
+    assert topics.accept_suggestion(slug, sid2, "__new__", new_name="  ")["ok"] is False
+
+
 def test_replace_investigation_links_hypotheses(db):
     slug = topics.create_topic("T", "Q?")
     topics.replace_investigation(

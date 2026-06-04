@@ -422,31 +422,18 @@
     </div>
 
     {# ============================ SUGGESTED READING ============================ #}
-    <div x-show="tab==='reading'" x-cloak class="space-y-3" x-data="{ purpose: 'broaden' }">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>✦</span> Suggested reading</h2>
-      <p class="text-xs text-slate-500">External papers (arXiv), <b>pre-validated against their abstract</b>. <b>Targeted</b> searches start from the entities — use 🔎 on a hypothesis (support / challenge), an unknown, or a missing-evidence gap. For an open-ended sweep, use Broaden or Custom here. Adding a validated, hypothesis-targeted paper files a <b>grounded</b> evidence link; an unvalidated one lands <b>unverified</b> for you to confirm.</p>
+    <div x-show="tab==='reading'" x-cloak class="space-y-3">
+      {% set suggest_action = "/t/" ~ t.slug ~ "/reading/suggest" %}
+      {% set launcher_hx = False %}
+      {% set launcher_subject = "this research topic" %}
+      {% set launcher_placeholder = "Find papers that challenge frequent test-time adaptation" %}
+      {% set examples = ["Counter-evidence for one of my hypotheses", "Papers that fill a missing-evidence gap", "Recent methods relevant to my question"] %}
+      {% include "_reading_launcher.html" %}
 
-      <form method="post" action="/t/{{ t.slug }}/reading/suggest" class="rounded-xl border border-slate-200 bg-white p-4 space-y-2"
-            onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('.sr-busy').classList.remove('hidden'); this.querySelector('.sr-idle').classList.add('hidden');">
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="text-xs font-medium text-slate-500">Open-ended</label>
-          <select name="purpose" x-model="purpose" class="rounded border border-slate-300 px-2 py-1 text-sm">
-            <option value="broaden">Broaden the field</option>
-            <option value="custom">Custom…</option>
-          </select>
-          <button type="submit" class="ml-auto rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-60">
-            <span class="sr-idle">✦ Find reading</span>
-            <span class="sr-busy hidden items-center gap-1"><span class="inline-block animate-spin">⟳</span> Searching arXiv…</span>
-          </button>
-        </div>
-        <template x-if="purpose === 'custom'">
-          <input name="custom" placeholder="What should the agent look for?" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-        </template>
-        <p class="text-[11px] text-slate-400">Network call to arXiv — may take ~20s; results are validated, then land below.</p>
-      </form>
+      <p class="text-xs text-slate-500"><b>Targeted</b> searches start from the entities — use 🔎 on a hypothesis (support / challenge), an unknown, or a missing-evidence gap. A validated hypothesis match files a <b>grounded</b> evidence link on Accept; otherwise it lands <b>unverified</b>.</p>
 
       {% if not suggestions %}
-      <p class="text-sm text-slate-400">No pending suggestions. Pick a purpose above and click <b>✦ Find reading</b>.</p>
+      <p class="text-sm text-slate-400">No pending suggestions. Use the search above, or 🔎 on an entity.</p>
       {% else %}
       {% set PLABEL = {'missing':'fill missing evidence','challenge':'challenge','support':'support','unknown':'address unknown','broaden':'broaden','custom':'custom'} %}
       <ul class="space-y-2">
@@ -464,12 +451,15 @@
           </div>
           {% if s.note %}<p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why:</span> {{ s.note }}</p>{% endif %}
           <div class="mt-2 flex items-center gap-1.5">
-            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/accept" class="flex items-center gap-1.5">
-              {% if linked|length > 1 %}
-              <select name="collection" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
-                {% for c in linked %}<option value="{{ c.slug }}">{{ c.name }}</option>{% endfor %}
+            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/accept" class="flex items-center gap-1.5 flex-wrap"
+                  x-data="{ coll: '{{ s.recommended or (linked[0].slug if linked else '__new__') }}' }">
+              <select name="collection" x-model="coll" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+                {% for c in linked %}<option value="{{ c.slug }}">{{ c.name }}{% if c.slug == s.recommended %} · best fit{% endif %}</option>{% endfor %}
+                <option value="__new__">+ New collection…</option>
               </select>
-              {% else %}<input type="hidden" name="collection" value="{{ linked[0].slug if linked else '' }}">{% endif %}
+              <template x-if="coll === '__new__'">
+                <input name="new_name" required placeholder="New collection name" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+              </template>
               <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add{% if s.target_kind == 'hypothesis' %} + link{% endif %}</button>
             </form>
             <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/dismiss">

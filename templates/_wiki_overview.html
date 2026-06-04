@@ -175,46 +175,18 @@
 {# ===================================================================
    PANE: SUGGESTED READING — purpose-driven arXiv discovery (→ triage → add)
    =================================================================== #}
-<div x-show="tab==='reading'" x-cloak class="space-y-3"
-     x-data="{ purpose: 'gaps' }">
-  <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>✦</span> Suggested reading</h2>
-  <p class="text-xs text-slate-500">External papers (arXiv) not in this collection. Pick a <b>purpose</b>, and the agent searches for papers that serve it — each with a concrete reason. Add one to import it locally.</p>
+<div x-show="tab==='reading'" x-cloak class="space-y-3">
+  {% set suggest_action = "/c/" ~ slug ~ "/wiki/recommend-add" %}
+  {% set launcher_hx = True %}
+  {% set launcher_subject = "this collection" %}
+  {% set launcher_placeholder = "Find recent surveys on streaming-video memory" %}
+  {% set examples = ["Recent SOTA on the collection's thesis", "Papers addressing an open question in this field", "Methods adjacent to this collection's approach"] %}
+  {% include "_reading_launcher.html" %}
 
-  <form id="rec-add-form" hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML"
-        hx-disabled-elt="find button" class="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
-    <div class="flex flex-wrap items-center gap-2">
-      <label class="text-xs font-medium text-slate-500">Purpose</label>
-      <select name="purpose" x-model="purpose" class="rounded border border-slate-300 px-2 py-1 text-sm">
-        <option value="gaps">Fill field gaps</option>
-        <option value="concept">Extend a concept</option>
-        <option value="thesis">Latest on the thesis</option>
-        <option value="adjacent">Broaden / adjacent</option>
-        <option value="custom">Custom…</option>
-      </select>
-      <template x-if="purpose === 'concept'">
-        <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm">
-          {% for c in overview.concepts %}<option value="{{ c.name }}">{{ c.name }}</option>{% endfor %}
-        </select>
-      </template>
-      <button class="ml-auto rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-60">
-        <span class="rec-idle">✦ Suggest papers</span>
-        <span class="rec-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Searching arXiv…</span>
-      </button>
-    </div>
-    <template x-if="purpose === 'custom'">
-      <input name="custom" placeholder="What should the agent look for? e.g. recent surveys on streaming video memory"
-             class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
-    </template>
-    <p class="text-[11px] text-slate-400">Network call to arXiv · results land below as pending suggestions.</p>
-  </form>
-  <style>
-    #rec-add-form .rec-busy { display: none; }
-    #rec-add-form.htmx-request .rec-busy { display: inline-flex; }
-    #rec-add-form.htmx-request .rec-idle { display: none; }
-  </style>
+  <p class="text-xs text-slate-500">Tip: for a specific concept, use 🔎 on a concept in the <b>Concepts</b> tab.</p>
 
   {% if not overview.add_candidates %}
-  <p class="text-sm text-slate-400">No pending suggestions yet. Pick a purpose above and click <b>✦ Suggest papers</b>.</p>
+  <p class="text-sm text-slate-400">No pending suggestions yet. Use the search above.</p>
   {% else %}
   <ul class="space-y-2">
     {% for c in overview.add_candidates %}

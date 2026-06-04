@@ -202,6 +202,15 @@ def topic_create(title: str = Form(""), question: str = Form(""),
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
+def _annotate_recommended(slug: str, suggestions: list[dict]) -> list[dict]:
+    """Tag each pending suggestion with `recommended` = the best-fit linked
+    collection (so the Add picker defaults to it)."""
+    for s in suggestions:
+        s["recommended"] = topic_view.recommend_collection(
+            slug, s.get("title", ""), s.get("abstract", ""))
+    return suggestions
+
+
 @app.get("/t/{slug}", response_class=HTMLResponse)
 def topic_page(request: Request, slug: str) -> HTMLResponse:
     t = topics_mod.get_topic(slug)
@@ -243,7 +252,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "t": t, "sources": _topic_sources(t),
         "all_collections": library.list_collections(with_activity=True),
         "stats": stats, "linked": linked,
-        "suggestions": topics_mod.list_suggestions(slug, "pending"),
+        "suggestions": _annotate_recommended(slug, topics_mod.list_suggestions(slug, "pending")),
         "basics_undo": topic_view.has_basics_undo(slug),
         "gen_running": gen_running,
         "gen_label": topic_view.gen_stage_label(gen_job) if gen_running else "",
@@ -395,8 +404,9 @@ def topic_reading_suggest(slug: str, purpose: str = Form("broaden"),
 
 
 @app.post("/t/{slug}/reading/{sid}/accept")
-def topic_reading_accept(slug: str, sid: int, collection: str = Form("")) -> RedirectResponse:
-    topics_mod.accept_suggestion(slug, sid, collection)
+def topic_reading_accept(slug: str, sid: int, collection: str = Form(""),
+                         new_name: str = Form("")) -> RedirectResponse:
+    topics_mod.accept_suggestion(slug, sid, collection, new_name)
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 

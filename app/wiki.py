@@ -1048,7 +1048,7 @@ def _add_seed(slug: str) -> str:
 
 
 # Collection "Suggested reading" purposes → (seed, intent) for the arXiv search.
-COLLECTION_PURPOSES = ("gaps", "concept", "thesis", "adjacent", "custom")
+COLLECTION_PURPOSES = ("related", "gaps", "concept", "thesis", "adjacent", "custom")
 
 
 def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -> tuple[str, str]:
@@ -1058,6 +1058,9 @@ def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -
     thesis = current_thesis(slug) or {}
     para = thesis.get("one_paragraph", "")
     concepts = _concept_names(slug)
+    if purpose == "related":
+        return (_add_seed(slug),
+                "be the most relevant key or recent work related to this collection")
     if purpose == "gaps":
         bits = []
         if ls.get("open_questions"):
