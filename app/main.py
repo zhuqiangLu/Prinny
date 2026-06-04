@@ -225,6 +225,14 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         if gen_job["status"] == "failed":
             gen_error = gen_job.get("error")
         topic_view.clear_generate_job(slug)
+    # Suggested-reading job (separate overlay on the reading tab).
+    rjob = topic_view.get_reading_job(slug)
+    reading_running = bool(rjob and rjob.get("status") == "running")
+    reading_error = None
+    if rjob and rjob.get("status") in ("done", "failed"):
+        if rjob["status"] == "failed":
+            reading_error = rjob.get("error")
+        topic_view.clear_reading_job(slug)
     thread_id = get_or_create_thread(f"topic:{t['slug']}", None)
     chat = [{"role": m["role"], "html": render_md(m["content"], "")}
             for m in get_messages(thread_id, limit=50)]
@@ -258,6 +266,8 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "gen_label": topic_view.gen_stage_label(gen_job) if gen_running else "",
         "gen_collections": (gen_job or {}).get("n_collections", 0) if gen_running else 0,
         "gen_error": gen_error,
+        "reading_running": reading_running,
+        "reading_error": reading_error,
         "chat": chat,
         "model": load_config().get("model", ""),
     })
@@ -395,12 +405,21 @@ def topic_question_undo(slug: str) -> RedirectResponse:
 @app.post("/t/{slug}/reading/suggest")
 def topic_reading_suggest(slug: str, purpose: str = Form("broaden"),
                           target: str = Form(""), custom: str = Form("")) -> RedirectResponse:
-    try:
+    """Kick off suggested-reading discovery on a background thread; the reading
+    pane renders an overlay that polls /reading/status. Redirect is immediate."""
+    if topics_mod.get_topic(slug):
         tgt = int(target) if (target or "").strip().isdigit() else None
-        topic_view.suggest_reading(slug, purpose=purpose, target_id=tgt, custom=custom)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("paper_agent.topics").exception("topic suggest_reading failed")
+        topic_view.start_reading_async(slug, purpose=purpose, target_id=tgt, custom=custom)
     return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.get("/t/{slug}/reading/status", response_class=JSONResponse)
+def topic_reading_status(slug: str) -> JSONResponse:
+    job = topic_view.get_reading_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"),
+                         "added": job.get("added", 0), "error": job.get("error")})
 
 
 @app.post("/t/{slug}/reading/{sid}/accept")
@@ -1903,6 +1922,14 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
     # landscape bullet lists, paper cards) directly via Jinja.
     overview = wiki.load_overview(slug, attention_since=attention_since)
     benchmarks = wiki.load_benchmarks(slug)
+    # Suggested-reading async job (overlay on the reading tab).
+    rjob = wiki.get_reading_job(slug)
+    reading_running = bool(rjob and rjob.get("status") == "running")
+    reading_error = None
+    if rjob and rjob.get("status") in ("done", "failed"):
+        if rjob["status"] == "failed":
+            reading_error = rjob.get("error")
+        wiki.clear_reading_job(slug)
 
     # Header stat strip (Papers · Highlights · Notes · Connections). Cheap counts;
     # 'Connections' reuses the structural graph's edge count from connection_view.
@@ -1927,6 +1954,8 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "overview": overview,
          "benchmarks": benchmarks,
          "stats": stats,
+         "reading_running": reading_running,
+         "reading_error": reading_error,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "dup_count": len(library.find_duplicate_groups(slug)),
@@ -2085,11 +2114,17 @@ def wiki_recommend_add(request: Request, slug: str, purpose: str = Form("gaps"),
     """Run arXiv discovery for the chosen purpose and enqueue new candidates into
     triage (synchronous network action). Re-renders the panel."""
     _require_collection(slug)
-    try:
-        wiki.suggest_papers_to_add(slug, purpose=purpose, target=target, custom=custom)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("paper_agent.wiki").exception("suggest_papers_to_add failed")
+    wiki.start_reading_async(slug, purpose=purpose, target=target, custom=custom)
     return _wiki_panel(request, slug)
+
+
+@app.get("/c/{slug}/wiki/reading/status", response_class=JSONResponse)
+def wiki_reading_status(slug: str) -> JSONResponse:
+    job = wiki.get_reading_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"),
+                         "added": job.get("added", 0), "error": job.get("error")})
 
 
 @app.post("/c/{slug}/wiki/add/{tid}/accept", response_class=HTMLResponse)

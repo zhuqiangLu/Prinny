@@ -94,6 +94,11 @@
       <b>Generation failed.</b> {{ gen_error }} — try <b>Find evidence</b> again.
     </div>
     {% endif %}
+    {% if reading_error %}
+    <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+      <b>Find reading failed.</b> {{ reading_error }} — try again.
+    </div>
+    {% endif %}
     {% if not has_content %}
     {# Empty investigation — prominent generate CTA #}
     <div class="rounded-xl border border-violet-200 bg-violet-50/40 p-6 text-center max-w-2xl mx-auto">
@@ -620,6 +625,43 @@
               }
               var l = document.getElementById("tg-gen-label");
               if (l && job.label) l.textContent = job.label;
+              setTimeout(tick, 1200);
+            })
+            .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2000); });
+        }
+        setTimeout(tick, 1000);
+      })();
+    </script>
+    {% endif %}
+
+    {# ===== suggested-reading overlay (reuses the .tg-gen-* styles) ===== #}
+    {% if reading_running %}
+    <div id="tg-read-cover" data-slug="{{ t.slug }}" role="status" aria-live="polite"
+         style="position:absolute; inset:0; z-index:30; background:rgba(248,250,252,.72); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);">
+      <div class="tg-gen-card">
+        <svg class="tg-gen-spin" viewBox="0 0 50 50" aria-hidden="true">
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
+          <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round" stroke-dasharray="31 126"></circle>
+        </svg>
+        <div class="tg-gen-label">Searching arXiv &amp; validating…</div>
+        <div class="tg-gen-foot">Find → verify → land — you can keep chatting on the right.</div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var cover = document.getElementById("tg-read-cover");
+        if (!cover) return;
+        var slug = cover.getAttribute("data-slug");
+        function tick() {
+          if (!document.body.contains(cover)) return;
+          fetch("/t/" + slug + "/reading/status", { headers: { "Accept": "application/json" } })
+            .then(function (r) { return r.json(); })
+            .then(function (job) {
+              if (!document.body.contains(cover)) return;
+              if (job.status === "idle" || job.status === "done" || job.status === "failed") {
+                try { localStorage.setItem("pa.ttab", "reading"); } catch (e) {}
+                window.location.reload(); return;
+              }
               setTimeout(tick, 1200);
             })
             .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2000); });

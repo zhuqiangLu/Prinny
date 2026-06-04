@@ -175,6 +175,33 @@ def test_suggest_reading_accept_links_unverified_and_survives_regenerate(topicdb
     assert unv2[0]["hypothesis_id"] == target["id"] != other["id"]   # re-linked by text
 
 
+def test_reading_async_job_lifecycle(topicdb, monkeypatch):
+    """start_reading_async runs suggest_reading on a thread; the overlay polls
+    running → done; no double-start; clear removes it."""
+    import threading, time
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    release = threading.Event()
+
+    def slow(s, **k):
+        release.wait(2)
+        return {"added": 3, "error": None}
+    monkeypatch.setattr(topic_view, "suggest_reading", slow)
+
+    assert topic_view.start_reading_async(slug, purpose="related") is True
+    assert topic_view.start_reading_async(slug) is False          # already running
+    assert topic_view.get_reading_job(slug)["status"] == "running"
+    release.set()
+    job = None
+    for _ in range(100):
+        job = topic_view.get_reading_job(slug)
+        if job and job["status"] == "done":
+            break
+        time.sleep(0.02)
+    assert job["status"] == "done" and job["added"] == 3
+    topic_view.clear_reading_job(slug)
+    assert topic_view.get_reading_job(slug) is None
+
+
 def test_recommend_collection_returns_linked_or_empty(topicdb):
     """Best-fit picker default: returns a linked collection (overlap or fallback),
     and '' when nothing is linked."""

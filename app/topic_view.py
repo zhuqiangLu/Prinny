@@ -430,6 +430,46 @@ def start_generate_async(slug: str) -> bool:
     return True
 
 
+# ---- async suggested-reading job (so Find reading doesn't freeze the page) ----
+_READING_JOBS: dict[str, dict] = {}
+_READING_LOCK = threading.Lock()
+
+
+def get_reading_job(slug: str) -> dict | None:
+    with _READING_LOCK:
+        j = _READING_JOBS.get(slug)
+        return dict(j) if j else None
+
+
+def clear_reading_job(slug: str) -> None:
+    with _READING_LOCK:
+        _READING_JOBS.pop(slug, None)
+
+
+def start_reading_async(slug: str, purpose: str = "related", target_id=None,
+                        custom: str = "") -> bool:
+    """Run suggest_reading on a daemon thread; the overlay polls /reading/status."""
+    existing = get_reading_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    with _READING_LOCK:
+        _READING_JOBS[slug] = {"status": "running", "started_at": _now(),
+                               "added": 0, "error": None}
+
+    def runner():
+        try:
+            res = suggest_reading(slug, purpose=purpose, target_id=target_id, custom=custom)
+            with _READING_LOCK:
+                _READING_JOBS[slug] = {"status": "done", "added": res.get("added", 0),
+                                       "error": res.get("error"), "finished_at": _now()}
+        except Exception as exc:  # noqa: BLE001
+            with _READING_LOCK:
+                _READING_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
+
+    threading.Thread(target=runner, daemon=True, name=f"topicread-{slug}").start()
+    return True
+
+
 def generate_investigation(slug: str, stage_cb=None) -> dict:
     """One LLM call → the full scientific investigation (assumptions, hypotheses
     with status/counts, supporting/counter/missing evidence, unknowns, candidate
