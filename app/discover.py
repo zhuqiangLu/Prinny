@@ -289,6 +289,50 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     return out
 
 
+def validate_candidates(target: str, candidates: list[dict], intent: str = "") -> list[dict]:
+    """Independent, skeptical pre-validation of finder candidates (the 'validator'
+    stage of find → verify → land). For each candidate, check the claimed relevance
+    against the paper's OWN abstract — the summary we already fetched, so no extra
+    network. Drops clear mismatches ('fail'); keeps 'pass'/'weak', annotated with
+    verdict + confidence + a one-line justification.
+
+    One LLM call per candidate, in an independent skeptical context (a genuine check,
+    not the finder grading itself). Read-only; the user still gates Accept."""
+    import json
+    goal = (intent or target or "").strip()
+    out = []
+    for c in candidates:
+        abstract = (c.get("summary") or "").strip()
+        if not abstract:                       # nothing to verify against → keep, low confidence
+            out.append({**c, "verdict": "weak", "confidence": 0.4,
+                        "justification": "No abstract available to verify."})
+            continue
+        system = ("You are a skeptical reviewer checking whether a paper actually serves "
+                  "a stated research goal. Judge ONLY from the abstract. Default to 'fail' "
+                  "unless the abstract clearly supports the goal. STRICT JSON: "
+                  '{"verdict":"pass|weak|fail","confidence":0.0-1.0,'
+                  '"why":"one sentence grounded in the abstract"}.')
+        user = (f"GOAL: {goal}\n\nPAPER: {c.get('title', '')}\nABSTRACT: {abstract[:1500]}\n\n"
+                "Does the abstract clearly support the goal? Be strict — a passing mention "
+                "is not support.")
+        try:
+            raw = llm.complete([{"role": "system", "content": system},
+                                {"role": "user", "content": user}])
+            j = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        except (ValueError, Exception):  # noqa: BLE001
+            j = {}
+        verdict = j.get("verdict") if j.get("verdict") in ("pass", "weak", "fail") else "weak"
+        if verdict == "fail":
+            continue                           # drop clear mismatches
+        try:
+            conf = max(0.0, min(1.0, float(j.get("confidence", 0.5))))
+        except (TypeError, ValueError):
+            conf = 0.5
+        out.append({**c, "verdict": verdict, "confidence": round(conf, 2),
+                    "justification": (j.get("why") or "").strip()[:240]})
+    return out
+
+
 # --- stale papers ----------------------------------------------------------
 def _appearance_count(slug: str, key: str) -> int:
     base = COLLECTIONS_DIR / slug

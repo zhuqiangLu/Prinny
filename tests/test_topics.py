@@ -65,6 +65,32 @@ def test_v2_inquiry_crud(db):
     assert topics.get_topic(slug)["unknowns"] == []
 
 
+def test_accept_suggestion_grounds_when_validated(db, monkeypatch):
+    """A validator 'pass' grounds the evidence link on Accept (unverified=0); a
+    'weak' suggestion lands unverified=1."""
+    import app.triage as triage
+    monkeypatch.setattr(triage, "accept_arxiv_into_collection", lambda *a, **k: 1234)
+    slug = topics.create_topic("T", "Q?", collections=["c1"])
+    topics.replace_investigation(slug, assumptions=[],
+        hypotheses=[{"text": "H one is plausible.", "status": "unknown",
+                     "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[], generated={})
+    h = topics.get_topic(slug)["hypotheses"][0]
+
+    sid = topics.add_suggestion(slug, arxiv_id="9", title="P", purpose="challenge",
+        target_kind="hypothesis", target_id=h["id"], target_label=h["text"],
+        stance="counter", verdict="pass", confidence=0.8, note="the abstract challenges it")
+    assert topics.accept_suggestion(slug, sid, "c1")["linked_evidence"] is True
+    grounded = [e for e in topics.get_topic(slug)["evidence"] if not e["unverified"]]
+    assert len(grounded) == 1 and grounded[0]["kind"] == "counter"
+
+    sid2 = topics.add_suggestion(slug, arxiv_id="10", title="P2", purpose="support",
+        target_kind="hypothesis", target_id=h["id"], target_label=h["text"],
+        stance="supporting", verdict="weak", confidence=0.5)
+    topics.accept_suggestion(slug, sid2, "c1")
+    assert len([e for e in topics.get_topic(slug)["evidence"] if e["unverified"]]) == 1
+
+
 def test_replace_investigation_links_hypotheses(db):
     slug = topics.create_topic("T", "Q?")
     topics.replace_investigation(

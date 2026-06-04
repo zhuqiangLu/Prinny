@@ -296,6 +296,19 @@
           <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="counter">👎{{ h.counter_count }}</span>
           <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button></form>
         </div>
+        {# contextual one-click: find papers that support / challenge this hypothesis #}
+        <div class="mt-2 pl-7 flex items-center gap-2 text-[11px]">
+          <span class="text-slate-400">Find reading:</span>
+          {% set sr = "onsubmit=\"this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}\"" %}
+          <form method="post" action="/t/{{ t.slug }}/reading/suggest" {{ sr|safe }}>
+            <input type="hidden" name="purpose" value="support"><input type="hidden" name="target" value="{{ h.id }}">
+            <button class="rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50">🔎 support</button>
+          </form>
+          <form method="post" action="/t/{{ t.slug }}/reading/suggest" {{ sr|safe }}>
+            <input type="hidden" name="purpose" value="challenge"><input type="hidden" name="target" value="{{ h.id }}">
+            <button class="rounded px-1.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 disabled:opacity-50">🔎 challenge</button>
+          </form>
+        </div>
         {% set evs = t.evidence|selectattr('hypothesis_id','equalto',h.id)|list %}
         {% if evs %}
         <div class="mt-2 pl-7 space-y-1">
@@ -337,6 +350,12 @@
                 <span class="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800" title="From suggested reading — not yet grounded against the paper">⚠ unverified</span>
                 <form method="post" action="/t/{{ t.slug }}/evidence/{{ e.id }}/verify"><button class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200">✓ confirm</button></form>
                 {% endif %}
+                {% if e.kind == 'missing' %}
+                <form method="post" action="/t/{{ t.slug }}/reading/suggest" onsubmit="this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+                  <input type="hidden" name="purpose" value="missing"><input type="hidden" name="target" value="{{ e.id }}">
+                  <button class="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50">🔎 find papers</button>
+                </form>
+                {% endif %}
               </div>
             </div>
             {% else %}<p class="text-[12px] text-slate-400">None.</p>{% endfor %}
@@ -364,6 +383,10 @@
             <span class="rounded px-1.5 py-0.5 {{ PRIO.get(u.priority,'bg-slate-100 text-slate-500') }}">{{ u.priority }} priority</span>
             <span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">{{ u.status }}</span>
             {% if u.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == u.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
+            <form method="post" action="/t/{{ t.slug }}/reading/suggest" onsubmit="this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+              <input type="hidden" name="purpose" value="unknown"><input type="hidden" name="target" value="{{ u.id }}">
+              <button class="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50">🔎 find papers</button>
+            </form>
           </div>
         </div>
         <form method="post" action="/t/{{ t.slug }}/unknowns/{{ u.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
@@ -401,36 +424,16 @@
     {# ============================ SUGGESTED READING ============================ #}
     <div x-show="tab==='reading'" x-cloak class="space-y-3" x-data="{ purpose: 'broaden' }">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>✦</span> Suggested reading</h2>
-      <p class="text-xs text-slate-500">External papers (arXiv) for this investigation. Pick a <b>purpose</b> — targeting a hypothesis or unknown — and the agent finds papers that serve it. Adding a paper imports it into a linked collection{% if t.hypotheses %}; for a hypothesis purpose it also files an <b>unverified</b> evidence link you can confirm{% endif %}.</p>
+      <p class="text-xs text-slate-500">External papers (arXiv), <b>pre-validated against their abstract</b>. <b>Targeted</b> searches start from the entities — use 🔎 on a hypothesis (support / challenge), an unknown, or a missing-evidence gap. For an open-ended sweep, use Broaden or Custom here. Adding a validated, hypothesis-targeted paper files a <b>grounded</b> evidence link; an unvalidated one lands <b>unverified</b> for you to confirm.</p>
 
       <form method="post" action="/t/{{ t.slug }}/reading/suggest" class="rounded-xl border border-slate-200 bg-white p-4 space-y-2"
             onsubmit="this.querySelector('button[type=submit]').disabled=true; this.querySelector('.sr-busy').classList.remove('hidden'); this.querySelector('.sr-idle').classList.add('hidden');">
         <div class="flex flex-wrap items-center gap-2">
-          <label class="text-xs font-medium text-slate-500">Purpose</label>
+          <label class="text-xs font-medium text-slate-500">Open-ended</label>
           <select name="purpose" x-model="purpose" class="rounded border border-slate-300 px-2 py-1 text-sm">
-            <option value="missing">Fill missing evidence</option>
-            <option value="challenge">Challenge a hypothesis</option>
-            <option value="support">Support a hypothesis</option>
-            <option value="unknown">Address an unknown</option>
             <option value="broaden">Broaden the field</option>
             <option value="custom">Custom…</option>
           </select>
-          <template x-if="purpose === 'challenge' || purpose === 'support'">
-            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
-              {% for h in t.hypotheses %}<option value="{{ h.id }}">H{{ loop.index }}: {{ h.text|truncate(48) }}</option>{% endfor %}
-            </select>
-          </template>
-          <template x-if="purpose === 'unknown'">
-            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
-              {% for u in t.unknowns %}<option value="{{ u.id }}">{{ u.text|truncate(52) }}</option>{% endfor %}
-            </select>
-          </template>
-          <template x-if="purpose === 'missing'">
-            <select name="target" class="rounded border border-slate-300 px-2 py-1 text-sm max-w-[18rem]">
-              <option value="">Any gap</option>
-              {% for e in t.evidence if e.kind == 'missing' %}<option value="{{ e.id }}">{{ e.claim|truncate(52) }}</option>{% endfor %}
-            </select>
-          </template>
           <button type="submit" class="ml-auto rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-60">
             <span class="sr-idle">✦ Find reading</span>
             <span class="sr-busy hidden items-center gap-1"><span class="inline-block animate-spin">⟳</span> Searching arXiv…</span>
@@ -439,7 +442,7 @@
         <template x-if="purpose === 'custom'">
           <input name="custom" placeholder="What should the agent look for?" class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">
         </template>
-        <p class="text-[11px] text-slate-400">Network call to arXiv — may take ~20s; results land below as pending.</p>
+        <p class="text-[11px] text-slate-400">Network call to arXiv — may take ~20s; results are validated, then land below.</p>
       </form>
 
       {% if not suggestions %}
@@ -456,6 +459,8 @@
           <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">{{ PLABEL.get(s.purpose, s.purpose) }}</span>
             {% if s.target_label %}<span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-600">→ {{ s.target_label|truncate(46) }}</span>{% endif %}
+            {% if s.verdict == 'pass' %}<span class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700" title="Validator confirmed against the abstract">✓ verified{% if s.confidence %} {{ (s.confidence * 100)|round|int }}%{% endif %}</span>
+            {% elif s.verdict == 'weak' %}<span class="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800" title="Borderline — verify before relying on it">~ weak match</span>{% endif %}
           </div>
           {% if s.note %}<p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why:</span> {{ s.note }}</p>{% endif %}
           <div class="mt-2 flex items-center gap-1.5">

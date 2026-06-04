@@ -1104,6 +1104,7 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     try:
         cands = discover.find_related_papers(seed, exclude_titles=have_titles,
                                              limit=limit, intent=intent)
+        cands = discover.validate_candidates(intent or seed, cands, intent)  # find → verify
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     added = 0
@@ -1111,7 +1112,12 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
         aid = c.get("arxiv_id")
         if not aid or aid in have_arxiv or aid in pending_arxiv:
             continue
-        if triage.add_from_arxiv(slug, aid, c.get("title", ""), c.get("note", "")):
+        note = c.get("note", "")
+        if c.get("verdict") == "pass" and c.get("justification"):
+            note = f"{note}  ·  ✓ verified: {c['justification']}"
+        elif c.get("verdict") == "weak":
+            note = f"{note}  ·  ~ weak match (verify)"
+        if triage.add_from_arxiv(slug, aid, c.get("title", ""), note):
             pending_arxiv.add(aid)
             added += 1
     _append_log(slug, f"suggested {added} paper(s) [{purpose}]", seed)

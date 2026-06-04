@@ -316,6 +316,11 @@
       <div class="flex items-center gap-2 mb-1">
         <h3 class="text-sm font-semibold text-violet-800 flex-1 min-w-0">{{ c.name }}</h3>
         {% if c.score %}<span class="text-[10px] rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ c.score }} attention points">🔥 {{ c.score }}</span>{% endif %}
+        {# contextual one-click: find external papers that extend this concept → Suggested reading tab #}
+        <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')">
+          <input type="hidden" name="purpose" value="concept"><input type="hidden" name="target" value="{{ c.name }}">
+          <button class="text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50" title="Find external papers that extend this concept">🔎 find papers</button>
+        </form>
       </div>
       {% if c.blurb %}<p class="text-xs text-slate-600 leading-snug mb-2">{{ c.blurb }}</p>{% endif %}
       {% if c.papers %}

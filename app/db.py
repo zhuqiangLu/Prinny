@@ -297,6 +297,8 @@ CREATE TABLE IF NOT EXISTS topic_suggestions (
   target_id INTEGER,                      -- hypothesis/unknown id at suggest time (best-effort)
   target_label TEXT NOT NULL DEFAULT '',  -- text snapshot of the target
   stance TEXT NOT NULL DEFAULT '',        -- 'supporting' | 'counter' | '' (for hypothesis purposes)
+  verdict TEXT NOT NULL DEFAULT '',       -- validator: 'pass' | 'weak' | ''
+  confidence REAL NOT NULL DEFAULT 0,     -- validator confidence 0-1
   status TEXT NOT NULL DEFAULT 'pending', -- pending | added | dismissed
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -447,6 +449,12 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE research_topics ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'investigation'")
         if "generated" not in rtcols:
             con.execute("ALTER TABLE research_topics ADD COLUMN generated TEXT NOT NULL DEFAULT '{}'")
+    if "topic_suggestions" in tables:
+        tscols = {r[1] for r in con.execute("PRAGMA table_info(topic_suggestions)")}
+        if "verdict" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN verdict TEXT NOT NULL DEFAULT ''")
+        if "confidence" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN confidence REAL NOT NULL DEFAULT 0")
     if "topic_evidence" in tables:
         tecols = {r[1] for r in con.execute("PRAGMA table_info(topic_evidence)")}
         if "unverified" not in tecols:

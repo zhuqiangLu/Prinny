@@ -661,6 +661,7 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
     try:
         cands = discover.find_related_papers(focus, exclude_titles=have_titles,
                                              limit=limit, intent=intent)
+        cands = discover.validate_candidates(target_label or intent, cands, intent)  # find → verify
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     pending = topics.pending_suggestion_arxiv(slug)
@@ -669,10 +670,15 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
         aid = c.get("arxiv_id")
         if not aid or aid in pending:
             continue
+        # validator-grounded justification becomes the note when it passed
+        note = c.get("note", "")
+        if c.get("verdict") == "pass" and c.get("justification"):
+            note = c["justification"]
         if topics.add_suggestion(slug, arxiv_id=aid, title=c.get("title", ""),
                                  authors=c.get("authors", ""), abstract=c.get("summary", ""),
-                                 note=c.get("note", ""), purpose=purpose, target_kind=target_kind,
-                                 target_id=tid_out, target_label=target_label, stance=stance):
+                                 note=note, purpose=purpose, target_kind=target_kind,
+                                 target_id=tid_out, target_label=target_label, stance=stance,
+                                 verdict=c.get("verdict", ""), confidence=c.get("confidence", 0)):
             pending.add(aid)
             added += 1
     topics.log_event(slug, "suggested_reading", f"{purpose}: {added} paper(s)")

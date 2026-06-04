@@ -506,7 +506,7 @@ def _delete_row(slug: str, table: str, rid: int) -> bool:
 def add_suggestion(slug: str, *, arxiv_id: str, title: str, authors: str = "",
                    abstract: str = "", note: str = "", purpose: str = "broaden",
                    target_kind: str = "", target_id=None, target_label: str = "",
-                   stance: str = "") -> int | None:
+                   stance: str = "", verdict: str = "", confidence: float = 0) -> int | None:
     con = connect()
     try:
         tid = _topic_id(con, slug)
@@ -514,10 +514,10 @@ def add_suggestion(slug: str, *, arxiv_id: str, title: str, authors: str = "",
             return None
         cur = con.execute(
             "INSERT INTO topic_suggestions(topic_id, arxiv_id, title, authors, abstract, "
-            "note, purpose, target_kind, target_id, target_label, stance, status) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?, 'pending')",
+            "note, purpose, target_kind, target_id, target_label, stance, verdict, "
+            "confidence, status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')",
             (tid, arxiv_id, title, authors, abstract, note, purpose, target_kind,
-             target_id, target_label, stance))
+             target_id, target_label, stance, verdict, float(confidence or 0)))
         _touch(con, slug)
         con.commit()
         return cur.lastrowid
@@ -631,9 +631,12 @@ def accept_suggestion(slug: str, sid: int, collection_slug: str = "") -> dict:
         hid = next((h["id"] for h in (t["hypotheses"] or []) if h["text"] == s["target_label"]), None)
         hid = hid or s["target_id"]
         if hid:
+            # A validator 'pass' grounds the link (the abstract was checked); otherwise
+            # it lands UNVERIFIED for the user / a Find-evidence pass to confirm.
+            grounded = s.get("verdict") == "pass"
             add_evidence(slug, kind=(s["stance"] or "supporting"),
                          claim=(s.get("note") or "").strip() or "From suggested reading — confirm against the paper.",
-                         paper_id=pid, collection=coll, hypothesis_id=hid, unverified=True)
+                         paper_id=pid, collection=coll, hypothesis_id=hid, unverified=not grounded)
             linked_ev = True
     con = connect()
     try:

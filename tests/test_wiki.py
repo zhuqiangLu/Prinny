@@ -565,6 +565,30 @@ def test_suggest_papers_to_add_enqueues_arxiv_candidates(tmp_path, monkeypatch):
     assert wiki.suggest_papers_to_add("vlms")["added"] == 0
 
 
+def test_validate_candidates_drops_fails_keeps_annotated(monkeypatch):
+    """The validator stage: independently checks each candidate's abstract, drops
+    'fail', keeps 'pass'/'weak' with verdict + confidence + justification."""
+    import app.discover as discover
+    cands = [{"arxiv_id": "1", "title": "Good", "summary": "strongly supports the goal", "note": "x"},
+             {"arxiv_id": "2", "title": "Bad", "summary": "an unrelated topic entirely", "note": "y"},
+             {"arxiv_id": "3", "title": "Maybe", "summary": "tangentially related at best", "note": "z"}]
+
+    def stub(messages, model=None):
+        u = messages[-1]["content"]
+        if "strongly supports" in u:
+            return '{"verdict":"pass","confidence":0.9,"why":"directly tests the goal"}'
+        if "unrelated" in u:
+            return '{"verdict":"fail","confidence":0.8,"why":"off topic"}'
+        return '{"verdict":"weak","confidence":0.5,"why":"only tangential"}'
+    monkeypatch.setattr(discover.llm, "complete", stub)
+
+    out = discover.validate_candidates("the goal", cands, "the goal")
+    assert {c["arxiv_id"] for c in out} == {"1", "3"}        # the 'fail' was dropped
+    passed = next(c for c in out if c["arxiv_id"] == "1")
+    assert passed["verdict"] == "pass" and passed["confidence"] == 0.9 and passed["justification"]
+    assert next(c for c in out if c["arxiv_id"] == "3")["verdict"] == "weak"
+
+
 def test_suggest_papers_to_add_needs_a_field_model(tmp_path, monkeypatch):
     """No thesis/concepts → no seed → refuse with a clear error, no network."""
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())   # no generate_overview
