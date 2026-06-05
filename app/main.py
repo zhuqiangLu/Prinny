@@ -39,6 +39,7 @@ from . import (
     thoughts as thoughts_mod,
     topic_view,
     topics as topics_mod,
+    notify,
     triage as triage_mod,
     wiki,
     wiki_propose,
@@ -113,6 +114,18 @@ def _startup() -> None:
 @app.on_event("shutdown")
 def _shutdown() -> None:
     live_session.shutdown_all()   # don't orphan persistent chat processes
+
+
+@app.get("/notifications", response_class=JSONResponse)
+def notifications_feed() -> JSONResponse:
+    """Global background-job notification feed for the sidebar bell."""
+    return JSONResponse(notify.feed())
+
+
+@app.post("/notifications/seen", response_class=JSONResponse)
+def notifications_seen() -> JSONResponse:
+    notify.mark_seen()
+    return JSONResponse({"ok": True})
 
 
 @app.get("/healthz")

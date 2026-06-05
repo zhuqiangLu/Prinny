@@ -138,8 +138,31 @@
         {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-auto">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
         <span class="truncate">{{ b.app_name }}</span>
       </a>
-      <button type="button" @click="toggleNav()" class="ml-auto grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-              title="Hide sidebar" aria-label="Hide sidebar">‹</button>
+      <div class="ml-auto flex items-center gap-1">
+        {# notification bell: global feed of finished background jobs. A pulsing dot
+           when there are unseen completions; opening the list marks them seen. #}
+        <div class="relative" x-data="{ open: false, unseen: 0, items: [],
+               feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.items = d.items; }).catch(() => {}); },
+               toggle() { this.open = !this.open; if (this.open && this.unseen) { fetch('/notifications/seen', { method: 'POST' }).then(() => this.unseen = 0); } } }"
+             x-init="feed(); setInterval(() => feed(), 12000)">
+          <button type="button" @click="toggle()" class="relative grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  title="Notifications" aria-label="Notifications">🔔
+            <span x-show="unseen > 0" x-cloak class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-violet-500 ring-2 ring-white animate-pulse"></span>
+          </button>
+          <div x-show="open" x-cloak @click.outside="open = false"
+               class="absolute right-0 mt-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
+            <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Activity</div>
+            <template x-for="n in items" :key="n.id">
+              <a :href="n.link || '#'" class="block px-3 py-2 hover:bg-slate-50 border-b border-slate-50 leading-snug">
+                <span :class="n.ok ? 'text-slate-700' : 'text-rose-700'" x-text="n.message"></span>
+              </a>
+            </template>
+            <p x-show="!items.length" class="px-3 py-3 text-xs text-slate-400 text-center">No recent activity.</p>
+          </div>
+        </div>
+        <button type="button" @click="toggleNav()" class="grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                title="Hide sidebar" aria-label="Hide sidebar">‹</button>
+      </div>
     </div>
     {% set NAV_MAX = 6 %}
     <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">

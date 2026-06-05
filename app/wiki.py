@@ -1000,6 +1000,12 @@ def start_benchmark_async(slug: str) -> bool:
                                      "done": res.get("papers", 0), "total": res.get("papers", 0),
                                      "results": res.get("results", 0), "error": err,
                                      "finished_at": _now()}
+            from . import notify
+            if err:
+                notify.add(f"Benchmark extraction failed ({slug})", f"/c/{slug}?tab=benchmarks", slug, ok=False)
+            else:
+                notify.add(f"Benchmarks: {res.get('results', 0)} result(s) extracted ({slug})",
+                           f"/c/{slug}?tab=benchmarks", slug)
         except Exception as exc:  # noqa: BLE001
             with _BENCH_LOCK:
                 _BENCH_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
@@ -1243,6 +1249,12 @@ def start_reading_async(slug: str, purpose: str = "related", target: str = "",
                 _READING_JOBS[slug] = {"status": "failed" if err else "done",
                                        "added": res.get("added", 0),
                                        "error": err, "finished_at": _now()}
+            from . import notify
+            if err:
+                notify.add(f"Suggested reading failed ({slug})", f"/c/{slug}?tab=reading", slug, ok=False)
+            else:
+                notify.add(f"Suggested reading: {res.get('added', 0)} paper(s) found ({slug})",
+                           f"/c/{slug}?tab=reading", slug)
         except Exception as exc:  # noqa: BLE001
             with _READING_LOCK:
                 _READING_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
@@ -1463,9 +1475,14 @@ def start_draft_async(slug: str, force: bool = True) -> bool:
                      stage="done" if ok else "failed",
                      finished_at=_now(),
                      error=None if ok else "the agent produced no usable output")
+            from . import notify
+            notify.add(f"Wiki draft {'ready' if ok else 'failed'} ({slug})",
+                       f"/c/{slug}?tab=overview", slug, ok=ok)
         except Exception as exc:  # noqa: BLE001 - publish, don't crash the worker
             _set_job(slug, status="failed", stage="failed",
                      finished_at=_now(), error=str(exc))
+            from . import notify
+            notify.add(f"Wiki draft failed ({slug})", f"/c/{slug}?tab=overview", slug, ok=False)
 
     threading.Thread(target=runner, daemon=True, name=f"draft-{slug}").start()
     return True

@@ -418,13 +418,18 @@ def start_generate_async(slug: str) -> bool:
     def runner():
         try:
             res = generate_investigation(slug, stage_cb=cb)
+            from . import notify
             if res.get("ok"):
                 _set_gen(slug, status="done", stage="done", finished_at=_now())
+                notify.add(f"Investigation generated ({slug})", f"/t/{slug}", slug)
             else:
                 _set_gen(slug, status="failed", stage="failed",
                          error=res.get("error") or "no usable output", finished_at=_now())
+                notify.add(f"Investigation generation failed ({slug})", f"/t/{slug}", slug, ok=False)
         except Exception as exc:  # noqa: BLE001 - publish, don't crash the worker
             _set_gen(slug, status="failed", stage="failed", error=str(exc), finished_at=_now())
+            from . import notify
+            notify.add(f"Investigation generation failed ({slug})", f"/t/{slug}", slug, ok=False)
 
     threading.Thread(target=runner, daemon=True, name=f"topicgen-{slug}").start()
     return True
@@ -465,6 +470,12 @@ def start_reading_async(slug: str, purpose: str = "related", target_id=None,
                 _READING_JOBS[slug] = {"status": "failed" if err else "done",
                                        "added": res.get("added", 0),
                                        "error": err, "finished_at": _now()}
+            from . import notify
+            if err:
+                notify.add(f"Topic reading failed ({slug})", f"/t/{slug}", slug, ok=False)
+            else:
+                notify.add(f"Topic reading: {res.get('added', 0)} paper(s) found ({slug})",
+                           f"/t/{slug}", slug)
         except Exception as exc:  # noqa: BLE001
             with _READING_LOCK:
                 _READING_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
