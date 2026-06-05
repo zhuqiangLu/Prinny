@@ -1101,13 +1101,20 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
         limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
     except (TypeError, ValueError):
         limit = 10
+    hist = triage.outcome_history(slug)          # learning: accept/reject memory
     have_titles = {(p.get("title") or "").lower() for p in library.list_papers(slug)}
+    have_titles |= {t.lower() for t in hist["accepted_titles"]}   # exclude accepted (hard)
     have_arxiv = {p.get("arxiv_id") for p in library.list_papers(slug) if p.get("arxiv_id")}
+    have_arxiv |= hist["accepted_arxiv"]
     pending_arxiv = {c.get("arxiv_id") for c in triage.list_triage(slug, "pending") if c.get("arxiv_id")}
     try:
-        cands = discover.find_related_papers(seed, exclude_titles=have_titles,
-                                             limit=limit, intent=intent)
+        cands = discover.find_related_papers(seed, exclude_titles=have_titles, limit=limit,
+                                             intent=intent, prefer=hist["accepted_titles"],
+                                             avoid=hist["dismissed_titles"])
         cands = discover.validate_candidates(intent or seed, cands, intent)  # find → verify
+        cands = discover.rerank_by_profile(                                   # learn → re-rank
+            cands, discover.preference_profile(hist["accepted_titles"], hist["dismissed_titles"]),
+            hist["dismissed_arxiv"])
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     added = 0
@@ -1120,6 +1127,8 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
             note = f"{note}  ·  ✓ verified: {c['justification']}"
         elif c.get("verdict") == "weak":
             note = f"{note}  ·  ~ weak match (verify)"
+        if c.get("seen_before"):
+            note = f"↩ seen before · {note}"
         if triage.add_from_arxiv(slug, aid, c.get("title", ""), note):
             pending_arxiv.add(aid)
             added += 1

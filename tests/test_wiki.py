@@ -550,7 +550,7 @@ def test_suggest_papers_to_add_enqueues_arxiv_candidates(tmp_path, monkeypatch):
     wiki.generate_overview("vlms")
     # Stub the network discovery: two candidates, one a dupe title of an existing paper.
     monkeypatch.setattr(discover, "find_related_papers",
-                        lambda seed, exclude_titles=None, limit=10, intent="": [
+                        lambda seed, exclude_titles=None, limit=10, intent="", **kw: [
                             {"arxiv_id": "2501.11111", "title": "Brand New Paper",
                              "summary": "x", "note": "fills the eval gap"},
                             {"arxiv_id": "2501.22222", "title": "Another New One",
@@ -589,6 +589,26 @@ def test_validate_candidates_drops_fails_keeps_annotated(monkeypatch):
     assert next(c for c in out if c["arxiv_id"] == "3")["verdict"] == "weak"
 
 
+def test_preference_profile_and_rerank():
+    """Learning: kept-paper words boost, passed-on words penalise, and a
+    previously-dismissed candidate is tagged + down-weighted (but not removed)."""
+    import app.discover as discover
+    profile = discover.preference_profile(
+        accepted_titles=["Sparse attention for long video"],
+        dismissed_titles=["Diffusion image generation"])
+    assert "sparse" in profile["boost"] and "attention" in profile["boost"]
+    assert "diffusion" in profile["penalise"]
+    cands = [{"arxiv_id": "a", "title": "Diffusion models survey", "summary": ""},
+             {"arxiv_id": "b", "title": "Sparse attention long video memory", "summary": ""},
+             {"arxiv_id": "c", "title": "Unrelated robotics", "summary": ""}]
+    out = discover.rerank_by_profile(cands, profile, dismissed_arxiv={"a"})
+    ids = [c["arxiv_id"] for c in out]
+    assert ids.index("b") < ids.index("a")              # boosted above dismissed
+    assert next(c for c in out if c["arxiv_id"] == "a")["seen_before"] is True
+    assert next(c for c in out if c["arxiv_id"] == "b")["seen_before"] is False
+    assert {c["arxiv_id"] for c in out} == {"a", "b", "c"}   # dismissed NOT dropped (soft)
+
+
 def test_suggest_papers_to_add_needs_a_field_model(tmp_path, monkeypatch):
     """No thesis/concepts → no seed → refuse with a clear error, no network."""
     _seed_three_papers(tmp_path, monkeypatch, _llm_stub())   # no generate_overview
@@ -604,7 +624,7 @@ def test_suggest_papers_to_add_passes_configured_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "load_config", lambda: {"recommend_count": "7"})
     wiki.generate_overview("vlms")
     seen = {}
-    def _capture(seed, exclude_titles=None, limit=10, intent=""):
+    def _capture(seed, exclude_titles=None, limit=10, intent="", **kw):
         seen["limit"] = limit
         return []
     monkeypatch.setattr(discover, "find_related_papers", _capture)

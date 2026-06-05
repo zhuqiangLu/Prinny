@@ -542,6 +542,36 @@ def pending_suggestion_arxiv(slug: str) -> set:
     return {s["arxiv_id"] for s in list_suggestions(slug, "pending") if s["arxiv_id"]}
 
 
+def reading_history(slug: str) -> dict:
+    """Accept/reject memory for the topic's suggested reading (the learning
+    signal): ``{accepted_arxiv, dismissed_arxiv, accepted_titles, dismissed_titles}``
+    from topic_suggestions (added vs dismissed)."""
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return {"accepted_arxiv": set(), "dismissed_arxiv": set(),
+                    "accepted_titles": [], "dismissed_titles": []}
+        rows = con.execute("SELECT arxiv_id, title, status FROM topic_suggestions "
+                           "WHERE topic_id=? AND status IN ('added','dismissed')", (tid,)).fetchall()
+        acc_a, dis_a, acc_t, dis_t = set(), set(), [], []
+        for r in rows:
+            if r["status"] == "added":
+                if r["arxiv_id"]:
+                    acc_a.add(r["arxiv_id"])
+                if r["title"]:
+                    acc_t.append(r["title"])
+            else:
+                if r["arxiv_id"]:
+                    dis_a.add(r["arxiv_id"])
+                if r["title"]:
+                    dis_t.append(r["title"])
+        return {"accepted_arxiv": acc_a, "dismissed_arxiv": dis_a,
+                "accepted_titles": acc_t, "dismissed_titles": dis_t}
+    finally:
+        con.close()
+
+
 def get_suggestion(slug: str, sid: int) -> dict | None:
     con = connect()
     try:

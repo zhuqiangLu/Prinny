@@ -92,6 +92,33 @@ def list_triage(slug: str, status: str = "pending") -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def outcome_history(slug: str) -> dict:
+    """Accept/reject memory for a collection's suggested reading (learning signal):
+    ``{accepted_arxiv, dismissed_arxiv, accepted_titles, dismissed_titles}`` from
+    triage_items (accepted vs rejected)."""
+    con = connect()
+    try:
+        rows = con.execute(
+            "SELECT arxiv_id, title, status FROM triage_items "
+            "WHERE collection_slug = ? AND status IN ('accepted','rejected')", (slug,)).fetchall()
+    finally:
+        con.close()
+    acc_a, dis_a, acc_t, dis_t = set(), set(), [], []
+    for r in rows:
+        if r["status"] == "accepted":
+            if r["arxiv_id"]:
+                acc_a.add(r["arxiv_id"])
+            if r["title"]:
+                acc_t.append(r["title"])
+        else:
+            if r["arxiv_id"]:
+                dis_a.add(r["arxiv_id"])
+            if r["title"]:
+                dis_t.append(r["title"])
+    return {"accepted_arxiv": acc_a, "dismissed_arxiv": dis_a,
+            "accepted_titles": acc_t, "dismissed_titles": dis_t}
+
+
 def get_item(triage_id: int) -> dict | None:
     con = connect()
     try:

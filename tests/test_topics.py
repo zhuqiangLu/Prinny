@@ -91,6 +91,20 @@ def test_accept_suggestion_grounds_when_validated(db, monkeypatch):
     assert len([e for e in topics.get_topic(slug)["evidence"] if e["unverified"]]) == 1
 
 
+def test_reading_history_tracks_accept_reject(db):
+    """reading_history exposes the accept/reject memory the finder learns from."""
+    slug = topics.create_topic("T", "Q?")
+    s1 = topics.add_suggestion(slug, arxiv_id="x1", title="Kept paper", purpose="related")
+    s2 = topics.add_suggestion(slug, arxiv_id="x2", title="Dropped paper", purpose="related")
+    topics.dismiss_suggestion(slug, s2)
+    con = topics.connect()                       # mark s1 'added' (accept needs an import)
+    con.execute("UPDATE topic_suggestions SET status='added' WHERE id=?", (s1,))
+    con.commit(); con.close()
+    h = topics.reading_history(slug)
+    assert h["accepted_arxiv"] == {"x1"} and h["accepted_titles"] == ["Kept paper"]
+    assert h["dismissed_arxiv"] == {"x2"} and h["dismissed_titles"] == ["Dropped paper"]
+
+
 def test_accept_suggestion_creates_and_links_new_collection(db, monkeypatch):
     """'__new__' creates a collection, links it to the topic, and imports there."""
     import app.triage as triage, app.library as library

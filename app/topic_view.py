@@ -708,7 +708,8 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
         if t["hypotheses"]:
             focus += "\n\nHYPOTHESES: " + "; ".join(h["text"] for h in t["hypotheses"][:5])
 
-    have_titles = set()
+    hist = topics.reading_history(slug)          # learning: accept/reject memory
+    have_titles = set(t.lower() for t in hist["accepted_titles"])   # exclude accepted (hard)
     for cs in t["collections"]:
         for p in library.list_papers(cs):
             have_titles.add((p.get("title") or "").lower())
@@ -717,12 +718,16 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
     except (TypeError, ValueError):
         limit = 10
     try:
-        cands = discover.find_related_papers(focus, exclude_titles=have_titles,
-                                             limit=limit, intent=intent)
+        cands = discover.find_related_papers(focus, exclude_titles=have_titles, limit=limit,
+                                             intent=intent, prefer=hist["accepted_titles"],
+                                             avoid=hist["dismissed_titles"])
         cands = discover.validate_candidates(target_label or intent, cands, intent)  # find → verify
+        cands = discover.rerank_by_profile(                                          # learn → re-rank
+            cands, discover.preference_profile(hist["accepted_titles"], hist["dismissed_titles"]),
+            hist["dismissed_arxiv"])
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
-    pending = topics.pending_suggestion_arxiv(slug)
+    pending = topics.pending_suggestion_arxiv(slug) | hist["accepted_arxiv"]
     added = 0
     for c in cands:
         aid = c.get("arxiv_id")
@@ -732,6 +737,8 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
         note = c.get("note", "")
         if c.get("verdict") == "pass" and c.get("justification"):
             note = c["justification"]
+        if c.get("seen_before"):
+            note = f"↩ seen before · {note}"
         if topics.add_suggestion(slug, arxiv_id=aid, title=c.get("title", ""),
                                  authors=c.get("authors", ""), abstract=c.get("summary", ""),
                                  note=note, purpose=purpose, target_kind=target_kind,

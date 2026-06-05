@@ -141,7 +141,7 @@ def test_suggest_reading_accept_links_unverified_and_survives_regenerate(topicdb
 
     monkeypatch.setattr(library, "list_papers", lambda s: [])
     monkeypatch.setattr(discover, "find_related_papers",
-                        lambda focus, exclude_titles=None, limit=10, intent="": [
+                        lambda focus, exclude_titles=None, limit=10, intent="", **kw: [
                             {"arxiv_id": "2502.0001", "title": "Counter Paper",
                              "summary": "abs", "note": "argues full-model adaptation wins"}])
     res = topic_view.suggest_reading(slug, purpose="challenge", target_id=hyp["id"])

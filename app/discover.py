@@ -227,14 +227,15 @@ def find_gaps(slug: str) -> list[dict]:
 
 
 def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
-                        limit: int = 10, intent: str = "") -> list[dict]:
+                        limit: int = 10, intent: str = "",
+                        prefer: list[str] | None = None,
+                        avoid: list[str] | None = None) -> list[dict]:
     """Recommend arXiv papers, seeded by a free-text FOCUS. Two LLM steps: build
     an arXiv query from the focus, then pick up to ``limit`` of the most relevant
     results, each with a CONCRETE reason. Results already present (by title) are
     dropped. ``intent`` (optional) states the PURPOSE — what to look for and how
-    to judge fit (e.g. "challenge the claim: <hypothesis>"); when omitted it
-    defaults to the original collection 'extend/fill gaps' framing so existing
-    callers are unchanged.
+    to judge fit. ``prefer``/``avoid`` (optional) are the titles of papers the user
+    previously kept / passed on — a SOFT bias for the pick step (learning signal).
 
     Returns ``[{arxiv_id, title, summary, authors, note}]`` (note = the reason).
     Network action (arXiv) — callers gate it behind an explicit user click."""
@@ -245,6 +246,11 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     intent = (intent or "").strip()
     q_goal = intent or "a researcher building this collection would want to read or cite next"
     pick_goal = intent or "best extend or fill gaps in this collection"
+    bias = ""
+    if prefer:
+        bias += "\nThe researcher PREVIOUSLY KEPT (prefer this kind): " + "; ".join(prefer[:8])
+    if avoid:
+        bias += "\nThey PASSED ON (deprioritise this kind): " + "; ".join(avoid[:8])
     exclude = {t.lower() for t in (exclude_titles or set())}
     try:
         query_resp = llm.complete([
@@ -268,7 +274,7 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
         pick = llm.complete([
             {"role": "system", "content": "You output only valid JSON."},
             {"role": "user", "content": (
-                f"FOCUS:\n{seed}\n\nCANDIDATES:\n{listing}\n\n"
+                f"FOCUS:\n{seed}{bias}\n\nCANDIDATES:\n{listing}\n\n"
                 f"Pick up to {limit} candidates that {pick_goal}. For EACH, give a "
                 "concrete one-sentence reason it fits this goal (what it adds / which "
                 "gap, concept, hypothesis or unknown it speaks to) — not a generic "
@@ -331,6 +337,52 @@ def validate_candidates(target: str, candidates: list[dict], intent: str = "") -
         out.append({**c, "verdict": verdict, "confidence": round(conf, 2),
                     "justification": (j.get("why") or "").strip()[:240]})
     return out
+
+
+# --- learning: deterministic preference profile from accept/reject history ----
+_STOPWORDS = {
+    "the", "a", "an", "of", "for", "and", "or", "to", "in", "on", "with", "via",
+    "from", "by", "is", "are", "be", "as", "at", "using", "use", "based", "toward",
+    "towards", "into", "over", "under", "we", "our", "this", "that", "these", "those",
+    "can", "learning", "model", "models", "approach", "method", "methods", "paper",
+    "study", "novel", "new", "efficient", "scalable", "framework", "via",
+}
+
+
+def _tokens(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9][a-z0-9\-]{2,}", (text or "").lower())
+            if w not in _STOPWORDS}
+
+
+def preference_profile(accepted_titles: list[str], dismissed_titles: list[str]) -> dict:
+    """A lightweight keyword profile from accept/reject history: words from kept
+    papers BOOST, words from passed-on papers PENALISE (minus any also boosted).
+    Deterministic, no LLM — improves as the user acts."""
+    boost: set[str] = set()
+    for t in accepted_titles or []:
+        boost |= _tokens(t)
+    penalise: set[str] = set()
+    for t in dismissed_titles or []:
+        penalise |= _tokens(t)
+    penalise -= boost
+    return {"boost": boost, "penalise": penalise}
+
+
+def rerank_by_profile(candidates: list[dict], profile: dict,
+                      dismissed_arxiv: set[str] | None = None) -> list[dict]:
+    """Re-rank candidates by the preference profile (stable: ties keep finder
+    order). Tags each with ``seen_before`` (previously dismissed — a soft penalty,
+    NOT a hard block, so it can resurface). Returns the reordered list."""
+    boost, penalise = profile.get("boost", set()), profile.get("penalise", set())
+    dismissed_arxiv = dismissed_arxiv or set()
+    scored = []
+    for i, c in enumerate(candidates):
+        toks = _tokens(f"{c.get('title','')} {c.get('summary','')}")
+        seen = c.get("arxiv_id") in dismissed_arxiv
+        score = len(toks & boost) - len(toks & penalise) - (2 if seen else 0)
+        scored.append((-score, i, {**c, "seen_before": seen}))
+    scored.sort(key=lambda x: (x[0], x[1]))      # score desc, then finder order
+    return [c for _s, _i, c in scored]
 
 
 # --- stale papers ----------------------------------------------------------
