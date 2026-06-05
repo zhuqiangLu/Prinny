@@ -65,9 +65,7 @@
       {# stat strip #}
       <div class="flex items-center gap-6 text-sm flex-wrap pb-1">
         {% for n, label, icon in [
-          (stats.collections,'Collections','⛓'), (stats.evidence,'Evidence papers','📄'),
-          (stats.hypotheses,'Hypotheses','🧪'), (stats.unknowns,'Unknowns','❓'),
-          (stats.experiments,'Experiments','⚗')] %}
+          (stats.collections,'Collections','⛓'), (stats.evidence,'Evidence papers','📄')] %}
         <div><span class="font-semibold text-slate-900 tabular-nums">{{ n }}</span> <span class="text-slate-400">{{ icon }} {{ label }}</span></div>
         {% endfor %}
         <div class="ml-auto relative pb-1">
