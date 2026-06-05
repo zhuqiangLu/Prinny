@@ -176,6 +176,12 @@
    PANE: SUGGESTED READING — purpose-driven arXiv discovery (→ triage → add)
    =================================================================== #}
 <div x-show="tab==='reading'" x-cloak class="space-y-3">
+  {% if reading_running %}
+  <div class="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+    <span class="inline-block animate-spin">⟳</span>
+    <span>Searching arXiv &amp; validating… <b>you can keep using other tabs</b> — results will appear here when it's done.</span>
+  </div>
+  {% endif %}
   {% set suggest_action = "/c/" ~ slug ~ "/wiki/recommend-add" %}
   {% set launcher_hx = True %}
   {% set launcher_subject = "this collection" %}

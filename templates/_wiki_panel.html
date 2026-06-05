@@ -79,7 +79,7 @@
       {% for key, label in TABS %}
       <button type="button" @click="go('{{ key }}')"
               :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
-              class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}</button>
+              class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
       {% endfor %}
     </div>
   </div>
@@ -309,42 +309,32 @@
   </script>
   {% endif %}
 
-  {# ===== suggested-reading overlay (covers the panel while the finder runs;
-       polls /wiki/reading/status, reloads the panel on done) ===== #}
+  {# ===== suggested-reading poller (non-blocking: NO cover — the user can use
+       other tabs while it runs; the reading tab shows a spinner + inline card.
+       On done we re-fetch the panel, preserving the current tab). ===== #}
   {% if reading_running %}
-  <div id="wiki-read-cover" data-slug="{{ slug }}" role="status" aria-live="polite"
-       style="position:absolute; inset:0; z-index:40; background:rgba(248,250,252,.78); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); border-radius:.5rem;">
-    <div style="position:sticky; top:34%; margin:34% auto 0; width:18rem; max-width:calc(100% - 2rem); background:#fff; border:1px solid #e2e8f0; border-radius:1rem; box-shadow:0 20px 40px -12px rgba(0,0,0,.18); padding:1.5rem; text-align:center;">
-      <svg viewBox="0 0 50 50" style="width:3rem;height:3rem;animation:wiki-read-rot .9s linear infinite;" aria-hidden="true">
-        <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
-        <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round" stroke-dasharray="31 126"></circle>
-      </svg>
-      <div style="margin-top:.9rem;font-size:.95rem;font-weight:600;color:#0f172a;">Searching arXiv &amp; validating…</div>
-      <div style="margin-top:.5rem;font-size:.72rem;color:#94a3b8;">Find → verify → land. You can keep chatting on the right.</div>
-    </div>
-  </div>
-  <style>@keyframes wiki-read-rot { to { transform: rotate(360deg); } }</style>
+  <div id="wiki-read-cover" data-slug="{{ slug }}" hidden></div>
   <script>
     (function () {
-      var cover = document.getElementById("wiki-read-cover");
-      if (!cover) return;
-      var slug = cover.getAttribute("data-slug");
+      var sentinel = document.getElementById("wiki-read-cover");
+      if (!sentinel) return;
+      var slug = sentinel.getAttribute("data-slug");
       function tick() {
-        if (!document.body.contains(cover)) return;
+        if (!document.body.contains(sentinel)) return;
         fetch("/c/" + slug + "/wiki/reading/status", { headers: { "Accept": "application/json" } })
           .then(function (r) { return r.json(); })
           .then(function (job) {
-            if (!document.body.contains(cover)) return;
+            if (!document.body.contains(sentinel)) return;
             if (job.status === "idle" || job.status === "done" || job.status === "failed") {
               if (window.htmx) htmx.ajax("GET", "/c/" + slug + "/wiki/panel", { target: "#left-panel", swap: "innerHTML" });
               else window.location.reload();
               return;
             }
-            setTimeout(tick, 1200);
+            setTimeout(tick, 1500);
           })
-          .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2000); });
+          .catch(function () { if (document.body.contains(sentinel)) setTimeout(tick, 2500); });
       }
-      setTimeout(tick, 900);
+      setTimeout(tick, 1000);
     })();
   </script>
   {% endif %}

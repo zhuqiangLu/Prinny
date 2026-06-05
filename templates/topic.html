@@ -83,7 +83,7 @@
         {% for key, label in TABS %}
         <button @click="go('{{ key }}')"
                 :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
-                class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}</button>
+                class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
         {% endfor %}
       </div>
     </div>{# /header #}
@@ -428,6 +428,12 @@
 
     {# ============================ SUGGESTED READING ============================ #}
     <div x-show="tab==='reading'" x-cloak class="space-y-3">
+      {% if reading_running %}
+      <div class="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+        <span class="inline-block animate-spin">⟳</span>
+        <span>Searching arXiv &amp; validating… <b>you can keep using other tabs</b> — results will appear here when it's done.</span>
+      </div>
+      {% endif %}
       {% set suggest_action = "/t/" ~ t.slug ~ "/reading/suggest" %}
       {% set launcher_hx = False %}
       {% set launcher_subject = "this research topic" %}
@@ -634,39 +640,30 @@
     </script>
     {% endif %}
 
-    {# ===== suggested-reading overlay (reuses the .tg-gen-* styles) ===== #}
+    {# ===== suggested-reading poller (non-blocking: no cover — the user can use
+       other tabs; the reading tab shows a spinner + an inline card. On done we
+       reload but keep whatever tab the user is on). ===== #}
     {% if reading_running %}
-    <div id="tg-read-cover" data-slug="{{ t.slug }}" role="status" aria-live="polite"
-         style="position:absolute; inset:0; z-index:30; background:rgba(248,250,252,.72); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px);">
-      <div class="tg-gen-card">
-        <svg class="tg-gen-spin" viewBox="0 0 50 50" aria-hidden="true">
-          <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
-          <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round" stroke-dasharray="31 126"></circle>
-        </svg>
-        <div class="tg-gen-label">Searching arXiv &amp; validating…</div>
-        <div class="tg-gen-foot">Find → verify → land — you can keep chatting on the right.</div>
-      </div>
-    </div>
+    <div id="tg-read-cover" data-slug="{{ t.slug }}" hidden></div>
     <script>
       (function () {
-        var cover = document.getElementById("tg-read-cover");
-        if (!cover) return;
-        var slug = cover.getAttribute("data-slug");
+        var sentinel = document.getElementById("tg-read-cover");
+        if (!sentinel) return;
+        var slug = sentinel.getAttribute("data-slug");
         function tick() {
-          if (!document.body.contains(cover)) return;
+          if (!document.body.contains(sentinel)) return;
           fetch("/t/" + slug + "/reading/status", { headers: { "Accept": "application/json" } })
             .then(function (r) { return r.json(); })
             .then(function (job) {
-              if (!document.body.contains(cover)) return;
+              if (!document.body.contains(sentinel)) return;
               if (job.status === "idle" || job.status === "done" || job.status === "failed") {
-                try { localStorage.setItem("pa.ttab", "reading"); } catch (e) {}
-                window.location.reload(); return;
+                window.location.reload(); return;     // keep the user's current tab (pa.ttab)
               }
-              setTimeout(tick, 1200);
+              setTimeout(tick, 1500);
             })
-            .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2000); });
+            .catch(function () { if (document.body.contains(sentinel)) setTimeout(tick, 2500); });
         }
-        setTimeout(tick, 1000);
+        setTimeout(tick, 1200);
       })();
     </script>
     {% endif %}
