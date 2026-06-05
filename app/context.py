@@ -43,8 +43,42 @@ def _latest_thoughts(slug: str, n: int = 3) -> list[str]:
 
 
 def _wiki_overview(slug: str) -> str:
-    wiki = _collection_dir(slug) / "wiki"
-    return _read(wiki / "index.md")
+    """A compact summary of the live cognitive-model wiki (wiki/sections/*) — thesis,
+    landscape, concepts. Falls back to the legacy wiki/index.md for old collections."""
+    import json as _json
+
+    from . import wiki as wiki_mod
+    bits: list[str] = []
+    th = wiki_mod.current_thesis(slug)
+    if th and th.get("one_paragraph"):
+        bits.append("Thesis: " + th["one_paragraph"])
+        for k, label in (("core_tension", "Core tension"), ("key_intuition", "Key intuition"),
+                         ("central_question", "Central question")):
+            if th.get(k):
+                bits.append(f"  {label}: {th[k]}")
+    lp = wiki_mod._landscape_json_path(slug)
+    if lp.is_file():
+        try:
+            ls = _json.loads(lp.read_text(encoding="utf-8")).get("landscape") or {}
+            for col, label in (("problems", "Problems"), ("methods", "Methods"),
+                               ("debates", "Debates"), ("open_questions", "Open questions")):
+                items = [it.get("text") if isinstance(it, dict) else it for it in (ls.get(col) or [])]
+                items = [i for i in items if i]
+                if items:
+                    bits.append(f"{label}: " + "; ".join(items))
+        except (ValueError, OSError):
+            pass
+    names = wiki_mod._concept_names(slug)
+    if names:
+        bits.append("Concepts: " + ", ".join(names))
+    if bits:
+        return "\n".join(bits)
+    return _read(_collection_dir(slug) / "wiki" / "index.md")     # legacy fallback
+
+
+def _paper_titles(slug: str, limit: int = 80) -> list[str]:
+    from . import library
+    return [p.get("title", "") for p in library.list_papers(slug) if p.get("title")][:limit]
 
 
 def _paper_notes(slug: str, paper_id: int) -> str:
@@ -118,6 +152,13 @@ def collection_system_prompt(slug: str, collection_name: str) -> str:
         parts.append(f"The user's most recent thoughts:\n{joined}")
     else:
         parts.append("The user has not recorded thoughts yet.")
+    titles = _paper_titles(slug)
+    if titles:
+        listed = "\n".join(f"- {t}" for t in titles)
+        more = "" if len(titles) < 80 else "\n(…more)"
+        parts.append(f"The collection has {len(titles)} paper(s):\n{listed}{more}")
+    else:
+        parts.append("The collection has no papers yet.")
     parts.append(
         f"The wiki currently says:\n{wiki}" if wiki
         else "The wiki is empty so far."
