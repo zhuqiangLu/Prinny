@@ -554,8 +554,8 @@
                 {% endif %}
                 <div class="flex flex-wrap gap-1.5 mt-2.5">
                   {% for e in t.entities[:4] %}
-                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[e.kind].cls }}">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[e.kind].dot }}"></span>{{ e.label|truncate(40) }}
+                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border max-w-full {{ KIND_STYLE[e.kind].cls }}">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0" style="background:{{ KIND_STYLE[e.kind].dot }}"></span><span class="min-w-0">{{ e.label }}</span>
                   </span>
                   {% endfor %}
                   {% if t.entities|length > 4 %}<span class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">+{{ t.entities|length - 4 }}</span>{% endif %}
@@ -581,8 +581,8 @@
               <div class="flex flex-wrap gap-1.5 mb-3">
                 {% for kind in ['problem', 'method', 'concept', 'belief'] %}
                   {% for e in t.entities if e.kind == kind %}
-                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border {{ KIND_STYLE[kind].cls }}">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full" style="background:{{ KIND_STYLE[kind].dot }}"></span>{{ e.label|truncate(48) }}
+                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border max-w-full {{ KIND_STYLE[kind].cls }}">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0" style="background:{{ KIND_STYLE[kind].dot }}"></span><span class="min-w-0">{{ e.label }}</span>
                   </span>
                   {% endfor %}
                 {% endfor %}
