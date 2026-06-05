@@ -94,9 +94,20 @@
 
   <form x-data="chatComposer({{ 'true' if chat_streaming else 'false' }}, '{{ slug }}', '{{ paper_key }}')"
         class="border-t border-slate-200 p-3"
+        @pa-ask.window="onAsk($event.detail)"
         {% if chat_streaming %}@submit.prevent="stream()"{% else %}@submit.prevent="send()"{% endif %}>
     <input type="hidden" name="paper_key" value="{{ paper_key }}">
     <input type="hidden" name="images_json" :value="JSON.stringify(images)">
+    <input type="hidden" name="ref_json" :value="ref ? JSON.stringify(ref) : ''">
+
+    <!-- card reference chip (from 'Ask in chat' on a wiki card) -->
+    <div x-show="ref" x-cloak class="mb-2">
+      <span class="inline-flex items-center gap-1 max-w-full rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs text-violet-700">
+        <span x-text="ref ? (ref.icon + ' ' + ref.label) : ''" class="truncate"></span>
+        <button type="button" @click="ref = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="Remove reference">✕</button>
+      </span>
+      <span class="ml-1 text-[11px] text-slate-400">ask about this — or just hit send</span>
+    </div>
 
     <!-- drag lever: pull up/down to resize the input -->
     <div class="-mt-1 mb-1.5 flex justify-center cursor-row-resize group"
@@ -134,9 +145,17 @@
     function chatComposer(streaming, slug, paperKey) {
       return {
         images: [],
+        ref: null,                 // {kind,label,key,icon} from "Ask in chat" on a wiki card
         streaming: !!streaming,
         slug: slug,
         paperKey: paperKey,
+        onAsk(detail) {            // a card dispatched 'pa-ask' → attach a reference chip
+          if (!detail) return;
+          this.ref = { kind: detail.kind, label: detail.label, key: detail.key || "",
+                       icon: detail.icon || "◆" };
+          const ta = this.$el.querySelector('textarea[name="message"]');
+          if (ta) { ta.focus(); }
+        },
         h: parseInt(localStorage.getItem("cc.composerH") || "56", 10),   // input height (px)
         startResize(e) {                                                 // the drag lever
           const startY = e.clientY, startH = this.h;
@@ -175,7 +194,7 @@
           const msg = (ta.value || "").trim();
           // Collection side-chat is agentic (tool-using → blocking). Slash-commands
           // also block. A paper-without-sub-agent turn still streams.
-          if (msg.startsWith("/") || !this.paperKey) return this.sendBlocking();
+          if (msg.startsWith("/") || !this.paperKey || this.ref) return this.sendBlocking();
           return this.streamTo(`/c/${this.slug}/chat/stream`);
         },
         // Per-paper sub-agent turn.
@@ -188,14 +207,16 @@
           const ta = form.querySelector('textarea[name="message"]');
           const msg = (ta.value || "").trim();
           const imgs = this.images.slice();
-          if (!msg && !imgs.length) return;
+          const refData = this.ref;                       // capture before clearing
+          if (!msg && !imgs.length && !refData) return;
           const log = document.getElementById("chat-log");
-          // optimistic user bubble (textContent = safe escaping)
+          // optimistic user bubble (textContent = safe escaping); show the card ref if any
           const u = document.createElement("div");
           u.className = "flex justify-end";
           u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
-          u.firstElementChild.textContent = msg + (imgs.length
-            ? (msg ? "\n" : "") + `📎 ${imgs.length} image${imgs.length > 1 ? "s" : ""}` : "");
+          const refPrefix = refData ? (refData.icon + " " + refData.label + (msg ? " — " : "")) : "";
+          u.firstElementChild.textContent = refPrefix + msg + (imgs.length
+            ? (msg || refData ? "\n" : "") + `📎 ${imgs.length} image${imgs.length > 1 ? "s" : ""}` : "");
           log.appendChild(u);
           // typing bubble
           const a = document.createElement("div");
@@ -203,12 +224,13 @@
           a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100">'
                       + '<div class="pa-working"><span class="pa-typing" aria-label="working"><i></i><i></i><i></i></span></div></div>';
           log.appendChild(a);
-          ta.value = ""; this.clear(); log.scrollTop = log.scrollHeight;
+          ta.value = ""; this.clear(); this.ref = null; log.scrollTop = log.scrollHeight;
           try {
             const resp = await fetch(`/c/${this.slug}/chat`, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
-                                          images_json: JSON.stringify(imgs) }),
+                                          images_json: JSON.stringify(imgs),
+                                          ref_json: refData ? JSON.stringify(refData) : "" }),
             });
             const html = await resp.text();
             u.remove(); a.remove();                       // server HTML re-includes the user bubble

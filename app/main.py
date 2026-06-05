@@ -1280,12 +1280,13 @@ def chat_post(
     message: str = Form(""),
     paper_key: str = Form(""),
     images_json: str = Form(""),
+    ref_json: str = Form(""),
 ) -> HTMLResponse:
     col = _require_collection(slug)
 
     message = message.strip()
     images = _parse_images(images_json)
-    if not message and not images:
+    if not message and not images and not ref_json:    # a card reference alone is a valid turn
         raise HTTPException(status_code=400, detail="Empty message")
 
     pid = int(paper_key) if paper_key else None
@@ -1306,6 +1307,18 @@ def chat_post(
         return _agentic_chat_turn(request, slug, thread_id, slug, instr, message, mode="update")
     if prefix == "updatewiki":      # explicit: ask the agent to propose wiki edits now
         return _agentic_chat_turn(request, slug, thread_id, slug, remainder, message, mode="update")
+
+    # "Ask in chat" from a wiki card: a reference chip + (optional) user text. The agent
+    # gets a verbose card-scoped question; the user only ever sees the clean chip.
+    if ref_json and pid is None:
+        try:
+            ref = json.loads(ref_json)
+        except (ValueError, TypeError):
+            ref = None
+        if ref and ref.get("label"):
+            return _agentic_chat_turn(request, slug, thread_id, slug,
+                                      _ref_instruction(ref, message), _ref_display(ref, message),
+                                      mode="answer")
     if prefix is not None:
         return _agentic_chat_turn(request, slug, thread_id, prefix, remainder, message)
 
@@ -1524,6 +1537,30 @@ def _chat_static_turn(request, slug, original, reply_md):
 
 def _chat_help_turn(request, slug, original):
     return _chat_static_turn(request, slug, original, _CHAT_HELP_MD)
+
+
+def _ref_phrase(ref: dict) -> str:
+    kind, label = ref.get("kind", ""), ref.get("label", "")
+    return {"concept": f"the concept “{label}”", "belief": f"the belief “{label}”",
+            "theme": f"the theme “{label}”"}.get(kind, f"“{label}”")
+
+
+def _ref_instruction(ref: dict, user_msg: str) -> str:
+    """The (verbose, hidden) question the agent receives for a card reference."""
+    phrase = _ref_phrase(ref)
+    if (user_msg or "").strip():
+        return f"Regarding {phrase} in this collection: {user_msg.strip()}"
+    return {
+        "concept": f"Explain {phrase} in this collection — what it means and which papers ground it.",
+        "belief": f"Lay out the evidence for and against {phrase}, citing papers in the collection.",
+        "theme": f"Summarize {phrase} — the ideas it groups and how its papers connect.",
+    }.get(ref.get("kind", ""), f"Tell me about {phrase} in this collection.")
+
+
+def _ref_display(ref: dict, user_msg: str) -> str:
+    """The clean message shown to the user (the chip + their words), not the verbose instruction."""
+    chip = f"{ref.get('icon', '◆')} {ref.get('label', '')}".strip()
+    return f"**{chip}** — {user_msg.strip()}" if (user_msg or "").strip() else f"**{chip}**"
 
 
 def _chat_command_turn(request, slug, prefix, remainder, original):

@@ -14,6 +14,19 @@
   <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-violet-100 text-violet-700 text-sm font-semibold tabular-nums">{{ n }}</span>
 {% endmacro %}
 
+{# "Ask in chat" — a card (right-click or its 💬 button) dispatches a reference to
+   the side-chat composer, which attaches it as a chip. Reads data-ask-* off the
+   nearest tagged card, so labels with quotes are safe. #}
+<script>
+  window.paAskEl = function (el) {
+    var card = el && el.closest("[data-ask-kind]");
+    if (!card) return;
+    window.dispatchEvent(new CustomEvent("pa-ask", { detail: {
+      kind: card.dataset.askKind, label: card.dataset.askLabel,
+      key: card.dataset.askKey || "", icon: card.dataset.askIcon || "◆" } }));
+  };
+</script>
+
 {# Per-theme color, keyed by theme index — shared by the Connections theme cards
    and the landscape problem/method theme badges so a theme reads the same in both
    places. Indexed (idx-1) % 6. #}
@@ -290,10 +303,14 @@
   {% if overview.concepts %}
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     {% for c in overview.concepts %}
-    <div class="rounded-xl border border-slate-200 bg-white p-4">
+    <div class="group rounded-xl border border-slate-200 bg-white p-4"
+         data-ask-kind="concept" data-ask-label="{{ c.name }}" data-ask-icon="◈"
+         @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-center gap-2 mb-1">
         <h3 class="text-sm font-semibold text-violet-800 flex-1 min-w-0">{{ c.name }}</h3>
         {% if c.score %}<span class="text-[10px] rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ c.score }} attention points">🔥 {{ c.score }}</span>{% endif %}
+        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
+                class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
         {# contextual one-click: find external papers that extend this concept → Suggested reading tab #}
         <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')">
           <input type="hidden" name="purpose" value="concept"><input type="hidden" name="target" value="{{ c.name }}">
@@ -401,9 +418,13 @@
   {% if overview.beliefs %}
   <ul class="space-y-3 {% if overview.belief_candidates %}mb-4{% endif %}">
     {% for b in overview.beliefs %}
-    <li class="rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-slate-50/30 p-3">
+    <li class="group rounded-lg border-l-4 border-violet-300 border-y border-r border-slate-200 bg-slate-50/30 p-3"
+        data-ask-kind="belief" data-ask-label="{{ b.title }}" data-ask-icon="◆"
+        @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-baseline gap-2 flex-wrap">
         <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ b.title }}</p>
+        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
+                class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
         {% if b.confidence == 'medium' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">medium</span>
         {% elif b.confidence == 'uncertain' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">uncertain</span>
         {% else %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">emerging</span>{% endif %}
@@ -527,7 +548,9 @@
         <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition" x-data="{ detail: false, editing: false }">
+        <div class="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition" x-data="{ detail: false, editing: false }"
+             data-ask-kind="theme" data-ask-label="{{ t.name or ('Theme ' ~ t.index) }}" data-ask-icon="⚯"
+             @contextmenu.prevent="window.paAskEl($el)">
           <div class="p-4 cursor-pointer" @click="detail = !detail">
             <div class="flex items-start gap-3">
               <div class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums shrink-0 {{ theme_color(t.index)|trim }}">{{ t.index }}</div>
@@ -544,6 +567,7 @@
                   </form>
                   <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
                   <button type="button" x-show="!editing" @click.stop="editing = true" title="Rename theme" class="text-[12px] text-slate-300 hover:text-violet-600">✎</button>
+                  <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)" class="opacity-0 group-hover:opacity-100 transition text-[12px] text-slate-300 hover:text-violet-600">💬</button>
                   {% if t.user_named %}<span class="text-[9px] text-slate-300" title="You named this theme">· yours</span>{% endif %}
                   <span class="ml-auto text-[11px] text-slate-400" x-text="detail ? '▾' : '▸'"></span>
                 </div>
