@@ -589,6 +589,49 @@ def test_validate_candidates_drops_fails_keeps_annotated(monkeypatch):
     assert next(c for c in out if c["arxiv_id"] == "3")["verdict"] == "weak"
 
 
+def test_benchmark_agent_extract_paper_parses(monkeypatch, tmp_path):
+    """The per-paper agent's JSON is parsed; non-dict rows are dropped."""
+    import json as _j
+    import app.benchmark_agent as ba, app.engine as engine_mod, app.agent_skills as ag
+
+    class FakeRes:
+        text = _j.dumps({"results": [
+            {"method": "X", "benchmark": "MLVU", "metric": "acc", "value": 72.1, "higher_is_better": True},
+            "garbage"]})
+
+    class FakeEng:
+        name = "fake"
+        def available(self): return (True, "")
+        def run_once(self, *a, **k): return FakeRes()
+    monkeypatch.setattr(engine_mod, "build_engine", lambda c: FakeEng())
+    monkeypatch.setattr(ag, "ensure_skills_home", lambda home=None: tmp_path)
+    monkeypatch.setattr(ba.agents, "effective_tools", lambda k, d: d)
+    monkeypatch.setattr(ba.mcp_server, "stdio_mcp_config", lambda *a, **k: {})
+    rows = ba.extract_paper("vlms", 1, "T")
+    assert len(rows) == 1 and rows[0]["benchmark"] == "MLVU"
+
+
+def test_extract_benchmarks_agentic_aggregates_grounds_and_links(tmp_path, monkeypatch):
+    """Orchestration: per-paper agent rows are tagged with the paper ref, validated,
+    written; load_benchmarks links each method to its reporting paper."""
+    import app.benchmark_agent as ba, app.pdf_store as pdf_store
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    monkeypatch.setattr(pdf_store, "has_pdf", lambda pid: True)
+
+    def fake_extract(slug, paper_id, title=""):
+        return [{"method": f"M{paper_id}", "benchmark": "MLVU", "metric": "acc",
+                 "value": 70 + paper_id, "higher_is_better": True}]
+    monkeypatch.setattr(ba, "extract_paper", fake_extract)
+
+    res = wiki.extract_benchmarks("vlms")
+    assert res["error"] is None and res["papers"] == 3 and res["results"] == 3
+    bm = wiki.load_benchmarks("vlms")
+    assert bm["n_results"] == 3 and "MLVU" in bm["benchmarks"]
+    m = bm["methods"][0]
+    assert m["paper"] and m["paper"]["id"]              # method linked to its own paper
+    assert any(c and c["paper"] for c in m["cells"])    # cells cite a paper
+
+
 def test_preference_profile_and_rerank():
     """Learning: kept-paper words boost, passed-on words penalise, and a
     previously-dismissed candidate is tagged + down-weighted (but not removed)."""

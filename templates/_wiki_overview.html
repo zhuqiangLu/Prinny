@@ -351,15 +351,18 @@
 {# ===================================================================
    PANE: BENCHMARKS — method × benchmark performance table (net-new)
    =================================================================== #}
-<div x-show="tab==='benchmarks'" x-cloak class="space-y-3" x-data="{ showAll: false }">
+<div x-show="tab==='benchmarks'" x-cloak class="relative space-y-3" x-data="{ showAll: false }">
+  {% if benchmark_error %}
+  <div class="rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800"><b>Extraction failed.</b> {{ benchmark_error }}</div>
+  {% endif %}
   <div class="flex items-center gap-2">
     <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▦</span> Benchmarks</h2>
     <form hx-post="/c/{{ slug }}/wiki/benchmarks/extract" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="ml-auto">
-      <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs disabled:opacity-70"
-              title="One LLM call: reads abstracts + PDF excerpts and pulls out reported numbers. Only numbers stated in the papers — never invented.">
-        {% if benchmarks and benchmarks.n_results %}↻ Re-extract{% else %}✦ Extract benchmarks{% endif %}
-        <span class="htmx-indicator text-violet-400">…</span>
+      <button {% if benchmark_running %}disabled{% endif %}
+              class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Reads each paper's PDF with an agent (paging to its results tables) and pulls out reported numbers — only numbers stated in the papers, never invented. Takes a while.">
+        {% if benchmark_running %}⟳ Extracting…{% elif benchmarks and benchmarks.n_results %}↻ Re-extract{% else %}✦ Extract benchmarks{% endif %}
       </button>
     </form>
   </div>
@@ -377,7 +380,10 @@
         <tr class="border-b border-slate-200 bg-slate-50/60">
           <th class="text-left font-semibold text-slate-600 px-3 py-2 sticky left-0 bg-slate-50/60">Method</th>
           {% for b in benchmarks.benchmarks %}
-          <th class="text-center font-medium text-slate-600 px-3 py-2 whitespace-nowrap">{{ b }}</th>
+          <th class="text-center font-medium text-slate-600 px-3 py-2 whitespace-nowrap">
+            <a href="https://arxiv.org/search/?searchtype=all&query={{ b|urlencode }}" target="_blank" rel="noopener"
+               class="hover:text-violet-700 hover:underline" title="Find the “{{ b }}” benchmark paper on arXiv">{{ b }} <span class="text-slate-300">↗</span></a>
+          </th>
           {% endfor %}
         </tr>
       </thead>
@@ -386,7 +392,8 @@
         <tr class="border-b border-slate-100 hover:bg-slate-50/50"
             x-show="showAll || {{ loop.index0 }} < 5"
             {% if loop.index0 >= 5 %}x-cloak{% endif %}>
-          <td class="px-3 py-2 font-medium text-slate-800 sticky left-0 bg-white whitespace-nowrap">{{ m.name }}</td>
+          <td class="px-3 py-2 font-medium text-slate-800 sticky left-0 bg-white whitespace-nowrap">
+            {% if m.paper %}<a href="/c/{{ slug }}/p/{{ m.paper.id }}" class="hover:text-violet-700 hover:underline" title="{{ m.paper.title }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}</td>
           {% for cell in m.cells %}
           <td class="px-3 py-2 text-center tabular-nums">
             {% if cell %}
@@ -407,6 +414,49 @@
           x-text="showAll ? 'Show top 5 methods' : 'Show all {{ benchmarks.methods|length }} methods'"></button>
   {% endif %}
   <p class="text-[10px] text-slate-400">{{ benchmarks.n_results }} result{{ 's' if benchmarks.n_results != 1 }} across {{ benchmarks.benchmarks|length }} benchmark{{ 's' if benchmarks.benchmarks|length != 1 }}. Best per column = leading value for that metric's direction.</p>
+  {% endif %}
+
+  {# ===== extracting overlay (animated; per-paper agent runs in the background;
+       polls /benchmarks/status for done/total, reloads the panel on done) ===== #}
+  {% if benchmark_running %}
+  <div id="wiki-bench-cover" data-slug="{{ slug }}" role="status" aria-live="polite"
+       style="position:absolute; inset:0; z-index:30; background:rgba(248,250,252,.82); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); border-radius:.5rem;">
+    <div style="position:sticky; top:30%; margin:30% auto 0; width:20rem; max-width:calc(100% - 2rem); background:#fff; border:1px solid #e2e8f0; border-radius:1rem; box-shadow:0 20px 40px -12px rgba(0,0,0,.18); padding:1.5rem; text-align:center;">
+      <svg viewBox="0 0 50 50" style="width:3rem;height:3rem;animation:wiki-bench-rot .9s linear infinite;" aria-hidden="true">
+        <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
+        <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round" stroke-dasharray="31 126"></circle>
+      </svg>
+      <div style="margin-top:.9rem;font-size:.95rem;font-weight:600;color:#0f172a;">Reading papers for benchmark numbers…</div>
+      <div id="wiki-bench-prog" style="margin-top:.35rem;font-size:.8rem;color:#64748b;">starting…</div>
+      <div style="margin-top:.6rem;font-size:.7rem;color:#94a3b8;">An agent reads each PDF's results tables. You can use other tabs.</div>
+    </div>
+  </div>
+  <style>@keyframes wiki-bench-rot { to { transform: rotate(360deg); } }</style>
+  <script>
+    (function () {
+      var cover = document.getElementById("wiki-bench-cover");
+      if (!cover) return;
+      var slug = cover.getAttribute("data-slug");
+      function tick() {
+        if (!document.body.contains(cover)) return;
+        fetch("/c/" + slug + "/wiki/benchmarks/status", { headers: { "Accept": "application/json" } })
+          .then(function (r) { return r.json(); })
+          .then(function (job) {
+            if (!document.body.contains(cover)) return;
+            if (job.status === "idle" || job.status === "done" || job.status === "failed") {
+              if (window.htmx) htmx.ajax("GET", "/c/" + slug + "/wiki/panel", { target: "#left-panel", swap: "innerHTML" });
+              else window.location.reload();
+              return;
+            }
+            var p = document.getElementById("wiki-bench-prog");
+            if (p && job.total) p.textContent = "read " + job.done + " of " + job.total + " papers";
+            setTimeout(tick, 1500);
+          })
+          .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2500); });
+      }
+      setTimeout(tick, 1000);
+    })();
+  </script>
   {% endif %}
 </div>
 

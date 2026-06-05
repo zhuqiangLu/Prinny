@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import logging
+import threading as _threading
 
 from . import frontmatter, llm
 from .config import COLLECTIONS_DIR
@@ -915,40 +916,96 @@ def _validate_benchmarks(data: dict, valid_refs: set[str]) -> list[dict]:
     return out
 
 
-def extract_benchmarks(slug: str) -> dict:
-    """One LLM call → method × benchmark performance numbers, written to
-    wiki/sections/benchmarks.json. The agent sees the same abstract + PDF-excerpt
-    digest the Field Model does, and is told to report ONLY numbers stated in the
-    text, each citing the paper that reported it. Returns ``{results, error}``."""
-    papers = _collection_abstracts(slug)
-    with_abs = [p for p in papers if p["abstract"]]
-    for p in with_abs:
-        p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
-    digest, included_refs, _pdf_refs = _overview_digest(with_abs)
-    if not digest.strip():
-        return {"results": 0, "error": "No paper abstracts to read yet."}
+def extract_benchmarks(slug: str, stage_cb=None) -> dict:
+    """Per-paper AGENTIC extraction → method × benchmark numbers in
+    wiki/sections/benchmarks.json. For each paper with a cached PDF, a tool-using
+    agent reads the PDF (paging to its results tables) and reports the numbers —
+    far better coverage than a one-shot abstract+intro digest (the numbers live in
+    tables deep in the paper). Each row is tagged with its paper, then validated.
+    ``stage_cb(done, total)`` reports progress. Returns ``{results, error, papers, failures}``."""
+    from . import benchmark_agent, library, pdf_store
+    targets = []
+    for p in library.list_papers(slug):
+        if pdf_store.has_pdf(p["id"]):
+            ref = p.get("arxiv_id") or p.get("zotero_key") or str(p["id"])
+            targets.append({"id": p["id"], "title": p.get("title", ""), "ref": ref})
+    if not targets:
+        return {"results": 0, "error": "No cached PDFs to read — add papers with PDFs first."}
 
-    from . import agent_skills
-    system = (agent_skills.skill_body("benchmark-extract")
-              or "Output JSON: {results:[{method, benchmark, metric, value, "
-                 "higher_is_better, paper}]}. Report ONLY numbers explicitly "
-                 "stated in the provided text; cite the paper ref each came from.")
-    try:
-        out = llm.complete([{"role": "system", "content": system},
-                            {"role": "user", "content": "Papers:\n\n" + digest}])
-        data = _extract_json(out)
-    except Exception:  # noqa: BLE001
-        return {"results": 0, "error": "The LLM call failed."}
+    valid_refs = {t["ref"] for t in targets}
+    all_rows, failures = [], 0
+    for i, t in enumerate(targets):
+        if stage_cb:
+            stage_cb(i, len(targets))
+        try:
+            rows = benchmark_agent.extract_paper(slug, t["id"], t["title"])
+        except Exception:  # noqa: BLE001 - one paper failing shouldn't sink the run
+            logger.warning("benchmark extract failed for paper %s", t["id"])
+            failures += 1
+            continue
+        for r in rows:
+            r["paper"] = t["ref"]          # tag with the paper that reported it (for validation)
+            all_rows.append(r)
+    if stage_cb:
+        stage_cb(len(targets), len(targets))
 
-    results = _validate_benchmarks(data or {}, included_refs)
+    results = _validate_benchmarks({"results": all_rows}, valid_refs)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
     _benchmarks_path(slug).write_text(
         json.dumps({"results": results, "generated_by": "agent",
-                    "generator": "benchmark-extract", "generated_at": _now()},
+                    "generator": "benchmark-paper", "generated_at": _now()},
                    ensure_ascii=False, indent=2),
         encoding="utf-8")
-    _append_log(slug, f"extracted {len(results)} benchmark result(s)", digest)
-    return {"results": len(results), "error": None}
+    _append_log(slug, f"extracted {len(results)} benchmark result(s) from {len(targets)} paper(s)", "")
+    return {"results": len(results), "error": None, "papers": len(targets), "failures": failures}
+
+
+# --- async benchmark-extract job (per-paper spawns are slow → background + progress) ---
+_BENCH_JOBS: dict[str, dict] = {}
+_BENCH_LOCK = _threading.Lock()
+
+
+def get_benchmark_job(slug: str) -> dict | None:
+    with _BENCH_LOCK:
+        j = _BENCH_JOBS.get(slug)
+        return dict(j) if j else None
+
+
+def clear_benchmark_job(slug: str) -> None:
+    with _BENCH_LOCK:
+        _BENCH_JOBS.pop(slug, None)
+
+
+def start_benchmark_async(slug: str) -> bool:
+    """Run extract_benchmarks on a daemon thread (per-paper agent spawns); the panel
+    overlay polls /wiki/benchmarks/status for done/total progress."""
+    existing = get_benchmark_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    with _BENCH_LOCK:
+        _BENCH_JOBS[slug] = {"status": "running", "done": 0, "total": 0, "error": None}
+
+    def cb(done, total):
+        with _BENCH_LOCK:
+            j = _BENCH_JOBS.get(slug, {})
+            j.update({"done": done, "total": total})
+            _BENCH_JOBS[slug] = j
+
+    def runner():
+        try:
+            res = extract_benchmarks(slug, stage_cb=cb)
+            err = res.get("error")
+            with _BENCH_LOCK:
+                _BENCH_JOBS[slug] = {"status": "failed" if err else "done",
+                                     "done": res.get("papers", 0), "total": res.get("papers", 0),
+                                     "results": res.get("results", 0), "error": err,
+                                     "finished_at": _now()}
+        except Exception as exc:  # noqa: BLE001
+            with _BENCH_LOCK:
+                _BENCH_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
+
+    _threading.Thread(target=runner, daemon=True, name=f"bench-{slug}").start()
+    return True
 
 
 def load_benchmarks(slug: str) -> dict | None:
@@ -1015,7 +1072,17 @@ def load_benchmarks(slug: str) -> dict | None:
     for m in method_names:
         cells = [cell_by.get((m, b)) for b in benchmarks]
         n = sum(1 for c in cells if c)
-        methods.append({"name": m, "n": n, "cells": cells})
+        # The method's "own" paper = the one reporting most of its cells (link target).
+        counts: dict[tuple, int] = {}
+        for c in cells:
+            if c and c.get("paper"):
+                key = (c["paper"]["id"], c["paper"]["title"])
+                counts[key] = counts.get(key, 0) + 1
+        paper = None
+        if counts:
+            pid, ptitle = max(counts, key=counts.get)
+            paper = {"id": pid, "title": ptitle}
+        methods.append({"name": m, "n": n, "cells": cells, "paper": paper})
     # Most-covered methods first; tie-break by how many columns they lead.
     methods.sort(key=lambda r: (-r["n"], -sum(1 for c in r["cells"] if c and c["best"]),
                                 r["name"].lower()))

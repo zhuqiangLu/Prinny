@@ -2081,6 +2081,14 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
         if rjob["status"] == "failed":
             reading_error = rjob.get("error")
         wiki.clear_reading_job(slug)
+    # Benchmark-extract async job (overlay on the benchmarks tab).
+    bjob = wiki.get_benchmark_job(slug)
+    benchmark_running = bool(bjob and bjob.get("status") == "running")
+    benchmark_error = None
+    if bjob and bjob.get("status") in ("done", "failed"):
+        if bjob["status"] == "failed":
+            benchmark_error = bjob.get("error")
+        wiki.clear_benchmark_job(slug)
 
     # Header stat strip (Papers · Highlights · Notes · Connections). Cheap counts;
     # 'Connections' reuses the structural graph's edge count from connection_view.
@@ -2107,6 +2115,8 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "stats": stats,
          "reading_running": reading_running,
          "reading_error": reading_error,
+         "benchmark_running": benchmark_running,
+         "benchmark_error": benchmark_error,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "dup_count": len(library.find_duplicate_groups(slug)),
@@ -2247,14 +2257,21 @@ def wiki_thesis_undo(request: Request, slug: str) -> HTMLResponse:
 
 @app.post("/c/{slug}/wiki/benchmarks/extract", response_class=HTMLResponse)
 def wiki_benchmarks_extract(request: Request, slug: str) -> HTMLResponse:
-    """Run the benchmark-extract LLM call synchronously (reads abstracts + PDF
-    excerpts, pulls reported numbers) and re-render the panel with the table."""
+    """Kick off per-paper agentic benchmark extraction on a background thread; the
+    panel overlay polls /benchmarks/status (done/total). Returns immediately."""
     _require_collection(slug)
-    try:
-        wiki.extract_benchmarks(slug)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("paper_agent.wiki").exception("extract_benchmarks failed")
+    wiki.start_benchmark_async(slug)
     return _wiki_panel(request, slug)
+
+
+@app.get("/c/{slug}/wiki/benchmarks/status", response_class=JSONResponse)
+def wiki_benchmarks_status(slug: str) -> JSONResponse:
+    job = wiki.get_benchmark_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"), "done": job.get("done", 0),
+                         "total": job.get("total", 0), "results": job.get("results", 0),
+                         "error": job.get("error")})
 
 
 # --- Recommended-papers-to-add (arXiv discovery → triage → collection) --------

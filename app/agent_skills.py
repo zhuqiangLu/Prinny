@@ -34,6 +34,8 @@ _HOMES: dict[str, list[str]] = {
     "topic": ["topic-seed", "topic-investigate", "section-edit"],
     # Deep-search finder: a tool-using agent (arxiv_search + local read + history).
     "finder": ["paper-finder"],
+    # Per-paper benchmark extractor: reads each PDF (read_paper_text) to its tables.
+    "benchmark": ["benchmark-paper"],
 }
 
 
