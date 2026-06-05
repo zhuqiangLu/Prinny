@@ -1542,7 +1542,9 @@ def _chat_help_turn(request, slug, original):
 def _ref_phrase(ref: dict) -> str:
     kind, label = ref.get("kind", ""), ref.get("label", "")
     return {"concept": f"the concept “{label}”", "belief": f"the belief “{label}”",
-            "theme": f"the theme “{label}”"}.get(kind, f"“{label}”")
+            "theme": f"the theme “{label}”", "thesis": "the collection's thesis",
+            "landscape": f"the {label.lower()} in this collection's research landscape",
+            }.get(kind, f"“{label}”")
 
 
 def _ref_instruction(ref: dict, user_msg: str) -> str:
@@ -1554,6 +1556,9 @@ def _ref_instruction(ref: dict, user_msg: str) -> str:
         "concept": f"Explain {phrase} in this collection — what it means and which papers ground it.",
         "belief": f"Lay out the evidence for and against {phrase}, citing papers in the collection.",
         "theme": f"Summarize {phrase} — the ideas it groups and how its papers connect.",
+        "thesis": "Walk me through the collection's thesis — its core tension, key intuition, "
+                  "and central question — and how the papers support it.",
+        "landscape": f"Walk me through {phrase} and the papers behind them.",
     }.get(ref.get("kind", ""), f"Tell me about {phrase} in this collection.")
 
 

@@ -68,13 +68,17 @@
   {% if overview.thesis and (overview.thesis.one_paragraph or overview.thesis.core_tension
                               or overview.thesis.key_intuition or overview.thesis.central_question) %}
   <section class="grid grid-cols-1 {% if overview.focus %}lg:grid-cols-3{% endif %} gap-3">
-    <div class="{% if overview.focus %}lg:col-span-2{% endif %} rounded-xl border border-slate-200 bg-white p-5">
+    <div class="group {% if overview.focus %}lg:col-span-2{% endif %} rounded-xl border border-slate-200 bg-white p-5"
+         data-ask-kind="thesis" data-ask-label="Collection Thesis" data-ask-icon="✦"
+         @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-center gap-2 mb-3">
         {{ section_badge(1) }}
         <h2 class="text-lg font-semibold text-slate-900">Collection Thesis</h2>
+        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
+                class="ml-auto opacity-0 group-hover:opacity-100 transition text-xs text-slate-400 hover:text-violet-600">💬 ask</button>
         <button type="button" title="Edit with agent"
                 @click="aeditOpen = true; $nextTick(() => { var i = document.getElementById('aedit-instr'); if (i) i.value = ''; var d = document.getElementById('aedit-diff'); if (d) d.innerHTML = ''; })"
-                class="ml-auto text-xs text-slate-400 hover:text-violet-600">✎ Edit with agent</button>
+                class="text-xs text-slate-400 hover:text-violet-600">✎ Edit with agent</button>
       </div>
       {% if overview.thesis.one_paragraph %}
       <p class="text-sm text-slate-700 leading-relaxed mb-3">{{ overview.thesis.one_paragraph }}</p>
@@ -138,8 +142,10 @@
     </div>
     <div class="flex flex-wrap gap-3">
       {% if overview.landscape.problems %}
-      <div class="flex-1 min-w-[220px] rounded-lg border border-rose-100 bg-rose-50/40 p-3">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-rose-100"><span>🚩</span><h3 class="text-sm font-semibold text-rose-900">Problems</h3></div>
+      <div class="group flex-1 min-w-[220px] rounded-lg border border-rose-100 bg-rose-50/40 p-3"
+           data-ask-kind="landscape" data-ask-label="Problems" data-ask-icon="🚩" @contextmenu.prevent="window.paAskEl($el)">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-rose-100"><span>🚩</span><h3 class="text-sm font-semibold text-rose-900">Problems</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.problems[:3] %}
           <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span class="flex-1 min-w-0">{{ item.text }}</span></li>
@@ -149,8 +155,10 @@
       </div>
       {% endif %}
       {% if overview.landscape.methods %}
-      <div class="flex-1 min-w-[220px] rounded-lg border border-sky-100 bg-sky-50/40 p-3">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-sky-100"><span>🔧</span><h3 class="text-sm font-semibold text-sky-900">Methods</h3></div>
+      <div class="group flex-1 min-w-[220px] rounded-lg border border-sky-100 bg-sky-50/40 p-3"
+           data-ask-kind="landscape" data-ask-label="Methods" data-ask-icon="🔧" @contextmenu.prevent="window.paAskEl($el)">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-sky-100"><span>🔧</span><h3 class="text-sm font-semibold text-sky-900">Methods</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.methods[:3] %}
           <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span class="flex-1 min-w-0">{{ item.text }}</span></li>
@@ -160,8 +168,10 @@
       </div>
       {% endif %}
       {% if overview.landscape.debates %}
-      <div class="flex-1 min-w-[220px] rounded-lg border border-amber-100 bg-amber-50/40 p-3">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-amber-100"><span>💬</span><h3 class="text-sm font-semibold text-amber-900">Debates</h3></div>
+      <div class="group flex-1 min-w-[220px] rounded-lg border border-amber-100 bg-amber-50/40 p-3"
+           data-ask-kind="landscape" data-ask-label="Debates" data-ask-icon="💬" @contextmenu.prevent="window.paAskEl($el)">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-amber-100"><span>💬</span><h3 class="text-sm font-semibold text-amber-900">Debates</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.debates %}
           <li class="flex items-start gap-1.5"><span class="text-amber-400 mt-1">•</span><span>{{ item }}</span></li>
@@ -170,8 +180,10 @@
       </div>
       {% endif %}
       {% if overview.landscape.open_questions %}
-      <div class="flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-violet-100"><span>❓</span><h3 class="text-sm font-semibold text-violet-900">Open questions</h3></div>
+      <div class="group flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3"
+           data-ask-kind="landscape" data-ask-label="Open questions" data-ask-icon="❓" @contextmenu.prevent="window.paAskEl($el)">
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-violet-100"><span>❓</span><h3 class="text-sm font-semibold text-violet-900">Open questions</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.open_questions %}
           <li class="flex items-start gap-1.5"><span class="text-violet-400 mt-1">•</span><span>{{ item }}</span></li>
