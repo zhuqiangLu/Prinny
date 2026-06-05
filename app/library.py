@@ -511,6 +511,16 @@ def set_summary(slug: str, summary: str) -> None:
         con.close()
 
 
+def set_wiki_proactive(slug: str, on: bool) -> None:
+    """Per-collection toggle: may the chat proactively propose wiki edits."""
+    con = connect()
+    try:
+        con.execute("UPDATE collections SET wiki_proactive=? WHERE slug=?", (1 if on else 0, slug))
+        con.commit()
+    finally:
+        con.close()
+
+
 def create_local_collection(name: str, purpose: str = "", summary: str = "") -> str:
     """Create a local-only collection (no Zotero collection yet) with a fresh unique slug."""
     slug = _unique_slug(name)

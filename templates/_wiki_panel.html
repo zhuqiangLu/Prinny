@@ -54,6 +54,13 @@
             {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
             {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
             {% if col and col.copy_mode == "lazy" %}<form method="post" action="/c/{{ slug }}/download-all" @submit="open = false"><button class="{{ mi }}">⤓ Download all PDFs</button></form>{% endif %}
+            <label class="{{ mi }} cursor-pointer" title="When on, the chat assistant may proactively propose wiki edits (you still Accept each). /updatewiki always works.">
+              <input type="checkbox" {% if not col or col.wiki_proactive %}checked{% endif %}
+                     hx-post="/c/{{ slug }}/wiki/proactive" hx-target="#proactive-status" hx-swap="innerHTML"
+                     hx-vals='js:{on: event.target.checked ? "1" : "0"}' class="accent-violet-600">
+              Chat may propose wiki edits
+              <span id="proactive-status" class="ml-auto text-xs text-slate-400"></span>
+            </label>
           </div>
         </div>
       </div>

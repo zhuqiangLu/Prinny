@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS collections (
   activated INTEGER NOT NULL DEFAULT 0,          -- 0/1; only activated cols are tracked/imported
   copy_mode TEXT CHECK(copy_mode IN ('eager','lazy')) NOT NULL DEFAULT 'eager',
   tags TEXT NOT NULL DEFAULT '[]',               -- JSON list of {label, color} custom tags
+  wiki_proactive INTEGER NOT NULL DEFAULT 1,     -- 1/0: may the chat proactively propose wiki edits
   last_refresh TIMESTAMP,
   last_wiki_regen TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -412,6 +413,8 @@ def _migrate(con: sqlite3.Connection) -> None:
     if "agent_session_id" not in cols:
         con.execute("ALTER TABLE chat_threads ADD COLUMN agent_session_id TEXT")
     ccols = {r[1] for r in con.execute("PRAGMA table_info(collections)")}
+    if "wiki_proactive" not in ccols:
+        con.execute("ALTER TABLE collections ADD COLUMN wiki_proactive INTEGER NOT NULL DEFAULT 1")
     if "tags" not in ccols:
         # Per-collection custom tags: JSON list of {label, color}.
         con.execute("ALTER TABLE collections ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")

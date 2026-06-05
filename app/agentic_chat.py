@@ -83,9 +83,19 @@ def answer(slug: str, history: list[dict], user_text: str) -> str:
     messages = [{"role": m["role"], "content": m["content"]} for m in history
                 if m.get("role") in ("user", "assistant")]
     messages.append({"role": "user", "content": user_text})
+    # Per-collection proactive toggle: when off, the agent keeps its read tools but
+    # loses the proposer (the explicit /updatewiki path always keeps it).
+    tools = CHAT_TOOLS
+    try:
+        from . import library
+        col = library.get_collection(slug) or {}
+        if not col.get("wiki_proactive", 1):
+            tools = [t for t in CHAT_TOOLS if not t.endswith("propose_wiki_edit")]
+    except Exception:  # noqa: BLE001
+        pass
     try:
         res = eng.run_once(
-            messages, system=_SYSTEM, allowed_tools=agents.effective_tools("chat", CHAT_TOOLS),
+            messages, system=_SYSTEM, allowed_tools=agents.effective_tools("chat", tools),
             mcp_config=mcp_server.stdio_mcp_config(slug),
             cwd=str(agent_skills.ensure_skills_home("chat")),
         )

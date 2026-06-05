@@ -1540,6 +1540,14 @@ def wiki_proposal_dismiss(slug: str, pid: int) -> HTMLResponse:
     return HTMLResponse('<span class="text-slate-400 text-xs">Dismissed</span>')
 
 
+@app.post("/c/{slug}/wiki/proactive", response_class=HTMLResponse)
+def wiki_set_proactive(slug: str, on: str = Form("")) -> HTMLResponse:
+    """Per-collection toggle for proactive chat→wiki proposals."""
+    _require_collection(slug)
+    library.set_wiki_proactive(slug, on == "1")
+    return HTMLResponse('on' if on == "1" else 'off')
+
+
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)
 def thoughts_capture(slug: str, agent_text: str = Form(""), your_take: str = Form("")) -> HTMLResponse:
     """Attribution-safe capture from agentic chat: the agent's reply becomes a
