@@ -258,6 +258,28 @@ def recommendation_history(slug: str) -> dict:
     return {"kept": h["accepted_titles"][:40], "passed_on": h["dismissed_titles"][:40]}
 
 
+def list_papers(slug: str) -> dict:
+    """The collection's papers as {ref, title}. Use a `ref` when citing
+    supporting_papers in propose_wiki_edit. Read-only."""
+    seen, out = set(), []
+    for ref, info in wiki._ref_map(slug).items():
+        if info["id"] in seen:
+            continue
+        seen.add(info["id"])
+        out.append({"ref": ref, "title": info.get("title", "")})
+    return {"count": len(out), "papers": out[:200]}
+
+
+def propose_wiki_edit(slug: str, section: str, op: str, content: dict,
+                      supporting_papers=None, grounding: str = "") -> dict:
+    """Propose a TYPED wiki edit (propose-and-gate). This does NOT write — it
+    creates a pending proposal the user Accepts/Dismisses inline."""
+    from . import wiki_propose
+    return wiki_propose.create_proposal(
+        slug, section, op, content or {},
+        supporting_papers=supporting_papers or [], grounding=grounding, origin="chat")
+
+
 def read_wiki_page(slug: str, page: str) -> dict:
     """One synthesized wiki page (bounded by the page itself)."""
     page = (page or "").strip().lstrip("/")
@@ -300,6 +322,27 @@ _TOOLS = [
     {"name": "recommendation_history",
      "description": "What the user previously KEPT vs PASSED ON for suggested reading in this collection. Use it to prefer accepted-like papers, deprioritise rejected-like ones, and avoid re-pitching.",
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "list_papers",
+     "description": "List the collection's papers as {ref, title}. Use a ref value when you cite supporting_papers in propose_wiki_edit.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "propose_wiki_edit",
+     "description": ("Propose a TYPED edit to this collection's wiki. This does NOT write — it creates a "
+                     "pending proposal the user Accepts/Dismisses inline, so propose sparingly and only "
+                     "when the conversation clearly warrants it. section/op + content shapes: "
+                     "thesis/replace content={one_paragraph,core_tension,key_intuition,central_question} "
+                     "(grounding=one sentence on why, from the conversation); "
+                     "landscape/add_item|remove_item content={column:problems|methods|debates|open_questions, text, papers?}; "
+                     "concepts/add_concept content={name,synonyms,blurb,papers}; "
+                     "belief/add content={title,confidence:emerging|medium|uncertain,related_concepts}. "
+                     "EVIDENCE edits (concepts, beliefs, landscape problems/methods) MUST pass supporting_papers "
+                     "(refs from list_papers); the thesis is grounded in the conversation instead. "
+                     "Returns {ok,id,summary} or {ok:false,error}."),
+     "inputSchema": {"type": "object", "properties": {
+         "section": {"type": "string"}, "op": {"type": "string"},
+         "content": {"type": "object"},
+         "supporting_papers": {"type": "array", "items": {"type": "string"}},
+         "grounding": {"type": "string"}},
+         "required": ["section", "op", "content"]}},
 ]
 
 
@@ -324,6 +367,12 @@ def _call_tool(slug: str, name: str, args: dict):
         return arxiv_search(slug, args.get("query", ""), args.get("max_results", 10))
     if name == "recommendation_history":
         return recommendation_history(slug)
+    if name == "list_papers":
+        return list_papers(slug)
+    if name == "propose_wiki_edit":
+        return propose_wiki_edit(slug, args.get("section", ""), args.get("op", ""),
+                                 args.get("content") or {}, args.get("supporting_papers") or [],
+                                 args.get("grounding", ""))
     raise KeyError(name)
 
 

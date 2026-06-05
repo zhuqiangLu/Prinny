@@ -70,6 +70,22 @@ def test_accept_concept_then_dedupes(wikidb):
     assert wp.accept_proposal(r2["id"])["ok"] is False          # duplicate rejected at apply
 
 
+def test_mcp_list_papers_and_propose_tool(wikidb, monkeypatch):
+    """The agent's MCP surface: list_papers returns citable refs; propose_wiki_edit
+    creates a pending proposal (gated — never writes)."""
+    import app.mcp_server as mcp
+    papers = mcp._call_tool("vlms", "list_papers", {})
+    assert papers["count"] >= 1 and "ref" in papers["papers"][0]
+
+    out = mcp._call_tool("vlms", "propose_wiki_edit", {
+        "section": "belief", "op": "add",
+        "content": {"title": "A grounded belief from the chat.", "confidence": "medium"},
+        "supporting_papers": ["2401.00001"]})
+    assert out["ok"] and out["id"]
+    assert len(wp.list_pending("vlms")) == 1          # queued, not written
+    assert not list(wiki._beliefs_dir("vlms").glob("*.md"))   # nothing applied yet
+
+
 def test_dismiss_marks_dismissed(wikidb):
     cur = wiki.current_thesis("vlms")
     r = wp.create_proposal("vlms", "thesis", "replace", {**cur, "one_paragraph": "z"}, grounding="g")

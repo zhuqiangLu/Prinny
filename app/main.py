@@ -41,6 +41,7 @@ from . import (
     topics as topics_mod,
     triage as triage_mod,
     wiki,
+    wiki_propose,
 )
 from .config import highlight_scheme as config_highlight_scheme, load_config, save_config
 from .db import init_db
@@ -1294,6 +1295,8 @@ def chat_post(
     # /{collection-slug} routes the turn through the agent with read-only MCP tools
     # (AGENTIC_PLAN P6). Checked before the legacy /collection /wiki literals.
     prefix, remainder = agentic_chat.parse_prefix(message)
+    if prefix == "updatewiki":      # explicit: ask the agent to propose wiki edits now
+        return _agentic_chat_turn(request, slug, thread_id, slug, remainder, message, mode="update")
     if prefix is not None:
         return _agentic_chat_turn(request, slug, thread_id, prefix, remainder, message)
 
@@ -1479,11 +1482,12 @@ def _paper_subagent_turn(request, slug, name, thread_id, paper_id, message, agen
     )
 
 
-def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original):
-    """A /{collection} turn: answer via the agent (read-only MCP tools) or, if the
-    prefix isn't a known collection, reply listing the available ones (no LLM call)."""
+def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mode="answer"):
+    """A /{collection} turn (or /updatewiki when mode='update'): answer via the agent
+    with read-only MCP tools + the gated wiki proposer. Any wiki proposals the agent
+    creates this turn are surfaced as inline Accept/Dismiss cards."""
     slugs = {c["slug"] for c in library.list_collections()}
-    if prefix not in slugs:
+    if mode != "update" and prefix not in slugs:
         avail = ", ".join(sorted(slugs)) or "(none yet)"
         reply = f"No collection `/{prefix}`. Available: {avail}"
         return templates.TemplateResponse(
@@ -1493,9 +1497,13 @@ def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original):
              "suggestion": None, "usage": llm.usage(), "agentic": False},
         )
     history = get_messages(thread_id, limit=10)
+    before = {p["id"] for p in wiki_propose.list_pending(prefix)}    # so we show only THIS turn's
     error, assistant_text = None, ""
     try:
-        assistant_text = agentic_chat.answer(prefix, history, remainder or "(no question)")
+        if mode == "update":
+            assistant_text = agentic_chat.update_wiki(prefix, history, remainder)
+        else:
+            assistant_text = agentic_chat.answer(prefix, history, remainder or "(no question)")
         add_message(thread_id, "user", original, [{"type": "collection", "id": prefix}])
         add_message(thread_id, "assistant", assistant_text, [])
     except llm.LLMError as exc:
@@ -1503,13 +1511,33 @@ def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original):
     except Exception as exc:  # noqa: BLE001
         logging.getLogger("paper_agent.chat").exception("agentic chat failed")
         error = f"Agentic chat failed: {exc}"
+    proposals = [p for p in wiki_propose.list_pending(prefix) if p["id"] not in before]
     return templates.TemplateResponse(
         request, "_chat_turn.html",
         {"slug": slug, "user_html": render_md(original, slug), "user_images": [],
          "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
          "assistant_text": assistant_text, "error": error, "suggestion": None,
+         "proposals": proposals,
          "usage": llm.usage(), "agentic": True, "capture_slug": prefix},
     )
+
+
+@app.post("/c/{slug}/wiki/proposal/{pid}/accept", response_class=HTMLResponse)
+def wiki_proposal_accept(slug: str, pid: int) -> HTMLResponse:
+    """Apply a chat-proposed wiki edit (snapshot + re-validate). Returns an inline
+    status; the card's hx-on refreshes the wiki panel."""
+    _require_collection(slug)
+    res = wiki_propose.accept_proposal(pid)
+    if res.get("ok"):
+        return HTMLResponse('<span class="text-emerald-700 text-xs font-medium">✓ Applied to the wiki</span>')
+    return HTMLResponse(f'<span class="text-rose-700 text-xs">Couldn\'t apply: {res.get("error", "")}</span>')
+
+
+@app.post("/c/{slug}/wiki/proposal/{pid}/dismiss", response_class=HTMLResponse)
+def wiki_proposal_dismiss(slug: str, pid: int) -> HTMLResponse:
+    _require_collection(slug)
+    wiki_propose.dismiss_proposal(pid)
+    return HTMLResponse('<span class="text-slate-400 text-xs">Dismissed</span>')
 
 
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)

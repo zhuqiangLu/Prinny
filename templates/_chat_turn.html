@@ -17,6 +17,40 @@
 </div>
 {% else %}
 {% with m = {"role": "assistant", "html": assistant_html} %}{% include "_chat_bubble.html" %}{% endwith %}
+
+{# Inline wiki-edit proposals the agent made this turn (propose-and-gate) #}
+{% if proposals %}
+<div class="flex justify-start">
+  <div class="max-w-[90%] w-full space-y-2">
+    {% for p in proposals %}
+    <div class="rounded-lg border border-violet-200 bg-violet-50/60 p-2.5 text-sm" x-data="{ done: false }">
+      <div class="flex items-start gap-2">
+        <span class="text-violet-500 mt-0.5">✎</span>
+        <div class="min-w-0 flex-1">
+          <p class="text-slate-800"><b class="text-violet-700">Proposed wiki edit</b> · <span class="text-slate-500">{{ p.section }}</span></p>
+          <p class="text-slate-700 leading-snug">{{ p.summary }}</p>
+          {% if p.supporting_papers %}<p class="text-[11px] text-slate-500 mt-0.5">cites: {{ p.supporting_papers|join(', ') }}</p>{% endif %}
+          {% if p.section == 'thesis' and p.grounding %}<p class="text-[11px] text-slate-500 mt-0.5">grounded in: {{ p.grounding }}</p>{% endif %}
+          <div class="mt-1.5 flex items-center gap-1.5" x-show="!done">
+            <button type="button"
+                    hx-post="/c/{{ slug }}/wiki/proposal/{{ p.id }}/accept" hx-target="find .prop-status" hx-swap="innerHTML"
+                    hx-on:htmx:after-request="if (window.htmx) htmx.ajax('GET','/c/{{ slug }}/wiki/panel',{target:'#left-panel',swap:'innerHTML'})"
+                    @click="done = true"
+                    class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Accept</button>
+            <button type="button"
+                    hx-post="/c/{{ slug }}/wiki/proposal/{{ p.id }}/dismiss" hx-target="find .prop-status" hx-swap="innerHTML"
+                    @click="done = true"
+                    class="rounded border border-slate-300 text-slate-600 px-2.5 py-0.5 text-xs hover:bg-slate-100">Dismiss</button>
+          </div>
+          <div class="prop-status mt-1"></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if agentic and assistant_text %}
 <div class="flex justify-start" x-data="{ open: false }">
   <div class="text-xs">
