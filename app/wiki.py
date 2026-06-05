@@ -1171,9 +1171,11 @@ def start_reading_async(slug: str, purpose: str = "related", target: str = "",
         try:
             res = suggest_papers_to_add(slug, purpose=purpose, target=target,
                                         custom=custom, deep=deep)
+            err = res.get("error")
             with _READING_LOCK:
-                _READING_JOBS[slug] = {"status": "done", "added": res.get("added", 0),
-                                       "error": res.get("error"), "finished_at": _now()}
+                _READING_JOBS[slug] = {"status": "failed" if err else "done",
+                                       "added": res.get("added", 0),
+                                       "error": err, "finished_at": _now()}
         except Exception as exc:  # noqa: BLE001
             with _READING_LOCK:
                 _READING_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}

@@ -202,6 +202,24 @@ def test_reading_async_job_lifecycle(topicdb, monkeypatch):
     assert topic_view.get_reading_job(slug) is None
 
 
+def test_reading_async_marks_failed_when_suggest_errors(topicdb, monkeypatch):
+    """A discovery error (e.g. arXiv 429) is surfaced: the job is 'failed' with the
+    message, so the overlay shows a banner instead of a silent empty result."""
+    import time
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    monkeypatch.setattr(topic_view, "suggest_reading",
+                        lambda s, **k: {"added": 0, "error": "arXiv is rate-limiting (HTTP 429)."})
+    assert topic_view.start_reading_async(slug, purpose="related") is True
+    job = None
+    for _ in range(100):
+        job = topic_view.get_reading_job(slug)
+        if job and job["status"] in ("done", "failed"):
+            break
+        time.sleep(0.02)
+    assert job["status"] == "failed" and "429" in job["error"]
+    topic_view.clear_reading_job(slug)
+
+
 def test_recommend_collection_returns_linked_or_empty(topicdb):
     """Best-fit picker default: returns a linked collection (overlap or fallback),
     and '' when nothing is linked."""

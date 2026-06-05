@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
@@ -23,22 +24,50 @@ logger = logging.getLogger("paper_agent.discover")
 
 ARXIV_API = "https://export.arxiv.org/api/query"
 ATOM = "{http://www.w3.org/2005/Atom}"
+# arXiv rate-limits/serves 429 to requests without a descriptive User-Agent and
+# asks callers to back off between requests — set one and retry transient failures.
+_HEADERS = {"User-Agent": "paper-agent/0.1 (local research wiki; +https://arxiv.org)"}
+
+
+class ArxivError(RuntimeError):
+    """arXiv was unreachable or kept failing (e.g. 429) after retries."""
+
+
+def _arxiv_get(params: dict, *, timeout: float = 20.0, retries: int = 3):
+    """GET the arXiv API with a real User-Agent and backoff on transient failures
+    (429 / 5xx / network). Honors a Retry-After header. Raises ArxivError once
+    retries are exhausted — with a friendly message for rate-limiting."""
+    last = None
+    rate_limited = False
+    backoff = 1.5
+    for attempt in range(retries):
+        if attempt:
+            time.sleep(min(backoff, 10.0))
+            backoff *= 2
+        try:
+            r = httpx.get(ARXIV_API, params=params, headers=_HEADERS,
+                          timeout=timeout, follow_redirects=True)
+            if getattr(r, "status_code", 200) == 429:
+                rate_limited = True
+                ra = getattr(r, "headers", {}).get("Retry-After")
+                if ra and ra.isdigit():
+                    backoff = max(backoff, float(ra))
+            r.raise_for_status()
+            return r
+        except httpx.HTTPError as exc:
+            last = exc
+            logger.warning("arxiv request failed (attempt %d/%d): %s", attempt + 1, retries, exc)
+    if rate_limited:
+        raise ArxivError("arXiv is rate-limiting requests (HTTP 429). Wait a minute and try again.")
+    raise ArxivError(f"arXiv unreachable: {last}")
 
 
 # --- gaps ------------------------------------------------------------------
 def _arxiv_search(query: str, max_results: int = 10) -> list[dict]:
-    try:
-        r = httpx.get(
-            ARXIV_API,
-            params={"search_query": query, "max_results": max_results,
-                    "sortBy": "submittedDate", "sortOrder": "descending"},
-            timeout=20.0,
-            follow_redirects=True,
-        )
-        r.raise_for_status()
-    except httpx.HTTPError as exc:
-        logger.warning("arxiv search failed: %s", exc)
-        return []
+    """Search arXiv. Raises ArxivError on persistent HTTP failure (so callers can
+    surface 'arXiv unreachable' instead of a silent empty result)."""
+    r = _arxiv_get({"search_query": query, "max_results": max_results,
+                    "sortBy": "submittedDate", "sortOrder": "descending"})
     root = ET.fromstring(r.text)
     out = []
     for entry in root.findall(f"{ATOM}entry"):
@@ -109,10 +138,8 @@ def fetch_arxiv_metadata(raw_id: str) -> dict | None:
     if not aid:
         return None
     try:
-        r = httpx.get(ARXIV_API, params={"id_list": aid, "max_results": 1},
-                      timeout=20.0, follow_redirects=True)
-        r.raise_for_status()
-    except httpx.HTTPError as exc:
+        r = _arxiv_get({"id_list": aid, "max_results": 1})
+    except ArxivError as exc:
         logger.warning("arxiv metadata fetch failed for %s: %s", aid, exc)
         return None
     entry = ET.fromstring(r.text).find(f"{ATOM}entry")
@@ -151,16 +178,14 @@ def fetch_arxiv_batch(raw_ids: list[str]) -> dict[str, dict]:
     for i in range(0, len(ids), 50):
         chunk = ids[i:i + 50]
         try:
-            resp = httpx.get(ARXIV_API, params={"id_list": ",".join(chunk), "max_results": len(chunk)},
-                             timeout=30.0, follow_redirects=True)
-            resp.raise_for_status()
+            resp = _arxiv_get({"id_list": ",".join(chunk), "max_results": len(chunk)}, timeout=30.0)
             for entry in ET.fromstring(resp.text).findall(f"{ATOM}entry"):
                 if entry.find(f"{ATOM}id") is None:
                     continue
                 meta = _parse_entry(entry)
                 if meta["arxiv_id"]:
                     out[meta["arxiv_id"]] = meta
-        except (httpx.HTTPError, ET.ParseError) as exc:
+        except (ArxivError, ET.ParseError) as exc:
             logger.warning("arxiv batch fetch failed for %s: %s", chunk, exc)
     return out
 
@@ -190,7 +215,11 @@ def find_gaps(slug: str) -> list[dict]:
     ).strip().strip('"')
     query = f"all:{query_resp}" if ":" not in query_resp else query_resp
 
-    results = _arxiv_search(query)
+    try:
+        results = _arxiv_search(query)
+    except ArxivError as exc:
+        logger.warning("gap search failed: %s", exc)
+        return []
     if not results:
         return []
 
