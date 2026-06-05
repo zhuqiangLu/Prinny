@@ -478,10 +478,19 @@
     'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': 'Medium'},
     'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': 'Emerging'}
   } %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ insight: null }">
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ insight: null, cview: 'card' }"
+           @wiki-jump.window="cview = 'graph'; $nextTick(() => window.kgRender && window.kgRender())">
     <div class="flex items-baseline gap-2 mb-1">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚯</span> Connections &amp; themes</h2>
-      <span class="ml-auto text-xs text-slate-400 cursor-help" title="Structural map — which ideas cluster by shared papers. Clustering is deterministic (no LLM); theme names are written by the agent when you regenerate, and you can rename them.">How? ⓘ</span>
+      <div class="ml-auto flex items-center gap-2">
+        {% if cx.graph and cx.graph.nodes %}
+        <div class="inline-flex rounded-md border border-slate-200 overflow-hidden text-xs">
+          <button type="button" @click="cview='card'" :class="cview==='card' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-2 py-0.5">▤ Card view</button>
+          <button type="button" @click="cview='graph'; $nextTick(() => window.kgRender && window.kgRender())" :class="cview==='graph' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-2 py-0.5 border-l border-slate-200">⚯ Graph view</button>
+        </div>
+        {% endif %}
+        <span class="text-xs text-slate-400 cursor-help" title="Structural map — which ideas cluster by shared papers. Clustering is deterministic (no LLM); theme names are written by the agent when you regenerate, and you can rename them.">How? ⓘ</span>
+      </div>
     </div>
     <p class="text-xs text-slate-500 mb-3">
       The collection forms <b class="text-slate-700">{{ ov.themes }}</b> theme{{ 's' if ov.themes != 1 }}
@@ -490,12 +499,11 @@
     </p>
     <style>
       .kg-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .5rem; }
-      .kg-2col { display: grid; grid-template-columns: 1fr; gap: 1rem; align-items: start; }
+      .kg-2col { display: block; }   /* card view and graph view are toggled, not side-by-side */
       .kg-2col-main { display: flex; flex-direction: column; gap: .75rem; }
       .kg-ins { display: grid; grid-template-columns: 1fr; gap: .5rem; }
-      .kg-theme-scroll { display: flex; flex-direction: column; gap: .75rem; max-height: 540px; overflow-y: auto; padding-right: 4px; }
+      .kg-theme-scroll { display: flex; flex-direction: column; gap: .75rem; }   /* no inner scrollbar — grows to content */
       @media (min-width: 640px) { .kg-stats { grid-template-columns: repeat(6, minmax(0,1fr)); } .kg-ins { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-      @media (min-width: 1024px) { .kg-2col { grid-template-columns: 7fr 5fr; } .kg-2col-side { position: sticky; top: 1rem; } }
     </style>
 
     <div class="kg-stats mb-4">
@@ -515,7 +523,7 @@
     </div>
 
     <div class="kg-2col mb-4">
-      <div class="kg-2col-main">
+      <div class="kg-2col-main" x-show="cview === 'card'">
         <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
@@ -613,7 +621,7 @@
       </div>
 
       {% if cx.graph and cx.graph.nodes %}
-      <div class="kg-2col-side">
+      <div class="kg-2col-side" x-show="cview === 'graph'" x-cloak>
         <div class="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
           <div class="flex items-center gap-2 mb-2">
             <span class="text-xs font-semibold text-slate-600">Collection map</span>

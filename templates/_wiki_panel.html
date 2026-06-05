@@ -66,16 +66,6 @@
       </div>
     </div>
 
-    {# stats strip #}
-    {% if stats %}
-    <div class="flex items-center gap-6 text-sm flex-wrap mb-4">
-      <div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.papers }}</span> <span class="text-slate-400">📄 Papers</span></div>
-      {% if stats.highlights is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.highlights }}</span> <span class="text-slate-400">🖍 Highlights</span></div>{% endif %}
-      {% if stats.notes is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.notes }}</span> <span class="text-slate-400">🗒 Notes</span></div>{% endif %}
-      {% if stats.connections is not none %}<div><span class="font-semibold text-slate-900 tabular-nums">{{ stats.connections }}</span> <span class="text-slate-400">🔗 Connections</span></div>{% endif %}
-    </div>
-    {% endif %}
-
     {# tab bar #}
     {% set TABS = [
       ('overview', '▢ Overview'), ('concepts', '◈ Concepts'), ('benchmarks', '▦ Benchmarks'),
