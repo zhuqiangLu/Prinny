@@ -51,7 +51,7 @@ def _throttle() -> None:
         _last_call[0] = time.monotonic()
 
 
-def _arxiv_get(params: dict, *, timeout: float = 15.0, retries: int = 2):
+def _arxiv_get(params: dict, *, timeout: float = 10.0, retries: int = 2):
     """GET the arXiv API with a real User-Agent, a global min-interval throttle, and
     backoff retry on TRANSIENT failures (timeout / 5xx / network). A 429 fails fast
     (retrying within seconds is futile and only adds load). Raises ArxivError."""
@@ -94,25 +94,37 @@ def _strip_html(s: str) -> str:
     return " ".join(_h.unescape(re.sub(r"<[^>]+>", " ", s or "")).split())
 
 
-def _web_get(url: str, params: dict | None = None, timeout: float = 15.0):
-    """GET an arXiv website page (throttled, browser UA). Raises ArxivError."""
-    _throttle()
-    try:
-        r = httpx.get(url, params=params, headers=_HTML_HEADERS,
-                      timeout=timeout, follow_redirects=True)
-        r.raise_for_status()
-        return r
-    except httpx.HTTPError as exc:
-        raise ArxivError(f"arXiv website unreachable: {exc}")
+def _web_get(url: str, params: dict | None = None, timeout: float = 30.0, retries: int = 3):
+    """GET an arXiv website page (throttled, browser UA). The search page is large
+    (~260KB) and can be slow, so use a generous timeout and retry transient
+    failures. Raises ArxivError once retries are exhausted."""
+    last = None
+    backoff = 2.0
+    for attempt in range(retries):
+        if attempt:
+            time.sleep(min(backoff, 8.0))
+            backoff *= 2
+        _throttle()
+        try:
+            r = httpx.get(url, params=params, headers=_HTML_HEADERS,
+                          timeout=timeout, follow_redirects=True)
+            r.raise_for_status()
+            return r
+        except httpx.HTTPError as exc:
+            last = exc
+            logger.warning("arxiv website request failed (attempt %d/%d): %s", attempt + 1, retries, exc)
+    raise ArxivError(f"arXiv website unreachable: {last}")
 
 
 def _arxiv_search_html(query: str, max_results: int = 10) -> list[dict]:
     """Search via the arxiv.org/search HTML page (each result carries id + title +
     full abstract). Returns the same shape as the API search."""
-    # The website's `query` param is plain text — strip the API's field prefixes
-    # (all:/ti:/abs:…) and query punctuation, leaving keywords.
+    # The website's `query` param is plain text and ANDs every term, so a long
+    # query (fine for the API) matches almost nothing here. Strip the API's field
+    # prefixes (all:/ti:/abs:…) + punctuation and cap to the first ~6 keywords so
+    # the AND still returns a usable pool.
     q = re.sub(r"\b(?:all|ti|abs|au|cat|co|jr|rn|id):", " ", query or "")
-    q = " ".join(re.sub(r'["()]', " ", q).split()) or (query or "")
+    q = " ".join(re.sub(r'["()]', " ", q).split()[:6]) or (query or "")
     r = _web_get(f"{ARXIV_WEB}/search/", params={"searchtype": "all", "query": q, "start": 0})
     out = []
     for block in re.findall(r'<li class="arxiv-result">.*?</li>', r.text, re.S):

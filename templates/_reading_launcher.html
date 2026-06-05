@@ -17,8 +17,8 @@
     <input type="hidden" name="purpose" :value="mode">
 
     {# Related work #}
-    <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer" :class="mode==='related' ? 'border-violet-300 bg-violet-50/50' : 'border-slate-200 hover:border-slate-300'">
-      <input type="radio" class="mt-1.5" :checked="mode==='related'" @change="mode='related'">
+    <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer {% if reading_running %}opacity-60 pointer-events-none{% endif %}" :class="mode==='related' ? 'border-violet-300 bg-violet-50/50' : 'border-slate-200 hover:border-slate-300'">
+      <input type="radio" class="mt-1.5" :checked="mode==='related'" @change="mode='related'" {% if reading_running %}disabled{% endif %}>
       <span class="grid place-items-center w-9 h-9 rounded-lg bg-violet-100 text-violet-700 shrink-0">✦</span>
       <span class="min-w-0 flex-1">
         <span class="flex items-center gap-2"><b class="text-slate-900">Related work</b><span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">Recommended</span></span>
@@ -27,9 +27,9 @@
     </label>
 
     {# Custom search #}
-    <label class="block rounded-xl border p-3 cursor-pointer" :class="mode==='custom' ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200 hover:border-slate-300'">
+    <label class="block rounded-xl border p-3 cursor-pointer {% if reading_running %}opacity-60 pointer-events-none{% endif %}" :class="mode==='custom' ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200 hover:border-slate-300'">
       <span class="flex items-start gap-3">
-        <input type="radio" class="mt-1.5" :checked="mode==='custom'" @change="mode='custom'">
+        <input type="radio" class="mt-1.5" :checked="mode==='custom'" @change="mode='custom'" {% if reading_running %}disabled{% endif %}>
         <span class="grid place-items-center w-9 h-9 rounded-lg bg-slate-100 text-slate-600 shrink-0">✎</span>
         <span class="min-w-0 flex-1">
           <b class="text-slate-900">Custom search</b>
@@ -38,7 +38,7 @@
       </span>
       <div x-show="mode==='custom'" x-cloak class="mt-2.5 pl-12">
         <label class="block text-xs font-medium text-slate-500 mb-1">Describe what you're looking for <span class="text-slate-400">(optional)</span></label>
-        <textarea name="custom" x-model="q" maxlength="500" rows="3" @focus="mode='custom'"
+        <textarea name="custom" x-model="q" maxlength="500" rows="3" @focus="mode='custom'" {% if reading_running %}disabled{% endif %}
                   placeholder="e.g., {{ launcher_placeholder }}"
                   class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
         <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
