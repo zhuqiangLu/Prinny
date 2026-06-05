@@ -1297,6 +1297,13 @@ def chat_post(
     prefix, remainder = agentic_chat.parse_prefix(message)
     if prefix == "help":            # static command reference, no LLM call
         return _chat_help_turn(request, slug, message)
+    if prefix in ("thought", "find", "gaps"):    # quick commands (capture / discover)
+        return _chat_command_turn(request, slug, prefix, remainder, message)
+    if prefix == "belief":          # propose ONE belief, grounded by the agent
+        instr = ("Propose exactly ONE belief capturing this claim, and cite supporting papers "
+                 f"from the collection to ground it: {remainder}" if (remainder or "").strip()
+                 else "Propose one belief that the recent conversation supports, with citations.")
+        return _agentic_chat_turn(request, slug, thread_id, slug, instr, message, mode="update")
     if prefix == "updatewiki":      # explicit: ask the agent to propose wiki edits now
         return _agentic_chat_turn(request, slug, thread_id, slug, remainder, message, mode="update")
     if prefix is not None:
@@ -1493,22 +1500,57 @@ def _paper_subagent_turn(request, slug, name, thread_id, paper_id, message, agen
 _CHAT_HELP_MD = (
     "**Chat commands**\n\n"
     "- `/help` — show this list.\n"
-    "- `/updatewiki [instruction]` — ask the assistant to propose wiki edits now; "
-    "each one lands as an inline card you **Accept** or **Dismiss**.\n"
+    "- `/thought <text>` — save a note to your **thought stream** (your words).\n"
+    "- `/find [focus]` — find external papers (**Suggested reading**); bare = related work, "
+    "with text = targeted. Results land in the Suggested reading tab.\n"
+    "- `/gaps` — find papers that fill your wiki's **open questions / gaps**.\n"
+    "- `/belief <claim>` — **propose a belief** from a claim; lands as an inline card you Accept/Dismiss.\n"
+    "- `/updatewiki [instruction]` — propose wiki edits now (inline Accept/Dismiss).\n"
     "- `/<collection-slug> <question>` — ask the agent about a *different* collection (read-only).\n\n"
-    "A plain message is answered by the assistant for **this** collection — it reads your wiki, "
-    "notes, and papers, and may propose wiki edits (toggle that in the ⋯ menu)."
+    "A plain message is answered for **this** collection — it reads your wiki, notes, and papers, "
+    "and may propose wiki edits (toggle that in the ⋯ menu)."
 )
 
 
-def _chat_help_turn(request, slug, original):
-    """Static command reference rendered as a chat turn (no LLM call)."""
+def _chat_static_turn(request, slug, original, reply_md):
+    """Render a command result as a chat turn (no LLM call)."""
     return templates.TemplateResponse(
         request, "_chat_turn.html",
         {"slug": slug, "user_html": render_md(original, slug), "user_images": [],
-         "assistant_html": render_md(_CHAT_HELP_MD, slug), "error": None,
+         "assistant_html": render_md(reply_md, slug), "error": None,
          "suggestion": None, "usage": llm.usage(), "agentic": False},
     )
+
+
+def _chat_help_turn(request, slug, original):
+    return _chat_static_turn(request, slug, original, _CHAT_HELP_MD)
+
+
+def _chat_command_turn(request, slug, prefix, remainder, original):
+    """Handle the quick (non-agentic) slash commands: /thought, /find, /gaps."""
+    text = (remainder or "").strip()
+    if prefix == "thought":
+        if not text:
+            return _chat_static_turn(request, slug, original,
+                                     "Usage: `/thought <text>` — saves a note to your thought stream.")
+        thoughts_mod.create_thought(slug, text, synth_kind="reasoning", author_origin="human")
+        return _chat_static_turn(request, slug, original, "✓ Saved to your **thought stream**.")
+    if prefix == "find":
+        if text:
+            wiki.start_reading_async(slug, purpose="custom", custom=text)
+            what = f"matching “{text}”"
+        else:
+            wiki.start_reading_async(slug, purpose="related")
+            what = "related to this collection"
+        return _chat_static_turn(request, slug, original,
+                                 f"🔎 Searching arXiv for papers {what}… results will appear in the "
+                                 "**Suggested reading** tab when ready.")
+    if prefix == "gaps":
+        wiki.start_reading_async(slug, purpose="gaps")
+        return _chat_static_turn(request, slug, original,
+                                 "🔎 Looking for papers that fill your wiki's open questions / gaps… "
+                                 "they'll appear in the **Suggested reading** tab.")
+    return _chat_static_turn(request, slug, original, "Unknown command. Try `/help`.")
 
 
 def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mode="answer"):
