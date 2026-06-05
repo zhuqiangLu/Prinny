@@ -2268,6 +2268,29 @@ def wiki_thesis_undo(request: Request, slug: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+@app.post("/c/{slug}/wiki/concepts/add", response_class=HTMLResponse)
+def wiki_concept_add(request: Request, slug: str, name: str = Form(""),
+                     blurb: str = Form("")) -> HTMLResponse:
+    _require_collection(slug)
+    wiki.add_concept(slug, name, blurb)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/concepts/edit", response_class=HTMLResponse)
+def wiki_concept_edit(request: Request, slug: str, target: str = Form(""),
+                      name: str = Form(""), blurb: str = Form("")) -> HTMLResponse:
+    _require_collection(slug)
+    wiki.edit_concept(slug, target, name, blurb)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/concepts/remove", response_class=HTMLResponse)
+def wiki_concept_remove(request: Request, slug: str, target: str = Form("")) -> HTMLResponse:
+    _require_collection(slug)
+    wiki.remove_concept(slug, target)
+    return _wiki_panel(request, slug)
+
+
 @app.post("/c/{slug}/wiki/benchmarks/extract", response_class=HTMLResponse)
 def wiki_benchmarks_extract(request: Request, slug: str) -> HTMLResponse:
     """Kick off per-paper agentic benchmark extraction on a background thread; the

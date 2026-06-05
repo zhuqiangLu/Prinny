@@ -632,6 +632,27 @@ def test_extract_benchmarks_agentic_aggregates_grounds_and_links(tmp_path, monke
     assert any(c and c["paper"] for c in m["cells"])    # cells cite a paper
 
 
+def test_concept_crud_and_survives_regenerate(tmp_path, monkeypatch):
+    """User add/edit/remove concepts (direct, user-owned), and user-owned concepts
+    survive a Field Model regenerate."""
+    _seed_three_papers(tmp_path, monkeypatch, _llm_stub())
+    wiki.generate_overview("vlms")
+    # add
+    assert wiki.add_concept("vlms", "My Concept", "a blurb")["ok"]
+    c = next(c for c in wiki._read_concepts("vlms") if c["name"] == "My Concept")
+    assert c["user_owned"] is True and c["blurb"] == "a blurb"
+    assert wiki.add_concept("vlms", "My Concept")["ok"] is False        # dup rejected
+    # edit (rename + reblurb)
+    assert wiki.edit_concept("vlms", "My Concept", "My Renamed", "new blurb")["ok"]
+    assert "My Renamed" in wiki._concept_names("vlms") and "My Concept" not in wiki._concept_names("vlms")
+    # regenerate → the user-owned concept survives the wholesale rewrite
+    wiki.generate_overview("vlms", force=True)
+    assert "My Renamed" in wiki._concept_names("vlms")
+    # remove
+    assert wiki.remove_concept("vlms", "My Renamed")["ok"]
+    assert "My Renamed" not in wiki._concept_names("vlms")
+
+
 def test_preference_profile_and_rerank():
     """Learning: kept-paper words boost, passed-on words penalise, and a
     previously-dismissed candidate is tagged + down-weighted (but not removed)."""

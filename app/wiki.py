@@ -507,6 +507,82 @@ def _write_concepts_file(slug: str, concepts: list[dict]) -> None:
     _concepts_path(slug).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+# --- user-editable concepts (direct edits the user owns; survive regenerate) ---
+def _read_concepts(slug: str) -> list[dict]:
+    p = _concepts_path(slug)
+    if not p.is_file():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("concepts") or []
+    except (ValueError, OSError):
+        return []
+
+
+def _cslug(name: str) -> str:
+    return _SLUG_RE.sub("-", (name or "").lower()).strip("-")
+
+
+def user_owned_concepts(slug: str) -> list[dict]:
+    """The user's hand-added/edited concepts (captured BEFORE a regenerate wipes
+    the sections tree)."""
+    return [c for c in _read_concepts(slug) if c.get("user_owned")]
+
+
+def merge_user_concepts(user_owned: list[dict], agent_concepts: list[dict]) -> list[dict]:
+    """Keep the user-owned concepts and add the agent's fresh ones that don't collide
+    by name-slug — so manual edits/additions survive a regenerate."""
+    user_slugs = {_cslug(c.get("name")) for c in user_owned}
+    merged = list(user_owned)
+    for c in agent_concepts:
+        if _cslug(c.get("name")) not in user_slugs:
+            merged.append(c)
+    return merged
+
+
+def add_concept(slug: str, name: str, blurb: str = "") -> dict:
+    name = (name or "").strip()
+    if len(name) < 2:
+        return {"ok": False, "error": "Concept needs a name."}
+    concepts = _read_concepts(slug)
+    if any(_cslug(c.get("name")) == _cslug(name) for c in concepts):
+        return {"ok": False, "error": f"“{name}” already exists."}
+    concepts.append({"name": name, "synonyms": [], "blurb": (blurb or "").strip(),
+                     "papers": [], "user_owned": True})
+    _write_concepts_file(slug, concepts)
+    _append_log(slug, "added concept (user)", name[:200])
+    return {"ok": True}
+
+
+def edit_concept(slug: str, target: str, name: str, blurb: str = "") -> dict:
+    """Rename/re-blurb a concept (by its current name-slug). Marks it user_owned so
+    the edit survives the next regenerate. Synonyms/papers are left untouched."""
+    name = (name or "").strip()
+    if len(name) < 2:
+        return {"ok": False, "error": "Concept needs a name."}
+    concepts = _read_concepts(slug)
+    ts = _cslug(target)
+    found = next((c for c in concepts if _cslug(c.get("name")) == ts), None)
+    if not found:
+        return {"ok": False, "error": "Concept not found."}
+    if _cslug(name) != ts and any(_cslug(c.get("name")) == _cslug(name) for c in concepts):
+        return {"ok": False, "error": f"“{name}” already exists."}
+    found["name"], found["blurb"], found["user_owned"] = name, (blurb or "").strip(), True
+    _write_concepts_file(slug, concepts)
+    _append_log(slug, "edited concept (user)", name[:200])
+    return {"ok": True}
+
+
+def remove_concept(slug: str, target: str) -> dict:
+    concepts = _read_concepts(slug)
+    ts = _cslug(target)
+    kept = [c for c in concepts if _cslug(c.get("name")) != ts]
+    if len(kept) == len(concepts):
+        return {"ok": False, "error": "Concept not found."}
+    _write_concepts_file(slug, kept)
+    _append_log(slug, "removed concept (user)", target[:200])
+    return {"ok": True}
+
+
 # --- belief tray (Phase C) ---------------------------------------------------
 
 def _validate_belief_candidates(data: dict, valid_refs: set, concept_slugs: set) -> list[dict]:
@@ -1325,6 +1401,7 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     # --- Write the section files atomically ----------------------------------
     # Three files: thesis.md, landscape.md (+ landscape.json), concepts.json.
     stage("writing", pages_done=0, pages_total=3)
+    kept_concepts = user_owned_concepts(slug)        # capture BEFORE the wipe
     _wipe_sections_tree(slug)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
     meta_extra = {"paper_count": len(included_refs),
@@ -1334,7 +1411,7 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     stage("writing", pages_done=1, pages_total=3)
     _write_landscape_page(slug, field["landscape"], meta_extra)
     stage("writing", pages_done=2, pages_total=3)
-    _write_concepts_file(slug, field["concepts"])
+    _write_concepts_file(slug, merge_user_concepts(kept_concepts, field["concepts"]))  # keep user-owned
     stage("writing", pages_done=3, pages_total=3)
     _append_log(slug, f"generated field model "
                        f"({len(pdf_refs)}/{len(included_refs)} PDFs, "

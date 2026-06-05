@@ -309,42 +309,69 @@
 {# ===================================================================
    PANE: CONCEPTS — the concept space (attention score + member papers)
    =================================================================== #}
-<div x-show="tab==='concepts'" x-cloak class="space-y-3">
-  <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◈</span> Concepts</h2>
-  <p class="text-xs text-slate-500">The collection's concept space. The score is your attention — highlights (×1) and notes (×5) whose text matches the concept. No LLM in this count.</p>
+<div x-show="tab==='concepts'" x-cloak class="space-y-3" x-data="{ adding: false }">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◈</span> Concepts</h2>
+    <button type="button" @click="adding = !adding" class="ml-auto text-xs rounded border border-violet-200 bg-violet-50 text-violet-700 px-2 py-0.5 hover:bg-violet-100">+ Add concept</button>
+  </div>
+  <p class="text-xs text-slate-500">The collection's concept space. The score is your attention — highlights (×1) and notes (×5) whose text matches the concept. No LLM in this count. You can add, edit, or remove concepts — your edits survive a regenerate.</p>
+  <form x-show="adding" x-cloak hx-post="/c/{{ slug }}/wiki/concepts/add" hx-target="#left-panel" hx-swap="innerHTML"
+        @submit="adding = false" class="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+    <input name="name" required placeholder="Concept name" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+    <textarea name="blurb" rows="2" placeholder="One-line description (optional)" class="w-full rounded border border-slate-300 px-2 py-1 text-sm"></textarea>
+    <div class="flex items-center gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Add concept</button><button type="button" @click="adding = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button></div>
+  </form>
   {% if overview.concepts %}
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     {% for c in overview.concepts %}
-    <div class="group rounded-xl border border-slate-200 bg-white p-4"
+    <div class="group rounded-xl border border-slate-200 bg-white p-4" x-data="{ editing: false }"
          data-ask-kind="concept" data-ask-label="{{ c.name }}" data-ask-icon="◈"
          @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-center gap-2 mb-1">
-        <h3 class="text-sm font-semibold text-violet-800 flex-1 min-w-0">{{ c.name }}</h3>
-        {% if c.score %}<span class="text-[10px] rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ c.score }} attention points">🔥 {{ c.score }}</span>{% endif %}
-        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
+        <h3 x-show="!editing" class="text-sm font-semibold text-violet-800 flex-1 min-w-0">{{ c.name }}{% if c.user_owned %} <span class="text-[9px] font-normal text-slate-300" title="You added or edited this concept">· yours</span>{% endif %}</h3>
+        <span x-show="editing" class="flex-1 text-[11px] text-slate-400">Editing concept…</span>
+        {% if c.score %}<span x-show="!editing" class="text-[10px] rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ c.score }} attention points">🔥 {{ c.score }}</span>{% endif %}
+        <button type="button" x-show="!editing" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
                 class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
+        <button type="button" x-show="!editing" @click.stop="editing = true" title="Edit concept"
+                class="opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">✎</button>
+        <form x-show="!editing" @click.stop hx-post="/c/{{ slug }}/wiki/concepts/remove" hx-target="#left-panel" hx-swap="innerHTML"
+              onsubmit="return confirm('Remove the concept “{{ c.name }}”?')">
+          <input type="hidden" name="target" value="{{ c.name }}">
+          <button class="opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-rose-600" title="Remove concept">✕</button>
+        </form>
         {# contextual one-click: find external papers that extend this concept → Suggested reading tab #}
-        <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')">
+        <form x-show="!editing" hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')">
           <input type="hidden" name="purpose" value="concept"><input type="hidden" name="target" value="{{ c.name }}">
           <button class="text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50" title="Find external papers that extend this concept">🔎 find papers</button>
         </form>
       </div>
-      {% if c.blurb %}<p class="text-xs text-slate-600 leading-snug mb-2">{{ c.blurb }}</p>{% endif %}
-      {% if c.papers %}
-      <div class="flex flex-wrap gap-1">
-        {% for p in c.papers[:6] %}
-        <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[10px] rounded px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(30) }}</a>
-        {% endfor %}
-        {% if c.papers|length > 6 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">+{{ c.papers|length - 6 }}</span>{% endif %}
+      {# display #}
+      <div x-show="!editing">
+        {% if c.blurb %}<p class="text-xs text-slate-600 leading-snug mb-2">{{ c.blurb }}</p>{% endif %}
+        {% if c.papers %}
+        <div class="flex flex-wrap gap-1">
+          {% for p in c.papers[:6] %}
+          <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[10px] rounded px-1.5 py-0.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(30) }}</a>
+          {% endfor %}
+          {% if c.papers|length > 6 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">+{{ c.papers|length - 6 }}</span>{% endif %}
+        </div>
+        {% else %}
+        <p class="text-[11px] text-slate-400 italic">No papers map here yet.</p>
+        {% endif %}
       </div>
-      {% else %}
-      <p class="text-[11px] text-slate-400 italic">No papers map here yet.</p>
-      {% endif %}
+      {# inline edit (name + blurb; synonyms/papers untouched) #}
+      <form x-show="editing" x-cloak @click.stop hx-post="/c/{{ slug }}/wiki/concepts/edit" hx-target="#left-panel" hx-swap="innerHTML" class="space-y-2 mt-1">
+        <input type="hidden" name="target" value="{{ c.name }}">
+        <input name="name" value="{{ c.name }}" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+        <textarea name="blurb" rows="2" placeholder="One-line description" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">{{ c.blurb }}</textarea>
+        <div class="flex items-center gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button><button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button></div>
+      </form>
     </div>
     {% endfor %}
   </div>
   {% else %}
-  <p class="text-sm text-slate-400">No concepts yet — draft the Field Model first.</p>
+  <p class="text-sm text-slate-400">No concepts yet — draft the Field Model, or <button type="button" @click="adding = true" class="text-violet-600 hover:underline">add one</button>.</p>
   {% endif %}
 </div>
 

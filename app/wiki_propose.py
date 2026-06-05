@@ -221,7 +221,8 @@ def _apply_concept(slug: str, content: dict) -> dict:
         return {"ok": False, "error": f"concept “{name}” already exists"}
     concepts.append({"name": name, "synonyms": content.get("synonyms") or [],
                      "blurb": (content.get("blurb") or "").strip(),
-                     "papers": content.get("papers") or content.get("supporting_papers") or []})
+                     "papers": content.get("papers") or content.get("supporting_papers") or [],
+                     "user_owned": True})   # accepted by the user → survives regenerate
     _snapshot_files(slug, wiki._concepts_path(slug))
     wiki._write_concepts_file(slug, concepts)
     wiki._append_log(slug, "chat edit: added concept", name[:200])
