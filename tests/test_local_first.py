@@ -330,6 +330,63 @@ def test_fetch_arxiv_metadata_bad_id(monkeypatch):
     assert discover.fetch_arxiv_metadata("not-an-arxiv-id") is None
 
 
+_SEARCH_HTML = """<html><body>
+<li class="arxiv-result">
+  <p class="list-title is-inline-block"><a href="https://arxiv.org/abs/2501.01234">arXiv:2501.01234</a></p>
+  <p class="title is-5 mathjax">A <span class="search-hit">Great</span> Title</p>
+  <span class="abstract-full has-text-grey-dark mathjax" id="2501.01234v1-abstract-full" style="display:none;">
+    The full abstract about <span class="search-hit">reasoning</span> here. <a href="#">&#9651; Less</a></span>
+</li></body></html>"""
+
+_ABS_HTML = """<html><head>
+<meta name="citation_title" content="A Great Title" />
+<meta name="citation_author" content="Doe, Jane" />
+<meta name="citation_author" content="Roe, Rick" />
+<meta name="citation_date" content="2025/01/02" />
+<meta property="og:description" content="The abstract from the page." />
+</head></html>"""
+
+
+def test_arxiv_search_html_parses(monkeypatch):
+    """Website search fallback extracts id + title + full abstract (tags stripped)."""
+    import app.discover as discover
+
+    class _Resp:
+        text = _SEARCH_HTML
+        def raise_for_status(self): pass
+    monkeypatch.setattr(discover.httpx, "get", lambda *a, **k: _Resp())
+    hits = discover._arxiv_search_html("all:reasoning", max_results=5)
+    assert len(hits) == 1
+    assert hits[0]["arxiv_id"] == "2501.01234"
+    assert hits[0]["title"] == "A Great Title"             # search-hit span stripped
+    assert "full abstract about reasoning here." in hits[0]["summary"]   # not truncated at nested span
+
+
+def test_arxiv_meta_html_parses(monkeypatch):
+    import app.discover as discover
+
+    class _Resp:
+        text = _ABS_HTML
+        def raise_for_status(self): pass
+    monkeypatch.setattr(discover.httpx, "get", lambda *a, **k: _Resp())
+    m = discover._arxiv_meta_html("2501.01234")
+    assert m["title"] == "A Great Title" and m["year"] == "2025"
+    assert m["authors"] == "Doe, Jane, Roe, Rick"
+    assert m["abstract"] == "The abstract from the page."
+
+
+def test_arxiv_search_falls_back_to_website_on_api_failure(monkeypatch):
+    """When the API raises (429/timeout), _arxiv_search uses the website scraper."""
+    import app.discover as discover
+    def _boom(*a, **k):
+        raise discover.ArxivError("429")
+    monkeypatch.setattr(discover, "_arxiv_get", _boom)
+    monkeypatch.setattr(discover, "_arxiv_search_html",
+                        lambda q, max_results=10: [{"arxiv_id": "2501.0001", "title": "T", "summary": "s"}])
+    out = discover._arxiv_search("all:x", max_results=5)
+    assert out and out[0]["arxiv_id"] == "2501.0001"
+
+
 def test_arxiv_get_fails_fast_on_429(monkeypatch):
     """A 429 raises immediately (no retry storm — retrying within seconds is futile
     and only feeds the rate limiter)."""

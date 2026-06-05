@@ -78,12 +78,90 @@ def _arxiv_get(params: dict, *, timeout: float = 15.0, retries: int = 2):
     raise ArxivError(f"arXiv unreachable: {last}")
 
 
+# --- website (HTML) fallback ------------------------------------------------
+# The arXiv API (export.arxiv.org) is rate-limited far more aggressively than the
+# website, and on shared/institutional IPs the API 429s while arxiv.org itself
+# stays 200. When the API fails we read the same data off the website pages:
+# arxiv.org/search (results carry id + title + abstract) and arxiv.org/abs/<id>
+# (citation meta tags). HTML is more fragile than the Atom API, so it's a FALLBACK
+# only — the clean API stays primary wherever it works.
+ARXIV_WEB = "https://arxiv.org"
+_HTML_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; paper-agent/0.1; local research wiki)"}
+
+
+def _strip_html(s: str) -> str:
+    import html as _h
+    return " ".join(_h.unescape(re.sub(r"<[^>]+>", " ", s or "")).split())
+
+
+def _web_get(url: str, params: dict | None = None, timeout: float = 15.0):
+    """GET an arXiv website page (throttled, browser UA). Raises ArxivError."""
+    _throttle()
+    try:
+        r = httpx.get(url, params=params, headers=_HTML_HEADERS,
+                      timeout=timeout, follow_redirects=True)
+        r.raise_for_status()
+        return r
+    except httpx.HTTPError as exc:
+        raise ArxivError(f"arXiv website unreachable: {exc}")
+
+
+def _arxiv_search_html(query: str, max_results: int = 10) -> list[dict]:
+    """Search via the arxiv.org/search HTML page (each result carries id + title +
+    full abstract). Returns the same shape as the API search."""
+    # The website's `query` param is plain text — strip the API's field prefixes
+    # (all:/ti:/abs:…) and query punctuation, leaving keywords.
+    q = re.sub(r"\b(?:all|ti|abs|au|cat|co|jr|rn|id):", " ", query or "")
+    q = " ".join(re.sub(r'["()]', " ", q).split()) or (query or "")
+    r = _web_get(f"{ARXIV_WEB}/search/", params={"searchtype": "all", "query": q, "start": 0})
+    out = []
+    for block in re.findall(r'<li class="arxiv-result">.*?</li>', r.text, re.S):
+        idm = re.search(r"arxiv\.org/abs/(\d{4}\.\d{4,5})", block)
+        if not idm:
+            continue
+        tm = re.search(r'<p class="title is-5[^"]*">(.*?)</p>', block, re.S)
+        am = re.search(r'<span class="abstract-full[^"]*"[^>]*>(.*?)<a\s', block, re.S)
+        out.append({"arxiv_id": idm.group(1),
+                    "title": _strip_html(tm.group(1)) if tm else "",
+                    "summary": _strip_html(am.group(1)) if am else ""})
+        if len(out) >= max_results:
+            break
+    return out
+
+
+def _arxiv_meta_html(raw_id: str) -> dict | None:
+    """Metadata for one id via the arxiv.org/abs HTML page (citation meta tags +
+    og:description abstract). None on failure / bad id."""
+    aid = normalize_arxiv_id(raw_id)
+    if not aid:
+        return None
+    try:
+        txt = _web_get(f"{ARXIV_WEB}/abs/{aid}").text
+    except ArxivError:
+        return None
+    title = re.search(r'<meta name="citation_title" content="(.*?)"', txt, re.S)
+    if not title:
+        return None
+    authors = re.findall(r'<meta name="citation_author" content="(.*?)"', txt)
+    date = re.search(r'<meta name="citation_(?:date|online_date|publication_date)" content="(\d{4})', txt)
+    abstract = re.search(r'<meta property="og:description" content="(.*?)"\s*/?>', txt, re.S)
+    return {"arxiv_id": aid,
+            "title": _strip_html(title.group(1)) or "(untitled)",
+            "authors": ", ".join(_strip_html(a) for a in authors),
+            "year": date.group(1) if date else "",
+            "abstract": _strip_html(abstract.group(1)) if abstract else ""}
+
+
 # --- gaps ------------------------------------------------------------------
 def _arxiv_search(query: str, max_results: int = 10) -> list[dict]:
-    """Search arXiv. Raises ArxivError on persistent HTTP failure (so callers can
-    surface 'arXiv unreachable' instead of a silent empty result)."""
-    r = _arxiv_get({"search_query": query, "max_results": max_results,
-                    "sortBy": "submittedDate", "sortOrder": "descending"})
+    """Search arXiv. Tries the API, then falls back to the website HTML page when
+    the API fails (429/timeout). Raises ArxivError only if BOTH are unreachable."""
+    try:
+        r = _arxiv_get({"search_query": query, "max_results": max_results,
+                        "sortBy": "submittedDate", "sortOrder": "descending"})
+    except ArxivError as exc:
+        logger.warning("arxiv API search failed (%s); falling back to website", exc)
+        return _arxiv_search_html(query, max_results)
     root = ET.fromstring(r.text)
     out = []
     for entry in root.findall(f"{ATOM}entry"):
@@ -156,8 +234,8 @@ def fetch_arxiv_metadata(raw_id: str) -> dict | None:
     try:
         r = _arxiv_get({"id_list": aid, "max_results": 1})
     except ArxivError as exc:
-        logger.warning("arxiv metadata fetch failed for %s: %s", aid, exc)
-        return None
+        logger.warning("arxiv API metadata fetch failed for %s (%s); trying website", aid, exc)
+        return _arxiv_meta_html(aid)         # website fallback
     entry = ET.fromstring(r.text).find(f"{ATOM}entry")
     if entry is None or entry.find(f"{ATOM}id") is None:
         return None
@@ -202,7 +280,11 @@ def fetch_arxiv_batch(raw_ids: list[str]) -> dict[str, dict]:
                 if meta["arxiv_id"]:
                     out[meta["arxiv_id"]] = meta
         except (ArxivError, ET.ParseError) as exc:
-            logger.warning("arxiv batch fetch failed for %s: %s", chunk, exc)
+            logger.warning("arxiv API batch fetch failed for %s (%s); trying website per-id", chunk, exc)
+            for a in chunk:                  # website fallback, one page per id
+                m = _arxiv_meta_html(a)
+                if m and m["arxiv_id"]:
+                    out[m["arxiv_id"]] = m
     return out
 
 
