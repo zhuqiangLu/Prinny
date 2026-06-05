@@ -53,18 +53,28 @@ def deep_find(slug: str, focus: str, intent: str, *, limit: int = 10) -> list[di
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except (ValueError, Exception):  # noqa: BLE001 - no parseable JSON → no picks
         return []
-    out, seen = [], set()
+    # Dedupe the agent's picks, then fetch ALL their metadata in ONE batched arXiv
+    # request (not one-per-pick) — a per-pick loop here was bursting ~limit requests
+    # and tripping arXiv's rate limit (429).
+    picks, seen = [], set()
     for p in (data.get("papers") or [])[: max(1, limit) * 2]:
         aid = discover.normalize_arxiv_id(str(p.get("arxiv_id") or ""))
         if not aid or aid in seen:
             continue
         seen.add(aid)
-        meta = discover.fetch_arxiv_metadata(aid)        # real abstract for the validator
+        picks.append({"arxiv_id": aid, "title": p.get("title") or "",
+                      "note": (p.get("why") or "").strip()})
+        if len(picks) >= limit:
+            break
+    if not picks:
+        return []
+    metas = discover.fetch_arxiv_batch([p["arxiv_id"] for p in picks])   # one request
+    out = []
+    for p in picks:
+        meta = metas.get(p["arxiv_id"])
         if not meta:
             continue                                     # invented / unresolvable id → drop
-        out.append({"arxiv_id": aid, "title": meta.get("title") or (p.get("title") or ""),
+        out.append({"arxiv_id": p["arxiv_id"], "title": meta.get("title") or p["title"],
                     "summary": meta.get("abstract", ""), "authors": meta.get("authors", ""),
-                    "note": (p.get("why") or "").strip()})
-        if len(out) >= limit:
-            break
+                    "note": p["note"]})
     return out

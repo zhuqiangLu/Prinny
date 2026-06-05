@@ -42,11 +42,16 @@ def test_deep_find_parses_dedupes_and_fetches(monkeypatch, tmp_path):
     monkeypatch.setattr(pf.agents, "effective_tools", lambda k, d: d)
     monkeypatch.setattr(pf.mcp_server, "stdio_mcp_config", lambda *a, **k: {})
     monkeypatch.setattr(discover, "normalize_arxiv_id", lambda x: x if str(x).startswith("2501") else "")
-    monkeypatch.setattr(discover, "fetch_arxiv_metadata",
-                        lambda aid: ({"arxiv_id": aid, "title": "Fetched", "authors": "A",
-                                      "year": "2025", "abstract": "the real abstract"}
-                                     if str(aid).startswith("2501") else None))
+    # metadata is fetched in ONE batched call (not one-per-pick) — count invocations
+    batch_calls = []
+    def fake_batch(ids):
+        batch_calls.append(list(ids))
+        return {aid: {"arxiv_id": aid, "title": "Fetched", "authors": "A",
+                      "year": "2025", "abstract": "the real abstract"}
+                for aid in ids if str(aid).startswith("2501")}
+    monkeypatch.setattr(discover, "fetch_arxiv_batch", fake_batch)
     out = pf.deep_find("vlms", "focus text", "challenge H2", limit=5)
+    assert len(batch_calls) == 1                          # single arXiv request, not per-pick
     assert len(out) == 1                                  # BOGUS dropped (unresolvable), dup deduped
     c = out[0]
     assert c["arxiv_id"] == "2501.01234" and c["summary"] == "the real abstract"
