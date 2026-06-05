@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
@@ -33,32 +34,47 @@ class ArxivError(RuntimeError):
     """arXiv was unreachable or kept failing (e.g. 429) after retries."""
 
 
-def _arxiv_get(params: dict, *, timeout: float = 20.0, retries: int = 3):
-    """GET the arXiv API with a real User-Agent and backoff on transient failures
-    (429 / 5xx / network). Honors a Retry-After header. Raises ArxivError once
-    retries are exhausted — with a friendly message for rate-limiting."""
+# Process-wide min-interval throttle: arXiv asks for ≤ ~1 request / 3s and 429s +
+# tarpits the IP on bursts. Serialize all arXiv access so no path (the deep loop,
+# the agent's search tool, or rapid clicks) can ever burst again. Tests can set
+# _MIN_INTERVAL = 0 to skip the wait.
+_MIN_INTERVAL = 3.0
+_RATE_LOCK = threading.Lock()
+_last_call = [0.0]
+
+
+def _throttle() -> None:
+    with _RATE_LOCK:
+        wait = _MIN_INTERVAL - (time.monotonic() - _last_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_call[0] = time.monotonic()
+
+
+def _arxiv_get(params: dict, *, timeout: float = 15.0, retries: int = 2):
+    """GET the arXiv API with a real User-Agent, a global min-interval throttle, and
+    backoff retry on TRANSIENT failures (timeout / 5xx / network). A 429 fails fast
+    (retrying within seconds is futile and only adds load). Raises ArxivError."""
     last = None
-    rate_limited = False
-    backoff = 1.5
+    backoff = 2.0
     for attempt in range(retries):
         if attempt:
             time.sleep(min(backoff, 10.0))
             backoff *= 2
+        _throttle()
         try:
             r = httpx.get(ARXIV_API, params=params, headers=_HEADERS,
                           timeout=timeout, follow_redirects=True)
             if getattr(r, "status_code", 200) == 429:
-                rate_limited = True
-                ra = getattr(r, "headers", {}).get("Retry-After")
-                if ra and ra.isdigit():
-                    backoff = max(backoff, float(ra))
+                # Fail fast — a 429 won't clear in seconds, so don't retry/hammer.
+                raise ArxivError("arXiv is rate-limiting requests (HTTP 429). Wait a minute and try again.")
             r.raise_for_status()
             return r
+        except ArxivError:
+            raise
         except httpx.HTTPError as exc:
             last = exc
             logger.warning("arxiv request failed (attempt %d/%d): %s", attempt + 1, retries, exc)
-    if rate_limited:
-        raise ArxivError("arXiv is rate-limiting requests (HTTP 429). Wait a minute and try again.")
     raise ArxivError(f"arXiv unreachable: {last}")
 
 

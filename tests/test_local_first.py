@@ -330,6 +330,26 @@ def test_fetch_arxiv_metadata_bad_id(monkeypatch):
     assert discover.fetch_arxiv_metadata("not-an-arxiv-id") is None
 
 
+def test_arxiv_get_fails_fast_on_429(monkeypatch):
+    """A 429 raises immediately (no retry storm — retrying within seconds is futile
+    and only feeds the rate limiter)."""
+    import app.discover as discover
+    calls = {"n": 0}
+
+    class _R429:
+        status_code = 429
+        headers = {}
+        def raise_for_status(self): pass
+
+    def _get(*a, **k):
+        calls["n"] += 1
+        return _R429()
+    monkeypatch.setattr(discover.httpx, "get", _get)
+    with pytest.raises(discover.ArxivError, match="429"):
+        discover._arxiv_get({"search_query": "x"})
+    assert calls["n"] == 1                               # one call, not retries=2
+
+
 def test_add_arxiv_manual(wired, monkeypatch):
     import app.triage as triage
 
