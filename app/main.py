@@ -805,7 +805,8 @@ def _rendered_history(slug: str, paper_id: int | None = None) -> list[dict]:
     out = []
     for m in get_messages(thread_id):
         if m["role"] in ("user", "assistant"):
-            out.append({"role": m["role"], "html": render_md(m["content"], slug)})
+            out.append({"role": m["role"], "html": render_md(m["content"], slug),
+                        "images": m.get("images") or []})
     return out
 
 
@@ -1369,7 +1370,7 @@ def chat_post(
     assistant_text = ""
     try:
         assistant_text = llm.complete(messages)
-        add_message(thread_id, "user", stored or "(image)", refs)
+        add_message(thread_id, "user", stored or "(image)", refs, images=images)
         # Store refs on the assistant turn too (kept for context/grounding).
         add_message(thread_id, "assistant", assistant_text, refs)
     except llm.LLMError as exc:

@@ -554,5 +554,13 @@
     });
 
   </script>
+
+  {# Global image lightbox: any chat image dispatches 'pa-lightbox' with its src.
+     Body-level so it's never trapped inside a collapsed panel. #}
+  <div x-data="{ src: '' }" @pa-lightbox.window="src = $event.detail"
+       x-show="src" x-cloak @click="src = ''" @keydown.escape.window="src = ''"
+       class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6 cursor-zoom-out">
+    <img :src="src" class="max-w-full max-h-full rounded shadow-2xl" alt="attached image">
+  </div>
 </body>
 </html>

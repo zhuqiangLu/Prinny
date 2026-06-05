@@ -210,20 +210,37 @@
           const refData = this.ref;                       // capture before clearing
           if (!msg && !imgs.length && !refData) return;
           const log = document.getElementById("chat-log");
-          // optimistic user bubble (textContent = safe escaping); show the card ref if any
-          const u = document.createElement("div");
-          u.className = "flex justify-end";
-          u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
+          const optimistic = [];                          // nodes to drop when the server turn arrives
+          // optimistic image thumbnails (clickable → lightbox)
+          if (imgs.length) {
+            const ir = document.createElement("div");
+            ir.className = "flex justify-end mb-1";
+            const wrap = document.createElement("div");
+            wrap.className = "flex flex-wrap gap-1 max-w-[85%] justify-end";
+            imgs.forEach((src) => {
+              const im = document.createElement("img");
+              im.src = src; im.alt = "attached image"; im.title = "Click to enlarge";
+              im.className = "h-20 w-20 object-cover rounded border border-slate-200 cursor-zoom-in hover:opacity-90";
+              im.onclick = () => window.dispatchEvent(new CustomEvent("pa-lightbox", { detail: src }));
+              wrap.appendChild(im);
+            });
+            ir.appendChild(wrap); log.appendChild(ir); optimistic.push(ir);
+          }
+          // optimistic user text bubble (only when there's text or a card ref)
           const refPrefix = refData ? (refData.icon + " " + refData.label + (msg ? " — " : "")) : "";
-          u.firstElementChild.textContent = refPrefix + msg + (imgs.length
-            ? (msg || refData ? "\n" : "") + `📎 ${imgs.length} image${imgs.length > 1 ? "s" : ""}` : "");
-          log.appendChild(u);
+          if (msg || refData) {
+            const u = document.createElement("div");
+            u.className = "flex justify-end";
+            u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
+            u.firstElementChild.textContent = refPrefix + msg;
+            log.appendChild(u); optimistic.push(u);
+          }
           // typing bubble
           const a = document.createElement("div");
           a.className = "flex justify-start";
           a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100">'
                       + '<div class="pa-working"><span class="pa-typing" aria-label="working"><i></i><i></i><i></i></span></div></div>';
-          log.appendChild(a);
+          log.appendChild(a); optimistic.push(a);
           ta.value = ""; this.clear(); this.ref = null; log.scrollTop = log.scrollHeight;
           try {
             const resp = await fetch(`/c/${this.slug}/chat`, {
@@ -233,7 +250,7 @@
                                           ref_json: refData ? JSON.stringify(refData) : "" }),
             });
             const html = await resp.text();
-            u.remove(); a.remove();                       // server HTML re-includes the user bubble
+            optimistic.forEach((n) => n.remove());        // server HTML re-includes the user bubble + images
             log.insertAdjacentHTML("beforeend", html);
             if (window.htmx && log.lastElementChild) window.htmx.process(log.lastElementChild);
           } catch (e) {

@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   role TEXT CHECK(role IN ('user','assistant','system')),
   content TEXT NOT NULL,
   context_refs TEXT,
+  images TEXT NOT NULL DEFAULT '[]',     -- JSON list of pasted image data URLs (user turns)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -412,6 +413,9 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute("UPDATE chat_threads SET last_active_at = created_at WHERE last_active_at IS NULL")
     if "agent_session_id" not in cols:
         con.execute("ALTER TABLE chat_threads ADD COLUMN agent_session_id TEXT")
+    _tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "chat_messages" in _tables and "images" not in {r[1] for r in con.execute("PRAGMA table_info(chat_messages)")}:
+        con.execute("ALTER TABLE chat_messages ADD COLUMN images TEXT NOT NULL DEFAULT '[]'")
     ccols = {r[1] for r in con.execute("PRAGMA table_info(collections)")}
     if "wiki_proactive" not in ccols:
         con.execute("ALTER TABLE collections ADD COLUMN wiki_proactive INTEGER NOT NULL DEFAULT 1")

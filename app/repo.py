@@ -201,14 +201,16 @@ def thread_message_count(thread_id: int) -> int:
 
 
 def add_message(
-    thread_id: int, role: str, content: str, context_refs: list[dict] | None = None
+    thread_id: int, role: str, content: str, context_refs: list[dict] | None = None,
+    images: list[str] | None = None,
 ) -> int:
     con = connect()
     try:
         cur = con.execute(
-            "INSERT INTO chat_messages (thread_id, role, content, context_refs) "
-            "VALUES (?, ?, ?, ?)",
-            (thread_id, role, content, json.dumps(context_refs) if context_refs else None),
+            "INSERT INTO chat_messages (thread_id, role, content, context_refs, images) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (thread_id, role, content, json.dumps(context_refs) if context_refs else None,
+             json.dumps(images or [])),
         )
         con.commit()
         return cur.lastrowid
@@ -241,10 +243,17 @@ def get_messages(thread_id: int, limit: int = 50) -> list[dict]:
     con = connect()
     try:
         rows = con.execute(
-            "SELECT role, content FROM chat_messages WHERE thread_id = ? "
+            "SELECT role, content, images FROM chat_messages WHERE thread_id = ? "
             "AND role IN ('user','assistant') ORDER BY id DESC LIMIT ?",
             (thread_id, limit),
         ).fetchall()
     finally:
         con.close()
-    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+    out = []
+    for r in reversed(rows):
+        try:
+            imgs = json.loads(r["images"]) if r["images"] else []
+        except (ValueError, TypeError):
+            imgs = []
+        out.append({"role": r["role"], "content": r["content"], "images": imgs})
+    return out
