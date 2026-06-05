@@ -367,6 +367,12 @@
     </form>
   </div>
   <p class="text-xs text-slate-500">Reported performance per method × benchmark — each number cites the paper that reported it (hover a cell). Best in each column is highlighted. Numbers are extracted from the papers, never estimated.</p>
+  {% if benchmarks and benchmarks.n_results %}
+  <div class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <span class="shrink-0">⚠</span>
+    <span><b>Agent-extracted — double-check before trusting.</b> An agent reads each PDF to pull these numbers and can make mistakes — misreading a table, mixing up methods or benchmarks, or misattributing a paper. Verify against the source (click a value to open its paper) before relying on them.</span>
+  </div>
+  {% endif %}
 
   {% if not benchmarks or not benchmarks.n_results %}
   <div class="rounded-xl border border-slate-200 bg-white p-5 text-center">
