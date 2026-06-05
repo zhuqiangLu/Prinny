@@ -1307,6 +1307,12 @@ def chat_post(
     if agent is not None:
         return _paper_subagent_turn(request, slug, col["name"], thread_id, pid, message, agent, images)
 
+    # The collection side-chat is AGENTIC by default: a tool-using agent that reads
+    # the live wiki/notes and may propose wiki edits (gated by the per-collection
+    # toggle). Paper turns (pid set) and image turns stay on the plain completion path.
+    if pid is None and not images:
+        return _agentic_chat_turn(request, slug, thread_id, slug, message, message, mode="answer")
+
     # /collection (or /wiki) pulls the collection wiki into a per-paper turn.
     include_collection = False
     for token in ("/collection", "/wiki"):

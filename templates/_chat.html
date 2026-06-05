@@ -173,7 +173,9 @@
         send() {
           const ta = this.$el.querySelector('textarea[name="message"]');
           const msg = (ta.value || "").trim();
-          if (msg.startsWith("/")) return this.sendBlocking();
+          // Collection side-chat is agentic (tool-using → blocking). Slash-commands
+          // also block. A paper-without-sub-agent turn still streams.
+          if (msg.startsWith("/") || !this.paperKey) return this.sendBlocking();
           return this.streamTo(`/c/${this.slug}/chat/stream`);
         },
         // Per-paper sub-agent turn.
