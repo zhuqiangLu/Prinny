@@ -474,8 +474,17 @@ def validate_candidates(target: str, candidates: list[dict], intent: str = "") -
         except (TypeError, ValueError):
             conf = 0.5
         out.append({**c, "verdict": verdict, "confidence": round(conf, 2),
-                    "justification": (j.get("why") or "").strip()[:240]})
+                    "justification": _clip((j.get("why") or "").strip(), 320)})
     return out
+
+
+def _clip(text: str, n: int) -> str:
+    """Trim to ~n chars on a word boundary with an ellipsis — never mid-word/number
+    (the validator's 'why' was hard-cut at a fixed length, e.g. '… 759 hours, 1,253')."""
+    text = (text or "").strip()
+    if len(text) <= n:
+        return text
+    return text[:n].rsplit(" ", 1)[0].rstrip(".,;:—- ") + "…"
 
 
 # --- learning: deterministic preference profile from accept/reject history ----

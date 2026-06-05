@@ -1295,6 +1295,8 @@ def chat_post(
     # /{collection-slug} routes the turn through the agent with read-only MCP tools
     # (AGENTIC_PLAN P6). Checked before the legacy /collection /wiki literals.
     prefix, remainder = agentic_chat.parse_prefix(message)
+    if prefix == "help":            # static command reference, no LLM call
+        return _chat_help_turn(request, slug, message)
     if prefix == "updatewiki":      # explicit: ask the agent to propose wiki edits now
         return _agentic_chat_turn(request, slug, thread_id, slug, remainder, message, mode="update")
     if prefix is not None:
@@ -1485,6 +1487,27 @@ def _paper_subagent_turn(request, slug, name, thread_id, paper_id, message, agen
         {"slug": slug, "user_html": render_md(message, slug), "user_images": [],
          "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
          "error": error, "suggestion": None, "usage": llm.usage(), "agentic": False},
+    )
+
+
+_CHAT_HELP_MD = (
+    "**Chat commands**\n\n"
+    "- `/help` — show this list.\n"
+    "- `/updatewiki [instruction]` — ask the assistant to propose wiki edits now; "
+    "each one lands as an inline card you **Accept** or **Dismiss**.\n"
+    "- `/<collection-slug> <question>` — ask the agent about a *different* collection (read-only).\n\n"
+    "A plain message is answered by the assistant for **this** collection — it reads your wiki, "
+    "notes, and papers, and may propose wiki edits (toggle that in the ⋯ menu)."
+)
+
+
+def _chat_help_turn(request, slug, original):
+    """Static command reference rendered as a chat turn (no LLM call)."""
+    return templates.TemplateResponse(
+        request, "_chat_turn.html",
+        {"slug": slug, "user_html": render_md(original, slug), "user_images": [],
+         "assistant_html": render_md(_CHAT_HELP_MD, slug), "error": None,
+         "suggestion": None, "usage": llm.usage(), "agentic": False},
     )
 
 

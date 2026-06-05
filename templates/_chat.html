@@ -118,7 +118,7 @@
     <div class="flex gap-2 items-stretch">
       <textarea name="message" :style="`height:${h}px`"
                 @paste="onPaste($event)"
-                placeholder="{% if paper_key %}Message about this paper… (/collection adds the wiki · paste an image){% else %}Message… (grounded in the wiki){% endif %}"
+                placeholder="{% if paper_key %}Message about this paper… (/collection adds the wiki · paste an image){% else %}Message… (use /help for commands){% endif %}"
                 class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm"
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault(); if(this.value.trim()||window.Alpine.$data(this.form).images.length) this.form.requestSubmit();}"></textarea>
       <button type="submit" aria-label="Send" title="Send (Enter)"
@@ -180,8 +180,9 @@
         },
         // Per-paper sub-agent turn.
         stream() { return this.streamTo(`/c/${this.slug}/p/${this.paperKey}/chat/stream`); },
-        // Blocking turn (slash-commands / agentic): show a typing bubble, then append
-        // the server-rendered turn. No optimistic user bubble (the response includes it).
+        // Blocking turn (slash-commands / agentic): show the user's message + a
+        // typing bubble immediately, then swap in the server-rendered turn (which
+        // re-includes the user bubble, so we drop the optimistic one to avoid a dupe).
         async sendBlocking() {
           const form = this.$el;
           const ta = form.querySelector('textarea[name="message"]');
@@ -189,6 +190,14 @@
           const imgs = this.images.slice();
           if (!msg && !imgs.length) return;
           const log = document.getElementById("chat-log");
+          // optimistic user bubble (textContent = safe escaping)
+          const u = document.createElement("div");
+          u.className = "flex justify-end";
+          u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
+          u.firstElementChild.textContent = msg + (imgs.length
+            ? (msg ? "\n" : "") + `📎 ${imgs.length} image${imgs.length > 1 ? "s" : ""}` : "");
+          log.appendChild(u);
+          // typing bubble
           const a = document.createElement("div");
           a.className = "flex justify-start";
           a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100">'
@@ -202,7 +211,7 @@
                                           images_json: JSON.stringify(imgs) }),
             });
             const html = await resp.text();
-            a.remove();
+            u.remove(); a.remove();                       // server HTML re-includes the user bubble
             log.insertAdjacentHTML("beforeend", html);
             if (window.htmx && log.lastElementChild) window.htmx.process(log.lastElementChild);
           } catch (e) {
