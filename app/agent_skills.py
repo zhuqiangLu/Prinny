@@ -32,6 +32,8 @@ _HOMES: dict[str, list[str]] = {
     # homes (organizer/debt/brainstorm/lint) were removed with the pipeline.
     "wiki": ["field-model", "belief-draft", "theme-name", "benchmark-extract", "section-edit"],
     "topic": ["topic-seed", "topic-investigate", "section-edit"],
+    # Deep-search finder: a tool-using agent (arxiv_search + local read + history).
+    "finder": ["paper-finder"],
 }
 
 

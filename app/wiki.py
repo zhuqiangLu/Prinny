@@ -1084,7 +1084,7 @@ def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -
 
 
 def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
-                          custom: str = "") -> dict:
+                          custom: str = "", deep: bool = False) -> dict:
     """On-demand arXiv discovery for a chosen PURPOSE (Fill field gaps / Extend a
     concept / Latest on the thesis / Broaden-adjacent / Custom). New candidates
     (not already in the collection, not already pending) are enqueued into triage
@@ -1108,9 +1108,13 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     have_arxiv |= hist["accepted_arxiv"]
     pending_arxiv = {c.get("arxiv_id") for c in triage.list_triage(slug, "pending") if c.get("arxiv_id")}
     try:
-        cands = discover.find_related_papers(seed, exclude_titles=have_titles, limit=limit,
-                                             intent=intent, prefer=hist["accepted_titles"],
-                                             avoid=hist["dismissed_titles"])
+        if deep:                                  # 🔬 Deep search: tool-using sub-agent
+            from . import paper_finder
+            cands = paper_finder.deep_find(slug, seed, intent or "the most relevant work for this collection", limit=limit)
+        else:
+            cands = discover.find_related_papers(seed, exclude_titles=have_titles, limit=limit,
+                                                 intent=intent, prefer=hist["accepted_titles"],
+                                                 avoid=hist["dismissed_titles"])
         cands = discover.validate_candidates(intent or seed, cands, intent)  # find → verify
         cands = discover.rerank_by_profile(                                   # learn → re-rank
             cands, discover.preference_profile(hist["accepted_titles"], hist["dismissed_titles"]),
@@ -1154,7 +1158,7 @@ def clear_reading_job(slug: str) -> None:
 
 
 def start_reading_async(slug: str, purpose: str = "related", target: str = "",
-                        custom: str = "") -> bool:
+                        custom: str = "", deep: bool = False) -> bool:
     """Run suggest_papers_to_add on a daemon thread; the panel overlay polls
     /wiki/reading/status."""
     existing = get_reading_job(slug)
@@ -1165,7 +1169,8 @@ def start_reading_async(slug: str, purpose: str = "related", target: str = "",
 
     def runner():
         try:
-            res = suggest_papers_to_add(slug, purpose=purpose, target=target, custom=custom)
+            res = suggest_papers_to_add(slug, purpose=purpose, target=target,
+                                        custom=custom, deep=deep)
             with _READING_LOCK:
                 _READING_JOBS[slug] = {"status": "done", "added": res.get("added", 0),
                                        "error": res.get("error"), "finished_at": _now()}

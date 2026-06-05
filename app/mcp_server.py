@@ -231,6 +231,33 @@ def search_fragments(slug: str, query: str) -> dict:
     return {"collection": slug, "count": len(hits), "hits": hits[:SEARCH_CAP]}
 
 
+def arxiv_search(slug: str, query: str, max_results=10) -> dict:
+    """Search arXiv (the finder agent's only network reach — the 'arXiv-only'
+    policy is enforced by this being the sole search tool). Returns lightweight
+    hits the agent can judge + cite. Read-only."""
+    from . import discover
+    try:
+        n = max(1, min(25, int(max_results)))
+    except (TypeError, ValueError):
+        n = 10
+    try:
+        hits = discover._arxiv_search(query, max_results=n)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"arxiv search failed: {exc}"}
+    return {"query": query, "count": len(hits),
+            "results": [{"arxiv_id": h.get("arxiv_id"), "title": h.get("title"),
+                         "summary": _preview(h.get("summary") or "")} for h in hits]}
+
+
+def recommendation_history(slug: str) -> dict:
+    """What the user previously KEPT vs PASSED ON for this collection's suggested
+    reading — the finder uses it to bias toward accepted-like and away from
+    rejected-like, and to avoid re-pitching. Titles only. Read-only."""
+    from . import triage
+    h = triage.outcome_history(slug)
+    return {"kept": h["accepted_titles"][:40], "passed_on": h["dismissed_titles"][:40]}
+
+
 def read_wiki_page(slug: str, page: str) -> dict:
     """One synthesized wiki page (bounded by the page itself)."""
     page = (page or "").strip().lstrip("/")
@@ -267,6 +294,12 @@ _TOOLS = [
     {"name": "read_wiki_page",
      "description": "Read one current wiki page, e.g. 'problems/efficiency' or 'index'.",
      "inputSchema": {"type": "object", "properties": {"page": {"type": "string"}}, "required": ["page"]}},
+    {"name": "arxiv_search",
+     "description": "Search arXiv for papers (keywords query). Your ONLY way to reach external papers — issue several focused queries and read the summaries before picking. max_results caps the hits (default 10).",
+     "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["query"]}},
+    {"name": "recommendation_history",
+     "description": "What the user previously KEPT vs PASSED ON for suggested reading in this collection. Use it to prefer accepted-like papers, deprioritise rejected-like ones, and avoid re-pitching.",
+     "inputSchema": {"type": "object", "properties": {}}},
 ]
 
 
@@ -287,6 +320,10 @@ def _call_tool(slug: str, name: str, args: dict):
         return get_chat_history(slug, args.get("paper_id"), args.get("limit", 200))
     if name == "read_wiki_page":
         return read_wiki_page(slug, args.get("page", ""))
+    if name == "arxiv_search":
+        return arxiv_search(slug, args.get("query", ""), args.get("max_results", 10))
+    if name == "recommendation_history":
+        return recommendation_history(slug)
     raise KeyError(name)
 
 

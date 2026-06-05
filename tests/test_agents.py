@@ -8,14 +8,15 @@ import app.agents as agents
 def test_registry_lists_all_agents_with_real_tools():
     items = agents.list_agents()
     keys = {a["key"] for a in items}
-    # Post-cleanup registry: the notes-pipeline agents (organizer/debt/brainstorm/lint)
-    # were removed with the pipeline; only the read-only paper/chat agents and the
-    # one-shot wiki drafter remain.
-    assert keys == {"paper", "chat", "wiki"}
+    # Read-only paper/chat agents, the one-shot wiki drafter, and the deep-search
+    # paper finder (read-only arXiv + collection + history).
+    assert keys == {"paper", "chat", "wiki", "finder"}
     paper = next(a for a in items if a["key"] == "paper")
     assert "Read" in [t["name"] for t in paper["tools"]]          # real allowlist
     assert any(s["name"] == "summarize-section" for s in paper["skills"])
     assert next(a for a in items if a["key"] == "wiki")["tools"] == []  # one-shot, no tools
+    finder = next(a for a in items if a["key"] == "finder")
+    assert "arxiv_search" in [t["name"] for t in finder["tools"]]   # real allowlist
     # No agent carries a write tool anymore (the lethal-trifecta surface is gone).
     assert all(not t["write"] for a in items for t in a["tools"])
 

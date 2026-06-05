@@ -403,13 +403,15 @@ def topic_question_undo(slug: str) -> RedirectResponse:
 
 # --- topic suggested reading (purpose-driven external discovery) ------------
 @app.post("/t/{slug}/reading/suggest")
-def topic_reading_suggest(slug: str, purpose: str = Form("broaden"),
-                          target: str = Form(""), custom: str = Form("")) -> RedirectResponse:
+def topic_reading_suggest(slug: str, purpose: str = Form("broaden"), target: str = Form(""),
+                          custom: str = Form(""), deep: str = Form("")) -> RedirectResponse:
     """Kick off suggested-reading discovery on a background thread; the reading
-    pane renders an overlay that polls /reading/status. Redirect is immediate."""
+    pane renders an overlay that polls /reading/status. Redirect is immediate.
+    ``deep`` ('1') routes to the tool-using paper-finder sub-agent."""
     if topics_mod.get_topic(slug):
         tgt = int(target) if (target or "").strip().isdigit() else None
-        topic_view.start_reading_async(slug, purpose=purpose, target_id=tgt, custom=custom)
+        topic_view.start_reading_async(slug, purpose=purpose, target_id=tgt, custom=custom,
+                                       deep=(deep == "1"))
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -2110,11 +2112,14 @@ def wiki_benchmarks_extract(request: Request, slug: str) -> HTMLResponse:
 
 @app.post("/c/{slug}/wiki/recommend-add", response_class=HTMLResponse)
 def wiki_recommend_add(request: Request, slug: str, purpose: str = Form("gaps"),
-                       target: str = Form(""), custom: str = Form("")) -> HTMLResponse:
-    """Run arXiv discovery for the chosen purpose and enqueue new candidates into
-    triage (synchronous network action). Re-renders the panel."""
+                       target: str = Form(""), custom: str = Form(""),
+                       deep: str = Form("")) -> HTMLResponse:
+    """Kick off arXiv discovery for the chosen purpose on a background thread and
+    re-render the panel (which shows the overlay). ``deep`` ('1') routes to the
+    tool-using paper-finder sub-agent."""
     _require_collection(slug)
-    wiki.start_reading_async(slug, purpose=purpose, target=target, custom=custom)
+    wiki.start_reading_async(slug, purpose=purpose, target=target, custom=custom,
+                             deep=(deep == "1"))
     return _wiki_panel(request, slug)
 
 

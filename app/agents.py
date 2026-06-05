@@ -21,6 +21,11 @@ _DEFS = [
      "Drafts the problem-oriented starter overview from the papers' abstracts on import.",
      "wiki", "One-shot completion over abstracts — no tools/MCP. Writes the agent-tagged "
      "overview map (the user-approved CLAUDE.md amendment); your own pages are untouched."),
+    ("finder", "Paper finder (deep search)",
+     "Suggested reading's 🔬 Deep search: iteratively searches arXiv, cross-checks your "
+     "library, and learns from your accept/reject history to propose papers.",
+     "finder", "Read-only: arXiv search + your collection (read) + accept/reject history. "
+     "Proposes candidates you review; never adds or writes anything."),
 ]
 
 
@@ -32,6 +37,9 @@ def _resolve_tools(key: str) -> list[str]:
     if key == "chat":
         from .agentic_chat import CHAT_TOOLS
         return list(CHAT_TOOLS)
+    if key == "finder":
+        from .paper_finder import FINDER_TOOLS
+        return list(FINDER_TOOLS)
     return []   # wiki: one-shot, no tools
 
 

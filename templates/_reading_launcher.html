@@ -62,8 +62,11 @@
       <span class="text-sky-600">🌐</span>
       <span class="text-[11px] text-slate-500 flex-1"><b class="text-slate-600">Powered by arXiv.</b> Results are validated before showing.</span>
       <div class="text-right">
-        <button type="submit" class="rounded-lg bg-violet-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-violet-700 disabled:opacity-60">✦ Find reading</button>
-        <div class="text-[10px] text-slate-400 mt-0.5">Takes ~20s</div>
+        <div class="flex items-center gap-1.5 justify-end">
+          <button type="submit" name="deep" value="" class="rounded-lg bg-violet-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-violet-700 disabled:opacity-60">✦ Find reading</button>
+          <button type="submit" name="deep" value="1" title="Tool-using agent: searches arXiv iteratively, cross-checks your library, learns from your accept/reject history. Slower." class="rounded-lg border border-violet-300 bg-white text-violet-700 px-3 py-1.5 text-sm font-medium hover:bg-violet-50 disabled:opacity-60">🔬 Deep</button>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-0.5">Find ~20s · Deep is an agent (slower)</div>
       </div>
     </div>
   </form>
