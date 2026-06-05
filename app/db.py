@@ -304,6 +304,24 @@ CREATE TABLE IF NOT EXISTS topic_suggestions (
 );
 CREATE INDEX IF NOT EXISTS idx_topic_suggestions ON topic_suggestions(topic_id);
 
+-- Chat-proposed wiki edits (propose-and-gate): the agentic chat proposes TYPED
+-- edits; nothing is written until the user Accepts (inline in the chat). Each row
+-- is one pending proposal.
+CREATE TABLE IF NOT EXISTS wiki_proposals (
+  id INTEGER PRIMARY KEY,
+  collection_slug TEXT NOT NULL,
+  section TEXT NOT NULL,                   -- thesis | landscape | concepts | belief
+  op TEXT NOT NULL,                        -- replace | add_item | remove_item | add_concept | add
+  content TEXT NOT NULL DEFAULT '{}',      -- JSON payload (shape depends on section/op)
+  supporting_papers TEXT NOT NULL DEFAULT '[]',  -- JSON list of cited collection paper refs
+  grounding TEXT NOT NULL DEFAULT '',      -- conversation provenance (thesis) / note
+  summary TEXT NOT NULL DEFAULT '',        -- one-line human description for the inline card
+  origin TEXT NOT NULL DEFAULT 'proactive',-- proactive | command (/updatewiki)
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | dismissed
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_wiki_proposals ON wiki_proposals(collection_slug, status);
+
 -- External-content FTS over paper_notes. First column is paper_id; paper_notes.paper_id
 -- is an INTEGER PRIMARY KEY so it *is* the rowid (content_rowid='rowid' stays correct).
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
