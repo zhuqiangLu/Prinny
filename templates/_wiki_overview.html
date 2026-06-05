@@ -675,13 +675,18 @@
         </div>
       </div>
       <script>
-        // Ideas-only map. Defined globally; called by collectionView when the
-        // Connections tab is shown (the element has no width while hidden, so we
-        // can't init at include time). Guarded against double-init.
-        window.kgRender = function () {
+        // Ideas-only map. Defined globally; called when the Graph view is shown.
+        // The element has no width until the browser lays it out — on Safari that
+        // isn't done by $nextTick, so we retry across animation frames (bounded)
+        // until cytoscape is loaded AND the container has width. Idempotent.
+        window.kgRender = function (tries) {
+          tries = tries || 0;
           var el = document.getElementById("kg-cyto");
-          if (!el || typeof cytoscape !== "function" || el.dataset.kgInit) return;
-          if (!el.clientWidth) return;   // still hidden — collectionView re-calls on tab show
+          if (!el || el.dataset.kgInit) return;
+          if (typeof cytoscape !== "function" || !el.clientWidth) {
+            if (tries < 90) requestAnimationFrame(function () { window.kgRender(tries + 1); });
+            return;   // wait for the script to load / the container to be laid out
+          }
           var data;
           try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
           el.dataset.kgInit = "1";
