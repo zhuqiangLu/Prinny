@@ -109,37 +109,74 @@
     {# ============================ OVERVIEW ============================ #}
     <div x-show="tab==='overview'" class="space-y-4">
       {% if has_content %}
-      {# Row 1: Question | Assumptions | Hypotheses #}
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {# 1 — Research Question #}
-        <section class="rounded-xl border border-slate-200 bg-white p-4" x-data="{ edit: false }">
-          <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">1</span>
-            <h2 class="text-sm font-semibold text-slate-900">Research Question</h2>
-            <div class="ml-auto flex items-center gap-2">
-              {% if basics_undo %}
-              <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="Revert the last agent edit">↩ Undo</button></form>
-              {% endif %}
-              <button @click="aeditOpen=true; $nextTick(() => { var i=document.getElementById('t-aedit-instr'); if(i)i.value=''; var d=document.getElementById('t-aedit-diff'); if(d)d.innerHTML=''; })" class="text-xs text-violet-600 hover:underline">✎ with agent</button>
-              <button @click="edit=!edit" class="text-xs text-slate-400 hover:text-violet-600">Edit</button>
+      {% set n_sup = t.evidence|selectattr('kind','equalto','supporting')|list|length %}
+      {% set n_cnt = t.evidence|selectattr('kind','equalto','counter')|list|length %}
+      {% set n_mis = t.evidence|selectattr('kind','equalto','missing')|list|length %}
+      {# Row 1: Research Question (prominent) | Evidence Summary (stats) #}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        {# Research Question — the hero card #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ edit: false }">
+          <div class="flex items-start gap-4">
+            <span class="grid place-items-center w-14 h-14 rounded-xl bg-violet-100 text-violet-600 text-2xl shrink-0">◎</span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">Research Question</span>
+                <div class="ml-auto flex items-center gap-2">
+                  {% if basics_undo %}
+                  <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="Revert the last agent edit">↩ Undo</button></form>
+                  {% endif %}
+                  <button @click="aeditOpen=true; $nextTick(() => { var i=document.getElementById('t-aedit-instr'); if(i)i.value=''; var d=document.getElementById('t-aedit-diff'); if(d)d.innerHTML=''; })" class="text-xs text-violet-600 hover:underline">✎ with agent</button>
+                  <button @click="edit=!edit" class="text-xs text-slate-400 hover:text-violet-600">Edit</button>
+                </div>
+              </div>
+              <p x-show="!edit" class="text-xl font-bold text-slate-900 leading-snug mt-1">{{ t.question }}</p>
+              {% if t.description %}<p x-show="!edit" class="text-xs text-slate-500 mt-2">{{ t.description }}</p>{% endif %}
+              <form x-show="edit" x-cloak method="post" action="/t/{{ t.slug }}/edit" class="space-y-2 mt-2">
+                <textarea name="question" rows="3" required class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">{{ t.question }}</textarea>
+                <textarea name="description" rows="2" placeholder="Description (optional)" class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs">{{ t.description }}</textarea>
+                <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
+                  <button type="button" @click="edit=false" class="text-xs text-slate-400">Cancel</button></div>
+              </form>
             </div>
           </div>
-          <div x-show="!edit" class="rounded-lg bg-slate-50 border border-slate-100 p-3">
-            <p class="text-sm font-medium text-slate-900 leading-snug">{{ t.question }}</p>
-            {% if t.description %}<p class="text-xs text-slate-500 mt-1.5">{{ t.description }}</p>{% endif %}
-          </div>
-          <form x-show="edit" x-cloak method="post" action="/t/{{ t.slug }}/edit" class="space-y-2">
-            <textarea name="question" rows="3" required class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">{{ t.question }}</textarea>
-            <textarea name="description" rows="2" placeholder="Description (optional)" class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs">{{ t.description }}</textarea>
-            <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
-              <button type="button" @click="edit=false" class="text-xs text-slate-400">Cancel</button></div>
-          </form>
         </section>
 
-        {# 2 — Assumptions #}
+        {# Evidence Summary — stat boxes with icons #}
+        <section class="rounded-xl border border-slate-200 bg-white p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-violet-600">📊</span>
+            <h2 class="text-sm font-semibold text-slate-900">Evidence Summary</h2>
+            <button @click="go('evidence')" class="ml-auto text-xs text-violet-600 hover:underline">Details →</button>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {% for icon, ic, n, big, lbl, sub in [
+                ('✓','text-emerald-600', n_sup, n_sup, 'Supporting', 'papers'),
+                ('✕','text-rose-600', n_cnt, n_cnt, 'Counter', 'papers'),
+                ('?','text-amber-500', n_mis, n_mis, 'Missing', 'gaps')] %}
+            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+              <div class="flex items-center gap-1.5"><span class="{{ ic }}">{{ icon }}</span><span class="text-2xl font-semibold text-slate-900 tabular-nums">{{ big }}</span></div>
+              <div class="text-[11px] text-slate-500 mt-0.5">{{ lbl }}</div>
+              <div class="text-[10px] text-slate-400">{{ sub }}</div>
+            </button>
+            {% endfor %}
+            <div class="rounded-lg border border-slate-200 p-3">
+              <div class="flex items-center gap-1.5"><span class="text-violet-600">🛡</span>
+                {% if gen.confidence %}<span class="text-2xl font-semibold text-violet-600">{{ gen.confidence.label }}</span>
+                {% else %}<span class="text-2xl font-semibold text-slate-300">—</span>{% endif %}</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">Confidence</div>
+              <div class="text-[10px] text-slate-400 tabular-nums">{% if gen.confidence %}{{ '%.2f'|format(gen.confidence.score) }}{% else %}no hypotheses{% endif %}</div>
+            </div>
+          </div>
+          <p class="mt-3 text-[10px] text-slate-400">Confidence is computed from hypothesis statuses (supported=1, mixed=.5, challenged=.15).</p>
+        </section>
+      </div>
+
+      {# Row 2: ① Assumptions | ② Hypotheses | ③ Evidence #}
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        {# 1 — Assumptions #}
         <section class="rounded-xl border border-slate-200 bg-white p-4" x-data="{ add: false }">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">2</span>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">1</span>
             <h2 class="text-sm font-semibold text-slate-900">Assumptions</h2>
             <button @click="viewAll='assumptions'" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
@@ -158,10 +195,10 @@
           </form>
         </section>
 
-        {# 3 — Hypotheses #}
+        {# 2 — Hypotheses #}
         <section class="rounded-xl border border-slate-200 bg-white p-4">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">3</span>
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">2</span>
             <h2 class="text-sm font-semibold text-slate-900">Hypotheses</h2>
             <button @click="go('hypotheses')" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
@@ -177,74 +214,52 @@
           </div>
           <button @click="addHyp=true" class="mt-3 pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add hypothesis</button>
         </section>
-      </div>
 
-      {# Row 2: Evidence Summary | Next Steps #}
-      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-        {# 4 — Evidence Summary #}
-        <section class="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-5">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">4</span>
-            <h2 class="text-sm font-semibold text-slate-900">Evidence Summary</h2>
+        {# 3 — Evidence (paper list) #}
+        <section class="rounded-xl border border-slate-200 bg-white p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">3</span>
+            <h2 class="text-sm font-semibold text-slate-900">Evidence</h2>
+            <button @click="go('evidence')" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
-          {% set n_sup = t.evidence|selectattr('kind','equalto','supporting')|list|length %}
-          {% set n_cnt = t.evidence|selectattr('kind','equalto','counter')|list|length %}
-          {% set n_mis = t.evidence|selectattr('kind','equalto','missing')|list|length %}
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-              <div class="text-[11px] text-slate-500">Supporting</div>
-              <div class="text-2xl font-semibold text-emerald-600 tabular-nums">{{ n_sup }}</div>
-              <div class="text-[10px] text-slate-400">papers</div>
-            </button>
-            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-              <div class="text-[11px] text-slate-500">Counter</div>
-              <div class="text-2xl font-semibold text-rose-600 tabular-nums">{{ n_cnt }}</div>
-              <div class="text-[10px] text-slate-400">papers</div>
-            </button>
-            <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
-              <div class="text-[11px] text-slate-500">Missing</div>
-              <div class="text-2xl font-semibold text-amber-500 tabular-nums">{{ n_mis }}</div>
-              <div class="text-[10px] text-slate-400">gaps</div>
-            </button>
-            <div class="rounded-lg border border-slate-200 p-3">
-              <div class="text-[11px] text-slate-500">Confidence</div>
-              {% if gen.confidence %}
-              <div class="text-2xl font-semibold text-violet-600">{{ gen.confidence.label }}</div>
-              <div class="text-[10px] text-slate-400 tabular-nums">{{ '%.2f'|format(gen.confidence.score) }}</div>
-              {% else %}<div class="text-2xl font-semibold text-slate-300">—</div><div class="text-[10px] text-slate-400">no hypotheses</div>{% endif %}
+          <div class="space-y-2">
+            {% for e in t.evidence[:4] %}
+            <div class="flex items-start gap-2">
+              <span class="text-slate-300 shrink-0 mt-0.5">📄</span>
+              <p class="flex-1 text-[13px] text-slate-700 leading-snug line-clamp-2" title="{{ e.paper_title or e.claim }}">{{ e.paper_title or e.claim }}</p>
+              {% if e.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == e.hypothesis_id %}
+              <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ 'bg-emerald-100 text-emerald-700' if e.kind=='supporting' else 'bg-rose-100 text-rose-700' if e.kind=='counter' else 'bg-amber-100 text-amber-700' }}">{{ 'supports' if e.kind=='supporting' else 'counters' if e.kind=='counter' else 'gap' }} H{{ loop.index }}</span>
+              {% endif %}{% endfor %}{% endif %}
+              {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="shrink-0 text-slate-300 hover:text-violet-600" title="Open paper">↗</a>{% endif %}
             </div>
+            {% else %}<p class="text-sm text-slate-400">No evidence yet.</p>{% endfor %}
           </div>
-          <p class="mt-3 text-[10px] text-slate-400">Confidence is computed from hypothesis statuses (supported=1, mixed=.5, challenged=.15). Counts are evidence items, not a trend.</p>
-        </section>
-
-        {# 5 — Next Steps #}
-        <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">5</span>
-            <h2 class="text-sm font-semibold text-slate-900">Next Steps</h2>
-          </div>
-          {% if gen.next_steps %}
-          <ul class="space-y-2">
-            {% for s in gen.next_steps %}
-            <li class="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5">
-              <span class="text-violet-500 mt-0.5 shrink-0">◎</span>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm text-slate-800 leading-snug">{{ s.title }}</p>
-                {% if s.detail %}<p class="text-[11px] text-slate-400">{{ s.detail }}</p>{% endif %}
-              </div>
-            </li>
-            {% endfor %}
-          </ul>
-          {% else %}<p class="text-sm text-slate-400">No next steps yet — generate the investigation.</p>{% endif %}
+          <button @click="go('evidence')" class="mt-3 pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add evidence</button>
         </section>
       </div>
 
-      {# Row 3: Connected Collections | Key Terms #}
+      {# Next Steps (full width) #}
+      {% if gen.next_steps %}
+      <section class="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 class="text-sm font-semibold text-slate-900 mb-3">Next Steps</h2>
+        <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {% for s in gen.next_steps %}
+          <li class="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5">
+            <span class="text-violet-500 mt-0.5 shrink-0">◎</span>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-slate-800 leading-snug">{{ s.title }}</p>
+              {% if s.detail %}<p class="text-[11px] text-slate-400">{{ s.detail }}</p>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {# Connected Collections | Key Terms #}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        {# 6 — Connected Collections #}
         <section class="rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex items-center gap-2 mb-3">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">6</span>
             <h2 class="text-sm font-semibold text-slate-900">Connected Collections</h2>
             <button @click="manage=true" class="ml-auto text-xs text-violet-600 hover:underline">Manage</button>
           </div>

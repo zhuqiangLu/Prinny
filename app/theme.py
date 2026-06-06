@@ -33,12 +33,12 @@ _OK_EXT = ("png", "jpg", "jpeg", "webp", "gif")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-# The default look is the shipped "Reading desk" preset: a paired light/dark wallpaper. The
-# palette is baked here (extraction is client-side) and derived from the LIGHT image — the
-# accent only shows in light mode, so it matches the cream desk (a soft khaki), not the lake.
+# The default look is the shipped "Reading desk" preset: a paired light/dark wallpaper.
+# The accent is Prinny's brand purple (violet-600/700) — it drives the primary buttons,
+# send button, and other accent surfaces app-wide.
 DEFAULT_THEME = {
     "bg": "#f4f4f4", "surface": "#fcfcfc",
-    "accent": "#9b9b3b", "accent_hover": "#7e7e30", "accent_fg": "#ffffff", "ink": "#3d1f1f",
+    "accent": "#7c3aed", "accent_hover": "#6d28d9", "accent_fg": "#ffffff", "ink": "#3d1f1f",
     "bg_light_url": "/static/themes/light.png", "bg_dark_url": "/static/themes/dark.png",
 }
 
