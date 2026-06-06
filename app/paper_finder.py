@@ -14,7 +14,7 @@ import json
 import logging
 
 from . import agent_skills, agents, discover, engine as engine_mod, llm, mcp_server
-from .config import load_config
+from .config import agent_model, load_config
 
 logger = logging.getLogger("paper_agent.paper_finder")
 
@@ -42,6 +42,7 @@ def deep_find(slug: str, focus: str, intent: str, *, limit: int = 10, since: str
             "then output the JSON.")
     try:
         res = eng.run_once([{"role": "user", "content": user}], system=system,
+                           model=agent_model(),     # heavy reasoning → opus by default
                            allowed_tools=agents.effective_tools("finder", FINDER_TOOLS),
                            mcp_config=mcp_server.stdio_mcp_config(slug, read_only=True),
                            cwd=str(agent_skills.ensure_skills_home("finder")))

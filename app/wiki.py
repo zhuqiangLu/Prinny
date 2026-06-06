@@ -1421,10 +1421,11 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     # The field-model agent is non-deterministic — a run occasionally returns prose
     # around the JSON, a truncated object, or nothing. Retry once before giving up,
     # and log the raw output so a real failure is debuggable (not just "no output").
+    from .config import agent_model
     field = None
     for attempt in (1, 2):
         try:
-            out = llm.complete(msgs)
+            out = llm.complete(msgs, model=agent_model())
         except Exception as exc:  # noqa: BLE001
             logger.warning("field-model LLM call failed (attempt %d) for %s: %s", attempt, slug, exc)
             continue

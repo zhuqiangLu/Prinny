@@ -13,7 +13,7 @@ import json
 import logging
 
 from . import agent_skills, agents, engine as engine_mod, llm, mcp_server
-from .config import load_config
+from .config import agent_model, load_config
 
 logger = logging.getLogger("paper_agent.benchmark_agent")
 
@@ -39,7 +39,7 @@ def extract_paper(slug: str, paper_id: int, title: str = "") -> list[dict]:
             "to its experiments / results tables, then output the JSON.")
     try:
         res = eng.run_once(
-            [{"role": "user", "content": user}], system=system,
+            [{"role": "user", "content": user}], system=system, model=agent_model(),
             allowed_tools=agents.effective_tools("benchmark", BENCH_TOOLS),
             mcp_config=mcp_server.stdio_mcp_config(slug, read_only=True),
             cwd=str(agent_skills.ensure_skills_home("benchmark")))

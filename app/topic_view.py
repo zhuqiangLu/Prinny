@@ -524,9 +524,11 @@ def generate_investigation(slug: str, stage_cb=None) -> dict:
                  'counter_evidence:[{claim,paper,hypothesis}], missing_evidence:[{claim,hypothesis}],'
                  'unknowns:[{question,priority,hypothesis}], experiments:[{title,method,metric,'
                  'hypothesis}], next_steps:[{title,detail}], key_terms:[".."]}.')
+    from .config import agent_model
     try:
         data = _extract_json(llm.complete([{"role": "system", "content": system},
-                                           {"role": "user", "content": user}])) or {}
+                                           {"role": "user", "content": user}],
+                                          model=agent_model())) or {}
     except Exception:  # noqa: BLE001
         return {"ok": False, "error": "The LLM call failed."}
 

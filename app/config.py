@@ -73,6 +73,11 @@ DEFAULTS: dict[str, str] = {
     # (durable, survives restart); live = one persistent process (faster, ephemeral).
     "chat_session_mode": "resume",
     "model": "",
+    # Model for spawned BACKGROUND sub-agents (Field-Model draft, 🔬 deep finder,
+    # benchmark extraction, topic investigation) — heavy reasoning, so default to opus.
+    # Interactive chat uses `model` (the picker) instead. Claude aliases only; on Codex
+    # this is ignored (it uses `model`).
+    "agent_model": "opus",
     # Per-collection reading log size (powers "Previous paper" walk-back).
     "reading_log_cap": "100",
     "show_highlight_legend": "true",
@@ -112,6 +117,16 @@ def load_config() -> dict[str, str]:
         with CONFIG_PATH.open("rb") as f:
             cfg.update({k: str(v) for k, v in tomllib.load(f).items()})
     return cfg
+
+
+def agent_model() -> str:
+    """Model for spawned background sub-agents (Field-Model draft, deep finder,
+    benchmark extraction, topic investigation). Defaults to opus. Codex doesn't take
+    Claude aliases, so there it falls back to the configured `model`."""
+    cfg = load_config()
+    if (cfg.get("engine") or "claude-code") == "codex":
+        return cfg.get("model", "")
+    return (cfg.get("agent_model") or "opus").strip() or "opus"
 
 
 # Default PDF-highlight scheme (user-editable in Settings). color + short legend label.
