@@ -1454,7 +1454,7 @@ def chat_post(
         if ref and ref.get("label"):
             return _agentic_chat_turn(request, slug, thread_id, slug,
                                       _ref_instruction(ref, message, slug), _ref_display(ref, message),
-                                      mode="answer")
+                                      mode="answer", images=images)
     if prefix is not None:
         return _agentic_chat_turn(request, slug, thread_id, prefix, remainder, message)
 
