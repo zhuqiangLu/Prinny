@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Collections — Paper Agent{% endblock %}
+{% block main_pad %}p-0{% endblock %}
+{% block main_width %}max-w-none{% endblock %}
+{% block main_inner %}h-full{% endblock %}
 {% block content %}
 {% macro heatcell(n) -%}
 {%- if n <= 0 -%}bg-slate-200{%- elif n == 1 -%}bg-amber-200{%- elif n <= 3 -%}bg-amber-400{%- elif n <= 6 -%}bg-amber-500{%- else -%}bg-amber-600{%- endif -%}
 {%- endmacro %}
-<div x-data='newWizard({{ available|tojson }}, {{ existing_names|tojson }})'>
-
+{# Whole landing page sits on a purpleish gradient (fades from violet at the top into
+   the neutral page bg), echoing the collection/topic header. #}
+<div x-data='newWizard({{ available|tojson }}, {{ existing_names|tojson }})'
+     class="min-h-full bg-gradient-to-b from-violet-100 via-violet-50 to-transparent">
+  <div class="mx-auto max-w-6xl px-6 py-6">
   <!-- Hero -->
   {% set b = pa_branding() %}
   <div class="flex items-start justify-between gap-6">
@@ -378,7 +384,7 @@
        collections, rendered as cards (was a single banner linking to /topics). -->
   <div class="mt-10">
     <div class="flex items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧭</span> Research Topics</h2>
+      <h2 class="text-lg font-semibold text-slate-900">Research Topics</h2>
       <a href="/topics" class="text-sm text-violet-600 hover:underline">+ New topic</a>
     </div>
     <p class="text-[12px] text-slate-500 mt-0.5">Questions you're investigating across collections — what you're chasing, not what the field contains.</p>
@@ -442,7 +448,8 @@
     {% endif %}
   </div>
 
-</div>
+  </div>{# /max-w-6xl centered container #}
+</div>{# /gradient page #}
 
 <script>
   // New-collection wizard: layer 1 (source) → layer 2 (Zotero/Directory: name, tags, preview).

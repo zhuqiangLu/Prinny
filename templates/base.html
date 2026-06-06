@@ -249,10 +249,10 @@
         </div>
       </div>
       <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
-              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">⚙ <span>Settings</span></button>
+              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"><span>Settings</span></button>
       <button type="button" @click="toggleTheme()"
-              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">
-        <span x-text="dark ? '☀️' : '🌙'"></span> <span x-text="dark ? 'Light mode' : 'Dark mode'"></span></button>
+              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
+        <span x-text="dark ? 'Light mode' : 'Dark mode'"></span></button>
     </div>
   </aside>
 

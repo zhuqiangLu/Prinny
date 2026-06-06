@@ -331,18 +331,18 @@
         <span x-show="editing" class="flex-1 text-[11px] text-slate-400">Editing concept…</span>
         {% if c.score %}<span x-show="!editing" class="text-[10px] rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ c.score }} attention points">🔥 {{ c.score }}</span>{% endif %}
         <button type="button" x-show="!editing" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
-                class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
+                class="shrink-0 inline-flex items-center leading-none opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-1 bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
         <button type="button" x-show="!editing" @click.stop="editing = true" title="Edit concept"
-                class="opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">✎</button>
-        <form x-show="!editing" @click.stop hx-post="/c/{{ slug }}/wiki/concepts/remove" hx-target="#left-panel" hx-swap="innerHTML"
+                class="shrink-0 inline-flex items-center leading-none opacity-0 group-hover:opacity-100 transition text-[11px] rounded px-1.5 py-1 border border-transparent text-slate-400 hover:text-violet-600">✎</button>
+        <form x-show="!editing" @click.stop hx-post="/c/{{ slug }}/wiki/concepts/remove" hx-target="#left-panel" hx-swap="innerHTML" class="inline-flex"
               onsubmit="return confirm('Remove the concept “{{ c.name }}”?')">
           <input type="hidden" name="target" value="{{ c.name }}">
-          <button class="opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-rose-600" title="Remove concept">✕</button>
+          <button class="shrink-0 inline-flex items-center leading-none opacity-0 group-hover:opacity-100 transition text-[11px] rounded px-1.5 py-1 border border-transparent text-slate-400 hover:text-rose-600" title="Remove concept">✕</button>
         </form>
         {# contextual one-click: find external papers that extend this concept → Suggested reading tab #}
-        <form x-show="!editing" hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')">
+        <form x-show="!editing" hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="go('reading')" class="inline-flex">
           <input type="hidden" name="purpose" value="concept"><input type="hidden" name="target" value="{{ c.name }}">
-          <button class="text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50" title="Find external papers that extend this concept">🔎 find papers</button>
+          <button class="shrink-0 inline-flex items-center leading-none text-[10px] rounded px-1.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50" title="Find external papers that extend this concept">🔎 find papers</button>
         </form>
       </div>
       {# display #}

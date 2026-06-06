@@ -95,11 +95,6 @@
           <div class="{{ sect }} space-y-3">
             <h3 class="text-sm font-semibold text-slate-700">Names</h3>
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">App name</label>
-              <input type="text" name="app_name" value="{{ config.app_name }}" maxlength="40"
-                     class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
-            </div>
-            <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Workspace title
                 <span class="font-normal text-slate-400">· landing headline</span></label>
               <input type="text" name="workspace_title" value="{{ config.workspace_title }}" maxlength="80"
@@ -186,20 +181,6 @@
           </div>
           {% endif %}
 
-          <!-- Custom logo & button icons -->
-          <div class="{{ sect }} text-xs text-slate-500 space-y-1.5">
-            <h3 class="text-sm font-semibold text-slate-700">Logo &amp; button icons</h3>
-            <p>Drop your own images in <code class="text-slate-700">static/branding/</code> (create the folder).
-              They're picked up automatically on the next page load — no upload step needed.
-              Any of <code>.svg .png .webp .jpg</code>:</p>
-            <ul class="list-disc pl-4 space-y-0.5">
-              <li><code>logo.*</code> — nav logo, shown next to the name (~24px tall)</li>
-              <li><code>icon-moon.*</code> / <code>icon-sun.*</code> — the light / dark toggle's two states</li>
-              <li><code>icon-agents.*</code> — Agents button</li>
-              <li><code>icon-settings.*</code> — Settings button</li>
-            </ul>
-            <p class="text-slate-400">Square icons ~40–64px look best (drawn at 20px). Any you don't add keep the default emoji.</p>
-          </div>
         </div>
 
         <!-- Agents -->

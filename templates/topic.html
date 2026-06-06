@@ -696,7 +696,6 @@
       <div class="flex items-center gap-2">
         <span class="text-violet-500">✦</span>
         <span class="font-semibold text-slate-900 text-sm">Prinny Assistant</span>
-        <span class="ml-auto text-[10px] text-slate-400">read-only</span>
       </div>
       <div class="flex items-center gap-2">
         <div x-data="modelPicker('{{ model }}')" x-init="load()" class="min-w-0 flex-1">
@@ -714,7 +713,7 @@
     <div id="tc-log" x-ref="log" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
       {% for m in chat %}{% include "_chat_bubble.html" %}{% endfor %}
       {% if not chat %}
-      <p class="text-sm text-slate-400">Ask about this topic — your question, hypotheses, the relevant ideas, or where the gaps are. Grounded in your linked collections; read-only.</p>
+      <p class="text-sm text-slate-400">Ask about this topic — your question, hypotheses, the relevant ideas, or where the gaps are. Grounded in your linked collections.</p>
       {% endif %}
     </div>
     <form @submit.prevent="send()" class="shrink-0 border-t border-slate-200 p-3">
