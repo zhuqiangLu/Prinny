@@ -1247,9 +1247,12 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     if not seed.strip():
         return {"added": 0, "error": "Draft the Field Model first — there's no focus to search from."}
     try:
-        limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
+        fast_limit = max(1, min(50, int(load_config().get("recommend_count", "15"))))
     except (TypeError, ValueError):
-        limit = 10
+        fast_limit = 15
+    # Deep search reads PDFs with a tool-using agent — cast a wider net (~50) since
+    # it's the thorough path. Fast (keyword) search returns the configured count (~15).
+    limit = 50 if deep else fast_limit
     hist = triage.outcome_history(slug)          # learning: accept/reject memory
     have_titles = {(p.get("title") or "").lower() for p in library.list_papers(slug)}
     have_titles |= {t.lower() for t in hist["accepted_titles"]}   # exclude accepted (hard)

@@ -728,9 +728,10 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
         for p in library.list_papers(cs):
             have_titles.add((p.get("title") or "").lower())
     try:
-        limit = max(1, min(50, int(load_config().get("recommend_count", "10"))))
+        fast_limit = max(1, min(50, int(load_config().get("recommend_count", "15"))))
     except (TypeError, ValueError):
-        limit = 10
+        fast_limit = 15
+    limit = 50 if deep else fast_limit       # 🔬 Deep casts a wider net (~50)
     try:
         if deep:                                  # 🔬 Deep search: tool-using sub-agent
             from . import paper_finder

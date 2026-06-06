@@ -46,8 +46,9 @@ DEFAULTS: dict[str, str] = {
     # Per-collection reading log size (powers "Previous paper" walk-back).
     "reading_log_cap": "100",
     "show_highlight_legend": "true",
-    # Wiki "Recommended to add": how many arXiv papers the discovery suggests per run.
-    "recommend_count": "10",
+    # Suggested reading: how many papers the FAST (keyword) search returns per run
+    # (the agentic 🔬 Deep search casts a wider net, ~50, regardless of this).
+    "recommend_count": "15",
     # Semantic Scholar: a second discovery source + a fallback when arXiv rate-limits.
     # A free API key (https://www.semanticscholar.org/product/api) gives a personal
     # rate limit that works on shared/institutional IPs where the public quota 429s.

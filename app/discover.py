@@ -34,6 +34,18 @@ class ArxivError(RuntimeError):
     """arXiv was unreachable or kept failing (e.g. 429) after retries."""
 
 
+# Shown whenever a source rate-limits (HTTP 429). On a shared/NAT network (e.g. a
+# university Wi-Fi where everyone exits through one public IP) the provider throttles
+# the WHOLE network, not just you — so it can 429 even on your first request.
+_RATE_LIMIT_HINT = (
+    "arXiv is rate-limiting this network (HTTP 429). On shared/campus Wi-Fi everyone "
+    "shares one public IP, so arXiv throttles the whole network — not just you. Fixes: "
+    "try your own network (home Wi-Fi, phone hotspot, or a VPN), or add a free "
+    "Semantic Scholar API key in Settings (it gives you a personal quota that works "
+    "even behind the shared IP)."
+)
+
+
 # Process-wide min-interval throttle: arXiv asks for ≤ ~1 request / 3s and 429s +
 # tarpits the IP on bursts. Serialize all arXiv access so no path (the deep loop,
 # the agent's search tool, or rapid clicks) can ever burst again. Tests can set
@@ -67,7 +79,7 @@ def _arxiv_get(params: dict, *, timeout: float = 10.0, retries: int = 2):
                           timeout=timeout, follow_redirects=True)
             if getattr(r, "status_code", 200) == 429:
                 # Fail fast — a 429 won't clear in seconds, so don't retry/hammer.
-                raise ArxivError("arXiv is rate-limiting requests (HTTP 429). Wait a minute and try again.")
+                raise ArxivError(_RATE_LIMIT_HINT)
             r.raise_for_status()
             return r
         except ArxivError:
@@ -108,8 +120,12 @@ def _web_get(url: str, params: dict | None = None, timeout: float = 30.0, retrie
         try:
             r = httpx.get(url, params=params, headers=_HTML_HEADERS,
                           timeout=timeout, follow_redirects=True)
+            if getattr(r, "status_code", 200) == 429:
+                raise ArxivError(_RATE_LIMIT_HINT)        # NAT/shared-IP throttle — explain it
             r.raise_for_status()
             return r
+        except ArxivError:
+            raise
         except httpx.HTTPError as exc:
             last = exc
             logger.warning("arxiv website request failed (attempt %d/%d): %s", attempt + 1, retries, exc)
@@ -413,8 +429,20 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     # best `limit` after dropping papers already present. Relevance-sorted (not
     # recency) so the pool is on-topic, not just "newest that loosely matches".
     pool = max(limit * 2, 20)
-    results = [r for r in _arxiv_search(query, max_results=pool)
-               if r["title"].lower() not in exclude]
+    try:
+        raw = _arxiv_search(query, max_results=pool)
+    except ArxivError as exc:
+        # arXiv is unreachable (e.g. the shared-IP 429) — fall back to Semantic
+        # Scholar (different provider; a Settings API key bypasses shared-IP limits).
+        logger.warning("arxiv unreachable (%s); falling back to Semantic Scholar", exc)
+        from . import semantic_scholar
+        try:
+            raw = semantic_scholar.search(query_resp or query, max_results=pool)
+        except semantic_scholar.S2Error:
+            # Both providers refused — almost always the shared/NAT-IP 429. Lead with
+            # the actionable explanation, not a raw stack of two errors.
+            raise ArxivError(_RATE_LIMIT_HINT)
+    results = [r for r in raw if r["title"].lower() not in exclude]
     if not results:
         return []
     listing = "\n".join(f"{i}. [{r['arxiv_id']}] {r['title']}: {r['summary'][:300]}"
