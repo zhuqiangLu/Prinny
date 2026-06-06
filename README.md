@@ -28,7 +28,7 @@
 git clone https://github.com/zhuqiangLu/Prinny.git prinny && cd prinny
 
 # Option A — pipx (isolated):
-pipx install --editable .
+pip install --editable .
 prinny                 # starts the app + opens your browser
 
 # Option B — a venv:
