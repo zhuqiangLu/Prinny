@@ -278,7 +278,7 @@
       paneW: parseInt(localStorage.getItem("cc.w") || "420", 10),
       // Wiki tab state (held here, not in the HTMX-swapped panel, so a panel
       // re-render preserves the active tab automatically).
-      tab: localStorage.getItem("cc.wikitab") || "overview",
+      tab: "overview",     // always enter on Overview (notification ?tab= can override in init)
       q: "",
       starred: localStorage.getItem("cc.star.{{ slug }}") === "1",
       lsModal: "",          // '' | 'problems' | 'methods' — landscape "View all" popup
@@ -298,7 +298,6 @@
         }
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));
         this.$watch("paneW", (v) => localStorage.setItem("cc.w", v));
-        this.$watch("tab", (v) => localStorage.setItem("cc.wikitab", v));
         // The collection's single left surface is the wiki (papers live inside
         // it). Load it on init.
         this.loadPanel("/c/{{ slug }}/wiki/panel");

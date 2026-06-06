@@ -716,10 +716,13 @@
   function topicShell() {
     return {
       // tab + modal state for the v2 topic page
-      tab: (function(){ try { return localStorage.getItem('pa.ttab') || 'overview'; } catch(e){ return 'overview'; } })(),
+      // Always enter on Overview. pa.ttab is a ONE-SHOT signal: a reading-search form
+      // sets it right before its full-page reload so we land back on Suggested reading;
+      // we consume + clear it here, so the next normal entry is Overview again.
+      tab: (function(){ try { var t = localStorage.getItem('pa.ttab'); localStorage.removeItem('pa.ttab'); return t || 'overview'; } catch(e){ return 'overview'; } })(),
       q: "",
       addHyp: false, viewAll: "", manage: false, aeditOpen: false,
-      go(t) { this.tab = t; try { localStorage.setItem('pa.ttab', t); } catch(e){} },
+      go(t) { this.tab = t; },     // no persistence — entry always defaults to Overview
       asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
       asstW: (function(){ try { return parseInt(localStorage.getItem('pa.tasstW') || '384', 10); } catch(e){ return 384; } })(),
       setAsst(v) { this.asstOpen = v; try { localStorage.setItem('pa.tasst', v ? 'open' : 'closed'); } catch(e){} },
