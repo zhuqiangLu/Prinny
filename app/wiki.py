@@ -80,7 +80,8 @@ def _extract_json(text: str) -> dict:
 
 def _append_log(slug: str, reason: str, content: str) -> None:
     log = _wikidir(slug) / "log.md"
-    h = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
+    # Sanitize lone surrogates (split mathematical-bold PDF glyphs) — they crash .encode.
+    h = hashlib.sha256((content or "").encode("utf-8", "ignore")).hexdigest()[:12]
     line = f"- {_now()} · {reason} · inputs_hash={h}\n"
     if not log.exists():
         log.write_text("# Generation Log\n\n", encoding="utf-8")
@@ -110,9 +111,11 @@ def _pdf_excerpt(paper_id: int, max_chars: int = 2500) -> str:
     if not pdf_store.has_pdf(paper_id):
         return ""
     try:
-        return pdf_text.extract_text(pdf_store.pdf_dest(paper_id), max_chars=max_chars)
+        txt = pdf_text.extract_text(pdf_store.pdf_dest(paper_id), max_chars=max_chars)
     except Exception:  # noqa: BLE001
         return ""
+    # Strip lone surrogates so the digest (hashed + written) never crashes UTF-8 encode.
+    return (txt or "").encode("utf-8", "ignore").decode("utf-8")
 
 
 def _pdf_abstract(paper_id: int) -> str:
@@ -1413,17 +1416,31 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     from . import agent_skills
     system = (agent_skills.skill_body("field-model")
               or "Output JSON: {thesis:{one_paragraph,core_tension,key_intuition,central_question}, landscape:{problems[],methods[],debates[],open_questions[]}}.")
-    try:
-        out = llm.complete([{"role": "system", "content": system},
-                            {"role": "user", "content": "Papers:\n\n" + digest}])
+    msgs = [{"role": "system", "content": system},
+            {"role": "user", "content": "Papers:\n\n" + digest}]
+    # The field-model agent is non-deterministic — a run occasionally returns prose
+    # around the JSON, a truncated object, or nothing. Retry once before giving up,
+    # and log the raw output so a real failure is debuggable (not just "no output").
+    field = None
+    for attempt in (1, 2):
+        try:
+            out = llm.complete(msgs)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("field-model LLM call failed (attempt %d) for %s: %s", attempt, slug, exc)
+            continue
         data = _extract_json(out)
-    except Exception:  # noqa: BLE001
-        return False
-    field = _validate_field_model(data or {}, valid_refs=included_refs)
-    # Refuse drafts where neither the thesis nor any landscape column came back
-    # populated — better to fail visibly than write empty section files.
-    if (not field["thesis"]["one_paragraph"]
-            and not any(field["landscape"].values())):
+        if not data:
+            logger.warning("field-model output didn't parse to JSON (attempt %d) for %s; "
+                           "raw len=%d, head=%r", attempt, slug, len(out or ""), (out or "")[:200])
+            continue
+        cand = _validate_field_model(data, valid_refs=included_refs)
+        # Accept once the thesis paragraph or any landscape column is populated.
+        if cand["thesis"]["one_paragraph"] or any(cand["landscape"].values()):
+            field = cand
+            break
+        logger.warning("field-model validated empty (attempt %d) for %s; data keys=%s",
+                       attempt, slug, list(data.keys()))
+    if field is None:
         return False
 
     # --- Write the section files atomically ----------------------------------
