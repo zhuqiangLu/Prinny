@@ -59,6 +59,16 @@ class EngineResult:
     events: list = field(default_factory=list)
 
 
+def safe_text(s: str | None) -> str:
+    """Drop lone UTF-16 surrogates (e.g. \\ud835 from a PDF's split mathematical-bold
+    glyphs). They live fine in a Python str but raise 'surrogates not allowed' the
+    moment we UTF-8 encode — which is exactly what feeding a subprocess stdin does.
+    Strip them so a single bad character in an abstract can't kill an LLM call."""
+    if not s:
+        return s or ""
+    return s.encode("utf-8", "ignore").decode("utf-8")
+
+
 # --- message flattening (for CLI engines) ----------------------------------
 def _split_system(messages: list[dict]) -> tuple[str, str]:
     """Flatten a role/content messages list into (system_text, prompt_text) for a
@@ -137,7 +147,7 @@ class _CliEngine(Engine):
         t0 = time.monotonic()
         try:
             proc = subprocess.run(
-                argv, input=stdin_text, capture_output=True, text=True,
+                argv, input=safe_text(stdin_text), capture_output=True, text=True,
                 timeout=CLI_TIMEOUT, env=None, cwd=_safe_cwd(cwd),
             )
         except FileNotFoundError as exc:
@@ -294,7 +304,7 @@ class ClaudeCodeEngine(_CliEngine):
                                 stderr=subprocess.PIPE, text=True, cwd=_safe_cwd(cwd))
         got_done = False
         try:
-            proc.stdin.write(prompt); proc.stdin.close()
+            proc.stdin.write(safe_text(prompt)); proc.stdin.close()
             for ev in claude_turn_events(proc.stdout):
                 got_done = got_done or ev.get("type") == "done"
                 yield ev

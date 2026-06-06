@@ -128,7 +128,9 @@ def _pdf_abstract(paper_id: int) -> str:
         text = "\n".join((reader.pages[i].extract_text() or "") for i in range(min(2, len(reader.pages))))
     except Exception:  # noqa: BLE001
         return ""
-    return _extract_abstract(text)
+    # Drop lone UTF-16 surrogates (split mathematical-bold glyphs) — they crash UTF-8
+    # encoding downstream (the field-model draft feeding the CLI agent's stdin).
+    return _extract_abstract(text).encode("utf-8", "ignore").decode("utf-8")
 
 
 def _collection_abstracts(slug: str) -> list[dict]:
