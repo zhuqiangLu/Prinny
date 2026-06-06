@@ -146,11 +146,26 @@ def _collection_abstracts(slug: str) -> list[dict]:
         ).fetchall()
     finally:
         con.close()
-    out = []
+    out, backfill = [], []
     for r in rows:
         ref = r["zotero_key"] or r["arxiv_id"] or r["openreview_id"] or str(r["id"])
-        abstract = (r["abstract"] or "").strip() or _pdf_abstract(r["id"])
+        abstract = (r["abstract"] or "").strip()
+        if not abstract:
+            abstract = _pdf_abstract(r["id"])         # expensive: parses the PDF
+            if abstract:
+                backfill.append((abstract, r["id"]))  # cache it so we never re-parse
         out.append({"id": r["id"], "ref": ref, "title": r["title"] or "", "abstract": abstract})
+    # Persist PDF-extracted abstracts — without this, every wiki render re-parsed every
+    # abstract-less PDF (×2: concept map + graph), which made opening a large field-model
+    # collection take seconds. One-time per paper.
+    if backfill:
+        con2 = connect()
+        try:
+            con2.executemany(
+                "UPDATE papers SET abstract=? WHERE id=? AND COALESCE(abstract,'')=''", backfill)
+            con2.commit()
+        finally:
+            con2.close()
     return out
 
 
