@@ -10,7 +10,23 @@
   .pa-typing i:nth-child(3){animation-delay:.3s}
   @keyframes pa-bounce{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}
 </style>
-<div class="flex flex-col h-full min-h-0 bg-white">
+<div class="relative flex flex-col h-full min-h-0 bg-white"
+     x-data="{ compacting: false,
+               async compact(url) {
+                 if (!(await window.paConfirm('Compact this chat into a summary artifact?\n\n• The back-and-forth history is replaced by a concise summary.\n• The summary carries forward as context for future messages.\n• The original history cannot be recovered.'))) return;
+                 this.compacting = true;
+                 try { await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }); }
+                 catch (e) {}
+                 window.location.reload();
+               } }">
+  {# compaction overlay — locks the chat while the summary is generated (async) #}
+  <div x-show="compacting" x-cloak class="absolute inset-0 z-40 grid place-items-center bg-white/80 backdrop-blur-[1px]">
+    <div class="flex flex-col items-center gap-2 text-slate-600">
+      <svg class="w-8 h-8 animate-spin text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path></svg>
+      <div class="text-sm font-medium">Compacting chat…</div>
+      <div class="text-[11px] text-slate-400">summarizing the conversation — one moment</div>
+    </div>
+  </div>
   <div class="border-b border-slate-200 px-3 py-1.5 flex items-center gap-2">
     <div class="flex items-center gap-1 min-w-0" x-data="modelPicker('{{ model }}')" x-init="load()">
       <select x-model="current" @change="setModel()" title="Model (applies to all chats)"
@@ -57,11 +73,9 @@
     {% else %}
     <!-- collection chat: compact into an artifact, or remove the chat -->
     <div class="ml-auto flex items-center gap-2 text-xs shrink-0">
-      <form method="post" action="{{ cbase }}/chat/compact"
-            onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Compact this chat into a summary artifact?\n\n• The back-and-forth history is replaced by a concise summary.\n• The summary carries forward as context for future messages.\n• The original history cannot be recovered.').then(function(o){ if(o) f.submit(); }); return false;">
-        <button class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50"
-                title="Summarize the chat into an artifact and clear the history">⊟ Compact</button>
-      </form>
+      <button type="button" @click="compact('{{ cbase }}/chat/compact')" :disabled="compacting"
+              class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              title="Summarize the chat into an artifact and clear the history">⊟ Compact</button>
       <form method="post" action="{{ cbase }}/chat/delete"
             onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Remove the current chat? This deletes the history and any compacted artifact.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
         <button class="rounded border border-rose-200 bg-white px-2 py-0.5 text-rose-600 hover:bg-rose-50"
@@ -129,17 +143,22 @@
     </div>
 
     <div class="flex gap-2 items-stretch">
-      <textarea name="message" :style="`height:${h}px`"
-                @paste="onPaste($event)"
+      <textarea name="message" :style="`height:${h}px`" :disabled="compacting"
+                @paste="onPaste($event)" @keydown.escape="if(sending) interrupt()"
                 placeholder="{% if paper_key %}Message about this paper… (/collection adds the wiki · paste an image){% else %}Message… (use /help for commands){% endif %}"
-                class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm"
+                class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault(); if(this.value.trim()||window.Alpine.$data(this.form).images.length) this.form.requestSubmit();}"></textarea>
-      <button type="submit" aria-label="Send" title="Send (Enter)"
-              class="shrink-0 grid place-items-center w-11 rounded bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50">
+      {# Send → becomes a Stop button while a turn is in flight (click or Esc interrupts) #}
+      <button x-show="!sending" type="submit" aria-label="Send" title="Send (Enter)" :disabled="compacting"
+              class="shrink-0 grid place-items-center w-11 rounded bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path>
         </svg>
+      </button>
+      <button x-show="sending" x-cloak type="button" @click="interrupt()" aria-label="Stop" title="Stop (Esc)"
+              class="shrink-0 grid place-items-center w-11 rounded bg-rose-600 text-white hover:bg-rose-700">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
       </button>
     </div>
   </form>
@@ -148,6 +167,9 @@
       return {
         images: [],
         ref: null,                 // {kind,label,key,icon} from "Ask in chat" on a card
+        sending: false,            // a turn is in flight — Send becomes Stop (interrupt)
+        controller: null,          // AbortController for the in-flight turn (Esc/Stop)
+        interrupt() { if (this.controller) { try { this.controller.abort(); } catch (e) {} } },
         streaming: !!streaming,
         slug: slug,
         paperKey: paperKey,
@@ -193,6 +215,7 @@
         // slash-commands need the agentic flow (blocking), everything else streams
         // so the chat shows the message + a typing indicator immediately.
         send() {
+          if (this.sending) return;            // a turn is already running — ignore
           const ta = this.$el.querySelector('textarea[name="message"]');
           const msg = (ta.value || "").trim();
           // Collection side-chat is agentic (tool-using → blocking). Slash-commands
@@ -201,7 +224,7 @@
           return this.streamTo(`${this.base}/chat/stream`);
         },
         // Per-paper sub-agent turn.
-        stream() { return this.streamTo(`/c/${this.slug}/p/${this.paperKey}/chat/stream`); },
+        stream() { if (this.sending) return; return this.streamTo(`/c/${this.slug}/p/${this.paperKey}/chat/stream`); },
         // Blocking turn (slash-commands / agentic): show the user's message + a
         // typing bubble immediately, then swap in the server-rendered turn (which
         // re-includes the user bubble, so we drop the optimistic one to avoid a dupe).
@@ -212,6 +235,7 @@
           const imgs = this.images.slice();
           const refData = this.ref;                       // capture before clearing
           if (!msg && !imgs.length && !refData) return;
+          this.sending = true;                            // lock until the turn returns
           const log = document.getElementById("chat-log");
           const optimistic = [];                          // nodes to drop when the server turn arrives
           // optimistic image thumbnails (clickable → lightbox)
@@ -245,19 +269,25 @@
                       + '<div class="pa-working"><span class="pa-typing" aria-label="working"><i></i><i></i><i></i></span></div></div>';
           log.appendChild(a); optimistic.push(a);
           ta.value = ""; this.clear(); this.ref = null; log.scrollTop = log.scrollHeight;
+          this.controller = new AbortController();
           try {
             const resp = await fetch(`${this.base}/chat`, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
                                           images_json: JSON.stringify(imgs),
                                           ref_json: refData ? JSON.stringify(refData) : "" }),
+              signal: this.controller.signal,
             });
             const html = await resp.text();
             optimistic.forEach((n) => n.remove());        // server HTML re-includes the user bubble + images
             log.insertAdjacentHTML("beforeend", html);
             if (window.htmx && log.lastElementChild) window.htmx.process(log.lastElementChild);
           } catch (e) {
-            a.querySelector(".pa-working").textContent = "Send failed: " + e;
+            optimistic.forEach((n) => n.remove());        // drop the optimistic bubbles
+            if (e.name === "AbortError") { ta.value = msg; this.images = imgs; this.ref = refData; }  // interrupted — restore the draft
+            else { const w = a.querySelector(".pa-working"); if (w) w.textContent = "Send failed: " + e; log.appendChild(a); }
+          } finally {
+            this.sending = false; this.controller = null;
           }
           log.scrollTop = log.scrollHeight;
         },
@@ -269,6 +299,7 @@
           const msg = (ta.value || "").trim();
           const imgs = this.images.slice();              // capture before clearing
           if (!msg && !imgs.length) return;
+          this.sending = true;                            // lock until the stream ends
           const log = document.getElementById("chat-log");
           // user bubble (textContent = safe escaping) + an attachment note if images
           const u = document.createElement("div");
@@ -291,11 +322,13 @@
           ta.value = ""; this.clear();
           log.scrollTop = log.scrollHeight;
           let acc = "";
+          this.controller = new AbortController();
           try {
             const resp = await fetch(url, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
                                           images_json: JSON.stringify(imgs) }),
+              signal: this.controller.signal,
             });
             const reader = resp.body.getReader(), dec = new TextDecoder();
             let buf = "";
@@ -322,7 +355,10 @@
               }
             }
           } catch (e) {
-            statusEl.textContent = ""; bodyEl.textContent = "Stream failed: " + e;
+            statusEl.textContent = "";
+            bodyEl.textContent = e.name === "AbortError" ? (acc + "\n⏹ interrupted") : ("Stream failed: " + e);
+          } finally {
+            this.sending = false; this.controller = null;
           }
           stopWorking();                                  // stream ended: remove the activity row
           // re-render the final text as markdown (same renderer as server-side bubbles)
