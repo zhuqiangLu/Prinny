@@ -50,7 +50,8 @@
             <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="open = false">
               <button class="{{ mi }}" title="Re-draft the Field Model from the current collection (runs in the background).">↻ Regenerate Field Model</button>
             </form>
-            <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
+            <button type="button" @click="open = false; wikiExportOpen = true" class="{{ mi }}">⬇ Export wiki…</button>
+            <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export to Zotero…</button>
             {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
             {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
             {% if col and col.copy_mode == "lazy" %}<form method="post" action="/c/{{ slug }}/download-all" @submit="open = false"><button class="{{ mi }}">⤓ Download all PDFs</button></form>{% endif %}

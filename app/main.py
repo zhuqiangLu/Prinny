@@ -2269,6 +2269,25 @@ def wiki_thesis_undo(request: Request, slug: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+_EXPORT_SECTIONS = ["thesis", "landscape", "concepts", "understanding",
+                    "benchmarks", "connections", "papers"]
+
+
+@app.get("/c/{slug}/wiki/export", response_class=HTMLResponse)
+def wiki_export(request: Request, slug: str, sections: str = "") -> HTMLResponse:
+    """Standalone, print-friendly export of the selected wiki sections (read as-is,
+    or Print → Save as PDF). ``sections`` is a comma-separated subset; default all."""
+    col = _require_collection(slug)
+    chosen = [s for s in (sections or "").split(",") if s in _EXPORT_SECTIONS] or list(_EXPORT_SECTIONS)
+    ov = wiki.load_overview(slug) or {}
+    benchmarks = wiki.load_benchmarks(slug) if "benchmarks" in chosen else None
+    return templates.TemplateResponse(
+        request, "wiki_export.html",
+        {"slug": slug, "name": col["name"], "ov": ov, "benchmarks": benchmarks,
+         "sections": chosen},
+    )
+
+
 @app.post("/c/{slug}/wiki/concepts/add", response_class=HTMLResponse)
 def wiki_concept_add(request: Request, slug: str, name: str = Form(""),
                      blurb: str = Form("")) -> HTMLResponse:
