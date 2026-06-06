@@ -7,10 +7,7 @@
 {% macro heatcell(n) -%}
 {%- if n <= 0 -%}bg-slate-200{%- elif n == 1 -%}bg-amber-200{%- elif n <= 3 -%}bg-amber-400{%- elif n <= 6 -%}bg-amber-500{%- else -%}bg-amber-600{%- endif -%}
 {%- endmacro %}
-{# Whole landing page sits on a purpleish gradient (fades from violet at the top into
-   the neutral page bg), echoing the collection/topic header. #}
-<div x-data='newWizard({{ available|tojson }}, {{ existing_names|tojson }})'
-     class="min-h-full bg-gradient-to-b from-violet-100 via-violet-50 to-transparent">
+<div x-data='newWizard({{ available|tojson }}, {{ existing_names|tojson }})' class="min-h-full">
   <div class="mx-auto max-w-6xl px-6 py-6">
   <!-- Hero -->
   {% set b = pa_branding() %}
