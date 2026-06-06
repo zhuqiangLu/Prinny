@@ -1,4 +1,5 @@
-# Prinny — a personal research-wiki agent over Zotero
+# Prinny — your paper reading sidekick 
+<img width="2172" height="724" alt="image" src="https://github.com/user-attachments/assets/7674f484-f5de-482e-b512-b014d3c0db9c" />
 
 Prinny maintains a **wiki per Zotero collection** where the wiki reflects **your own
 thinking** (notes, highlights, beliefs, conversations), with papers as evidence.
