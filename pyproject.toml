@@ -1,8 +1,10 @@
 [project]
 name = "paper-agent"
 version = "0.1.0"
-description = "Personal research wiki agent over Zotero collections — the wiki reflects the user's thinking, papers are evidence."
+description = "Prinny — personal research-wiki agent over Zotero collections; the wiki reflects the user's thinking, papers are evidence."
 requires-python = ">=3.11"
+license = { text = "MIT" }
+readme = "README.md"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -12,6 +14,9 @@ dependencies = [
     "markdown-it-py",
     "pypdf",
 ]
+
+[project.scripts]
+paper-agent = "app.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]
@@ -28,4 +33,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
+# templates/ and static/ live at the repo root (resolved via BASE_DIR at runtime),
+# so the supported install is an EDITABLE one from a clone — `pipx install
+# --editable .` or `pip install -e .` — which runs from the source tree. A fully
+# relocatable wheel would require moving those dirs under app/ (a follow-up).
 packages = ["app"]

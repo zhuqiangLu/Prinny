@@ -1,111 +1,122 @@
-# Paper Collection Wiki Agent
+# Prinny — a personal research-wiki agent over Zotero
 
-A personal research tool that maintains a **wiki per Zotero collection** — where the
-wiki reflects **your own thinking** (notes, thoughts, highlights, conversations),
-with papers as evidence.
+Prinny maintains a **wiki per Zotero collection** where the wiki reflects **your own
+thinking** (notes, highlights, beliefs, conversations), with papers as evidence.
 
-> **Philosophical anchor:** the LLM is an editor and research assistant, not the
-> author. It never produces wiki content unless you wrote something first, and
-> every LLM-proposed change is a **diff you review**, never a silent mutation.
+> **Philosophical anchor:** the LLM is an editor and research assistant, not the author.
+> It never silently rewrites your wiki — every agent-proposed change is something **you
+> review and accept**. You do the reading; the tool helps you organize what you wrote and
+> surfaces gaps.
 
----
-
-## What it's for
-
-**Purpose.** Help a single researcher *externalize their own understanding* of a body
-of papers. The papers are evidence; the wiki is your synthesis. The tool lowers the
-friction of capturing notes, thoughts, and highlights, then helps you turn **what you
-wrote** into a structured, cited wiki — it does not read the papers for you.
-
-**How it works (the loop).**
-
-1. Point it at a **Zotero collection**; it reads the papers and PDFs (read-only).
-2. You **read**: highlight PDFs, write per-paper notes, jot timestamped thoughts, and
-   chat with an assistant grounded in *your* notes + the open paper.
-3. On request, a two-step LLM pass (analyze → generate) turns **your notes + thoughts**
-   into proposed wiki edits — `problems / methods / gaps / benchmarks / synthesis` —
-   each as a **diff with per-claim provenance**.
-4. You **review and accept**. Accepting is the *only* code path that writes the wiki;
-   claims that don't cite a real note/thought/highlight/paper are filtered out in code.
-5. Optionally: triage candidate papers into the collection, search arXiv for gap-fillers,
-   and export the collection to BibTeX.
-
-Everything is local: data lives in `~/.paper-agent/` as plain Markdown + SQLite (editable
-in Obsidian or any editor). The only outbound calls are to OpenAI and arXiv.
-
-**Good for**
-
-- Researchers who keep collections in Zotero and want a **personal wiki that reflects
-  their own thinking**, with papers as grounding.
-- Active reading: structured per-paper notes, PDF highlights, a thought stream, and
-  collection-scoped chat that's aware of the open paper and your notes.
-- Producing a **traceable** literature synthesis — every wiki claim links back to
-  something you wrote or a paper you cited.
-- A **single local user** who wants their data in plain files and minimal external calls.
-- Curating an inbox of candidate papers (e.g. from `zotero-arxiv-daily`) and exporting
-  to `.bib`.
-
-**Not good for**
-
-- Having the LLM **read and summarize papers for you** — by design it won't author wiki
-  content you didn't seed. You still do the reading.
-- Working **without Zotero** — Zotero is a hard dependency (source of truth for papers
-  and PDFs).
-- **Teams / multi-user / sharing / auth** — it's single-user and local only.
-- **Semantic search over a huge corpus** — retrieval is SQLite FTS5 keyword search; there
-  is no vector store or embeddings (a deliberate v1 choice).
-- **Hands-off automation** — expensive operations (full wiki rebuild, gap-finding) are
-  on-demand and human-reviewed; there is no background scheduler.
-- Replacing Zotero as your reference manager — it **complements** Zotero, not replaces it.
+Everything is **local**: data lives in `~/.paper-agent/` as plain Markdown + SQLite. The
+LLM runs through your **local Claude Code (or Codex) CLI** — there is no API key and no
+hosted backend. The only outbound network calls are to your local Zotero and (on request)
+arXiv.
 
 ---
 
-- **Backend:** Python 3.11+, FastAPI, SQLite (no ORM)
-- **Frontend:** server-rendered HTML + HTMX + Alpine.js + Tailwind (CDN, no build step)
-- **PDF:** PDF.js (CDN) with a custom annotation overlay
-- **LLM:** OpenAI SDK behind a thin interface
-- **Search:** SQLite FTS5 (no vector store)
-- **Zotero:** read via local SQLite (read-only, `immutable=1`) or the Local HTTP API when enabled
+## Requirements
+
+- **Python 3.11+**
+- **Zotero Desktop** — the source of truth for papers and PDFs (a hard dependency).
+- **Claude Code CLI** (or Codex CLI), installed and authenticated — this is the LLM
+  backend. Without it the app still runs and you can browse/read/annotate, but chat,
+  wiki drafting, suggested reading, and benchmark extraction are disabled.
 
 ---
 
-## Quick start
+## Install & run
+
+The supported install is an **editable install from a clone** (templates, compiled CSS,
+vendored front-end libs, and PDF.js all live in the source tree and are loaded from
+there — no build step, no Node, no CDN at runtime).
 
 ```bash
+git clone <your-repo-url> prinny && cd prinny
+
+# Option A — pipx (isolated):
+pipx install --editable .
+paper-agent                 # starts the app + opens your browser
+
+# Option B — a venv:
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/uvicorn app.main:app --reload   # http://127.0.0.1:8000
-.venv/bin/pytest -q                        # tests
+.venv/bin/paper-agent       # or: .venv/bin/uvicorn app.main:app
 ```
 
-On first run the app creates `~/.paper-agent/` (config, `app.sqlite`, `collections/`).
-Add your OpenAI key on the **Settings** page to enable any LLM feature; everything
-LLM-dependent degrades gracefully without one.
+`paper-agent` runs a quick preflight (checks the LLM CLI is on PATH and Zotero is
+reachable), then serves `http://127.0.0.1:8000` and opens it. Flags: `--port`,
+`--host`, `--no-open`, `--reload`.
+
+On first run the app creates `~/.paper-agent/` (`config.toml`, `app.sqlite`,
+`collections/`). Pick your engine (claude-code / codex) and model on the **Settings**
+page if the defaults aren't right.
 
 ### Required setup — Zotero local API
 
-In **Zotero Desktop**:
-
-1. Open **Settings / Preferences**
-2. Go to **Advanced → General**
-3. Enable **"Allow other applications on this computer to communicate with Zotero"**
-
-This starts the local HTTP server on port **23119**. Verify it's up:
+In **Zotero Desktop → Settings → Advanced → General**, enable **"Allow other
+applications on this computer to communicate with Zotero"** (starts the local HTTP
+server on port 23119). Verify:
 
 ```bash
-curl -s --noproxy '*' http://127.0.0.1:23119/api/users/0/collections | head -c 200
+curl -s http://127.0.0.1:23119/api/users/0/collections | head -c 200
 ```
 
-A JSON array means it's working (a `403 "Local API is not enabled"` means the
-setting is still off).
+A JSON array means it's working. The app prefers this HTTP API and falls back to reading
+`~/Zotero/zotero.sqlite` directly (read-only). The HTTP API is also required for triage
+write-back (moving/tagging items in Zotero).
 
-### Zotero connection notes
+---
 
-- The app prefers the **Local HTTP API** (port 23119) and falls back to reading
-  `~/Zotero/zotero.sqlite` directly (read-only, `immutable=1` — safe while Zotero runs).
-  Detection is automatic at startup; no config change is needed when you toggle the API.
-- The HTTP API is also required for **triage write-back** (moving/tagging items in Zotero).
-- Local Zotero calls bypass any `http_proxy`/`https_proxy`; OpenAI calls use them.
+## What it does
+
+1. **Point it at a Zotero collection.** It reads the papers + PDFs (read-only) and
+   serves them with an embedded PDF.js viewer.
+2. **You read.** Highlight PDFs, write per-paper notes, jot thoughts, and chat with an
+   agent grounded in *your* notes, the open paper, and the collection.
+3. **Draft the Field Model** (one agent pass): a one-paragraph **thesis** + a four-column
+   **research landscape** (problems / methods / debates / open questions) + a **concept**
+   space. Agent-written, agent-tagged, regenerable.
+4. **Build understanding over time** — the wiki is a single page of stage-gated sections:
+   - **Thesis** and **Landscape** (the Field Model).
+   - **Concepts** — a deterministic, no-LLM attention scorer ("Your Current Focus")
+     ranks them by your highlights/notes. You can add/edit/remove concepts; your edits
+     survive a regenerate.
+   - **Your Understanding (beliefs)** — single-sentence claims you hold. The agent drafts
+     candidates into a tray; **you accept** the ones that match your thinking.
+   - **Benchmarks** — a method × benchmark table, extracted per-paper by an agent that
+     reads each PDF's results tables. Each number cites its paper. *Agent-extracted —
+     verify before trusting.*
+   - **Connections & themes** — a structural (embedding-free) knowledge graph; card view
+     or graph view.
+   - **Papers** — the live evidence list with attention chips.
+5. **The chat can propose wiki edits** (propose-and-gate): the agentic side-chat may
+   propose typed edits (or you run `/updatewiki`); each lands as an inline **Accept /
+   Dismiss** card. Accepting is the only path that writes the wiki.
+6. **Suggested reading** — find external arXiv papers (related work or a custom search;
+   `🔬 Deep` runs a tool-using finder that learns from your accept/reject history). Each
+   candidate is validated against its abstract before it's shown; accept imports it.
+7. **Research topics** — cross-collection investigations (question → assumptions →
+   hypotheses → evidence → unknowns → experiments) seeded from your collections.
+8. **Triage / gaps / stale** — curate an inbox of candidate papers, find gap-fillers,
+   flag papers you've never engaged with (never auto-removed).
+
+A **notification bell** in the sidebar surfaces background jobs finishing, so you can keep
+working while a search or extraction runs.
+
+---
+
+## Chat commands
+
+Type these in the collection's side chat:
+
+- `/help` — list commands.
+- `/thought <text>` — save a note to your thought stream.
+- `/find [focus]` — find external papers (Suggested reading).
+- `/gaps` — find papers that fill the wiki's open questions.
+- `/belief <claim>` — propose a belief (you Accept/Dismiss).
+- `/updatewiki [instruction]` — ask the agent to propose wiki edits now.
+- `/<collection-slug> <question>` — ask about a *different* collection (read-only).
 
 ---
 
@@ -113,17 +124,34 @@ setting is still off).
 
 ```
 ~/.paper-agent/
-├── config.toml                 # key, model, Zotero paths
-├── app.sqlite                  # threads, messages, notes, triage, annotations, sync, FTS
+├── config.toml                 # engine, model, Zotero paths
+├── app.sqlite                  # threads/messages, notes, triage, annotations, topics, FTS
 └── collections/<slug>/
-    ├── purpose.md  schema.md    # mission + structure (optional, rarely change)
-    ├── thoughts/  thoughts-archive/
-    ├── notes/<zotero-key>.md    # mirror of structured notes (editable in Obsidian)
-    ├── wiki/{problems,methods,gaps,benchmarks,synthesis}/  index.md  log.md
-    └── proposed-edits/*.json    # pending LLM diffs awaiting review
+    ├── purpose.md               # optional collection mission
+    ├── thoughts/                # timestamped thought stream
+    ├── notes/<zotero-key>.md     # mirror of structured notes (editable in Obsidian)
+    └── wiki/sections/            # the cognitive-model wiki
+        ├── thesis.md  landscape.md (+ landscape.json)  concepts.json
+        ├── benchmarks.json
+        └── beliefs/  (+ _candidates/ tray)
 ```
 
-PDFs are **never copied** — streamed from Zotero's storage dir.
+PDFs are **never copied** — they're streamed from Zotero's storage directory.
+
+---
+
+## Tech notes
+
+- **Backend:** Python / FastAPI / Jinja2 + HTMX + Alpine.js. SQLite (stdlib). No ORM.
+- **Frontend:** server-rendered HTML; Tailwind **compiled** to `static/app.css`
+  (`make css`); HTMX/Alpine/cytoscape/KaTeX/Fuse and PDF.js are **vendored** under
+  `static/vendor/` and `static/pdfjs/` (no CDN at runtime).
+- **LLM:** the Claude Code / Codex CLI, driven as a subprocess via `engine.py` behind
+  `llm.py`. No API key, no hosted backend.
+- **No vector store / embeddings** — retrieval is SQLite FTS5; the knowledge graph is
+  purely structural.
+- **Tests:** `pytest` (`make test`). LLM calls are stubbed; the live agent-spawn paths
+  are exercised manually.
 
 ---
 
@@ -132,161 +160,27 @@ PDFs are **never copied** — streamed from Zotero's storage dir.
 | File | Responsibility |
 |---|---|
 | `config.py` | `~/.paper-agent/` layout, `config.toml` load/save |
-| `db.py` | `app.sqlite` schema + init, FTS triggers, `connect()` |
-| `zotero.py` | Zotero adapter (abstract `ZoteroBackend` + `LocalZotero` + `WebZotero` stub) — only Zotero access |
-| `slugs.py` | `slugify()` name→slug |
-| `repo.py` | app.sqlite helpers: collection mapping + chat threads/messages |
-| `llm.py` | thin OpenAI wrapper (`complete`/`stream`), token+latency logging |
-| `markdown.py` | markdown + `[[wikilink]]` resolution |
-| `pdf_text.py` | pypdf text extraction for chat grounding |
-| `frontmatter.py` | hand-rolled YAML-frontmatter parse/dump (no PyYAML) |
+| `db.py` | `app.sqlite` schema + migrations, FTS, `connect()` |
+| `zotero.py` | Zotero adapter (`LocalZotero` + `WebZotero` stub) — only Zotero access |
+| `library.py` / `repo.py` | local paper store + chat threads/messages |
+| `engine.py` / `llm.py` | CLI-agent subprocess seam + thin `complete`/`stream` interface |
+| `mcp_server.py` | read-only MCP tools the agents use (search, read PDF, arXiv, propose) |
 | `context.py` | chat context assembly |
-| `notes.py` | per-paper structured notes, DB↔markdown sync |
-| `thoughts.py` | timestamped thought stream + consolidation |
-| `wiki.py` | wiki generation pipeline, guardrail, review queue |
-| `suggest.py` | chat→wiki classifier |
-| `triage.py` | candidate-paper inbox triage |
-| `discover.py` | arXiv gap detection + stale-paper flagging |
-| `annotations.py` | app-authored PDF annotations + Zotero read-in |
+| `notes.py` / `thoughts.py` / `annotations.py` | per-paper notes, thought stream, PDF highlights |
+| `wiki.py` | the cognitive-model wiki (Field Model, concepts, beliefs, benchmarks, graph) |
+| `wiki_propose.py` | chat→wiki propose-and-gate engine |
+| `agentic_chat.py` / `paper_chat.py` | tool-using collection + paper chat agents |
+| `paper_finder.py` / `benchmark_agent.py` | deep-search finder + per-paper benchmark extractor |
+| `discover.py` | arXiv search (API + website fallback), gap/stale detection |
+| `topics.py` / `topic_view.py` | research topics (cross-collection investigations) |
+| `notify.py` | background-job notification feed (sidebar bell) |
+| `cli.py` | `paper-agent` console entrypoint + preflight |
 | `main.py` | all FastAPI routes |
-| `static/annotate.js` | persistent highlights on the prebuilt PDF.js viewer (overlay + selection toolbar + manager) |
-| `static/pdfjs/` | vendored PDF.js prebuilt viewer (self-hosted, same-origin) — runtime dependency |
 
 ---
 
-## Features → file → function
+## Single user, local only
 
-### Browsing, papers, PDF (Phases 0–1)
-| Feature | File:function |
-|---|---|
-| List collections (HTTP→SQLite fallback) | `zotero.py:LocalZotero.list_collections`, `http_available` |
-| Slug ↔ collection persistence | `repo.py:resolve_collection` → `sync_state` |
-| Paper list / metadata | `zotero.py:list_papers`, `get_paper`, `paper_full` |
-| PDF resolution + streaming | `zotero.py:pdf_path`, `main.py:pdf_stream` |
-| Settings | `config.py:save_config`, `main.py:settings_post` |
-
-### Chat — collection-scoped, paper-aware, read-only re: artifacts (Phase 2)
-| Feature | File:function |
-|---|---|
-| LLM call | `llm.py:complete` / `stream` |
-| One thread per collection | `repo.py:get_or_create_thread`, `add_message`, `get_messages` |
-| Context assembly | `context.py:build_messages`, `system_prompt`, `paper_block` |
-| Chat endpoint + render | `main.py:chat_post`, `markdown.py:render` |
-
-### Per-paper notes (Phase 3) — `notes.py`
-| Feature | Function |
-|---|---|
-| Save to DB + mirror `.md` | `save_note` |
-| Two-way sync (file mtime tiebreak) | `get_note` |
-| Draft from chat (never auto-saves) | `main.py:notes_draft` |
-
-### Thoughts stream (Phase 4) — `thoughts.py`
-`create_thought` · `update_thought` · `delete_thought` · `supersede_thought` (→archive) · `propose_consolidation` (LLM) · `accept_consolidation`.
-
-### Wiki generation — the careful part (Phase 5) — `wiki.py`
-| Step | Function |
-|---|---|
-| Gather inputs + valid provenance set | `gather_inputs` |
-| Two-step analyze → generate | `analyze`, `generate` |
-| **Guardrail: drop claims lacking a real note/thought (in code)** | `_filter_claims` |
-| Build page + frontmatter | `_build_page` |
-| Write proposals (never applied) | `run_generation` → `proposed-edits/*.json` |
-| Review queue | `main.py:proposed_get` |
-| **Accept = the only path that writes `wiki/`** | `accept_proposed` → `rebuild_index`, `_append_log` |
-
-### Wiki edits from chat (Phase 6)
-`suggest.py:classify` flags a turn → `wiki.py:proposal_from_chat` (guardrail: turn must cite a note/thought/paper from its `context_refs`).
-
-### Triage (Phase 7) — `triage.py`
-`scan_inbox` (cheap, no LLM) · `generate_pitch` (on-demand LLM) · `accept`/`reject`/`defer` (Zotero write-back stubbed via `ZoteroWriteError`) · `add_from_arxiv`. Inbox configured in `purpose.md` frontmatter (`inbox_collection` / `inbox_tag`).
-
-### Gap detection + stale papers (Phase 8) — `discover.py`
-`find_gaps` (LLM query → `_arxiv_search` → LLM picks gap-fillers) · `find_stale` (`_appearance_count`, 90-day cutoff, **never removes**).
-
-### PDF annotations (Phase 1.5) — `annotations.py` + `static/annotate.js`
-| Feature | Where |
-|---|---|
-| App CRUD (Zotero-origin is read-only) | `annotations.py:create/update/delete/list_all` |
-| Zotero read-in (one-way) | `zotero.py:read_annotations` |
-| Prebuilt PDF.js viewer (zoom/search/page-nav) + persistent highlight overlay + `[Highlight] [Ask] [Note]` selection toolbar | `static/annotate.js`, `templates/paper.html` |
-| Highlight manager: color filter + multi-select batch recolor/delete, plus per-row jump/note/recolor/delete | `static/annotate.js` (`wireManager`) |
-| Endpoints | `main.py:annotations_create/list/update/delete` |
-
-**Annotation authority = the app.** We author into our own store and read Zotero's
-annotations out one-way; we do **not** write back to Zotero in v1. Positions mirror
-Zotero's `{pageIndex, rects}` PDF-point shape and `# WRITEBACK-TODO` seams are marked
-so write-back can be added later without a data-model change.
-
----
-
-## Overall pipeline
-
-```
-ZOTERO (source of truth, read-only)
-  ├─ zotero.sqlite (immutable, proxy-bypassed)
-  └─ itemAnnotations / Local HTTP API
-                    │
-                    ▼
-            zotero.py adapter ──────────────────────────────────────────┐
-                    │                                                     │
-   ┌────────────────┼─────────────────────────────┐                      │
-   ▼                ▼                               ▼                      ▼
- BROWSE          CAPTURE (low friction)         ORGANIZE              DISCOVER
- papers/PDF      • notes      (notes.py)         thoughts (thoughts.py)  • gaps (discover.py→arXiv)
- (main.py,       • highlights (annotations.py)   wiki    (wiki.py)        • stale (discover.py)
-  paper.html)    • chat       (context+llm)                              • triage (triage.py)
-                    │                               │
-                    └──────────────┬────────────────┘
-                                   ▼
-                       WIKI GENERATION  (wiki.py, two-step)
-                       analyze ─► generate ─► _filter_claims (guardrail)
-                                   │
-                                   ▼
-                       proposed-edits/*.json   (nothing applied yet)
-                                   │
-                          user reviews diff + provenance  (main.py:proposed_get)
-                                   │  accept / edit / reject
-                                   ▼
-                       accept_proposed()  ── the ONLY writer into wiki/
-                                   │
-                                   ▼
-                       wiki/<section>/*.md + index.md + log.md
-```
-
-**Invariant enforced everywhere:** the only code path that writes a wiki page is a
-user accepting a proposed edit. Every wiki claim must cite a real note, thought,
-highlight, or paper — unsupported claims are filtered out in code before you ever
-see the diff.
-
----
-
-## External capture (Phase 4.5 — planned, not yet built)
-
-For "shower thoughts" away from the desk, the app will **harvest** a watched
-location rather than be the capture tool. Suggested zero-build setups:
-
-1. **Apple Notes / Obsidian synced folder** — a single `inbox.md` you append lines to from your phone.
-2. **Dropbox/iCloud folder** — drop a `.txt` per thought; the watcher ingests new files.
-3. **Telegram/email → file bridge** (e.g. a Shortcut or IFTTT) writing to that folder.
-
-Each captured line becomes an unassigned thought; an `/inbox` triage step proposes a
-collection/paper for you to confirm.
-
----
-
-## Testing & status
-
-- `pytest` — 50 tests: Zotero adapter, notes sync, frontmatter, chat context, the
-  wiki diff-proposal **guardrail** (mocked LLM), annotations (app CRUD + Zotero read-in),
-  local-first store (clean-reset, non-destructive refresh), custom tags, and BibTeX export.
-- Built & checkpointed: Phases 0–8 + addendum Phase 1.5. See **PROGRESS.md** for
-  per-phase detail and documented deviations.
-
-### Known limitations
-- Zotero **write-back** (triage accept/reject moving/tagging items) is stubbed —
-  requires enabling the Local API and implementing the write protocol.
-- Highlight→chat gesture and silent chat auto-attach (**Phase 2.5**) and external
-  inbox ingestion (**Phase 4.5**) are not yet built.
-- Triage scan, gap-finding, and stale detection are **on-demand** (no background
-  scheduler) — by design, to avoid auto-triggering expensive operations.
-```
+No accounts, no auth, no multi-user, no telemetry. It complements Zotero — it does not
+replace it, and it does not read papers *for* you. By design, the LLM won't author wiki
+content you didn't seed.

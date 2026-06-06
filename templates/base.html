@@ -16,11 +16,14 @@
       } catch (e) {}
     })();
   </script>
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <!-- Front-end libs are VENDORED under static/vendor/ (no CDN at runtime — the app
+       works fully offline, consistent with its local-first design). Update them with
+       scripts/vendor_assets.sh. -->
+  <script src="/static/vendor/htmx.min.js"></script>
+  <script src="/static/vendor/fuse.min.js"></script>
   <!-- Cytoscape: force-directed knowledge-graph view in the wiki's Connections section -->
-  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/static/vendor/cytoscape.min.js"></script>
+  <script defer src="/static/vendor/alpine.min.js"></script>
   <!-- Tailwind: COMPILED to static/app.css (Tailwind v3 standalone CLI, see
        `make css` / scripts/build_css.sh). Replaces the Play CDN, whose runtime
        JIT only generated classes present at initial page load — classes unique
@@ -29,10 +32,10 @@
        sheet contains every class scanned from templates, so this can't recur. -->
   <link rel="stylesheet" href="/static/app.css">
 
-  <!-- KaTeX: render LaTeX in chat + note previews -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <!-- KaTeX: render LaTeX in chat + note previews (vendored, with woff2 fonts) -->
+  <link rel="stylesheet" href="/static/vendor/katex/katex.min.css">
+  <script defer src="/static/vendor/katex/katex.min.js"></script>
+  <script defer src="/static/vendor/katex/contrib/auto-render.min.js"></script>
   <style>[x-cloak]{display:none !important}</style>
   <style>
     /* === Dark theme: remap the app's slate palette under html.dark ========= */
