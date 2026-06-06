@@ -8,8 +8,10 @@
 > review and accept**. You do the reading; the tool helps you organize what you wrote and
 > surfaces gaps.
 
-**TODO
-[] link experiment to coding agent
+**TODO**  
+
+ - [ ] link experiment to coding agent
+
 ---
 
 ## Requirements
