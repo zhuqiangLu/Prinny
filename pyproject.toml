@@ -1,5 +1,5 @@
 [project]
-name = "paper-agent"
+name = "prinny"
 version = "0.1.0"
 description = "Prinny — personal research-wiki agent over Zotero collections; the wiki reflects the user's thinking, papers are evidence."
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-paper-agent = "app.cli:main"
+prinny = "app.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest"]

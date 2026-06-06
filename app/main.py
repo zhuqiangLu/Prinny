@@ -102,7 +102,7 @@ def _pa_nav() -> dict:
 
 templates.env.globals["pa_nav"] = _pa_nav
 
-app = FastAPI(title="Paper Collection Wiki Agent")
+app = FastAPI(title="Prinny")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 

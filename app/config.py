@@ -1,6 +1,7 @@
 """Application config + storage layout.
 
-Config lives at ``~/.paper-agent/config.toml``. We read it with the stdlib
+Config lives at ``~/.prinny/config.toml`` (or the legacy ``~/.paper-agent`` if a
+previous install created it — see APP_DIR below). We read it with the stdlib
 ``tomllib`` (3.11+) and write it with a tiny hand-rolled serializer so we don't
 need a TOML-writing dependency for the handful of flat keys we store.
 """
@@ -11,10 +12,22 @@ import os
 import tomllib
 from pathlib import Path
 
+
 # ---------------------------------------------------------------------------
 # Storage layout (see CLAUDE.md "Storage layout")
 # ---------------------------------------------------------------------------
-APP_DIR = Path(os.environ.get("PAPER_AGENT_HOME", Path.home() / ".paper-agent"))
+def _resolve_home() -> Path:
+    """The data home. Env override wins (PRINNY_HOME, then legacy PAPER_AGENT_HOME).
+    Otherwise default to ~/.prinny, but keep using an existing ~/.paper-agent from a
+    pre-rename install so we never orphan a user's data (no migration, no data move)."""
+    env = os.environ.get("PRINNY_HOME") or os.environ.get("PAPER_AGENT_HOME")
+    if env:
+        return Path(env)
+    new, legacy = Path.home() / ".prinny", Path.home() / ".paper-agent"
+    return legacy if (legacy.exists() and not new.exists()) else new
+
+
+APP_DIR = _resolve_home()
 CONFIG_PATH = APP_DIR / "config.toml"
 DB_PATH = APP_DIR / "app.sqlite"
 COLLECTIONS_DIR = APP_DIR / "collections"
@@ -102,7 +115,7 @@ def save_config(values: dict[str, str]) -> dict[str, str]:
     ensure_dirs()
     cfg = load_config()
     cfg.update({k: str(v) for k, v in values.items()})
-    lines = ["# paper-agent config — edit via the Settings page or by hand.\n"]
+    lines = ["# prinny config — edit via the Settings page or by hand.\n"]
     for key, val in cfg.items():
         lines.append(f'{key} = "{_toml_escape(val)}"\n')
     CONFIG_PATH.write_text("".join(lines), encoding="utf-8")

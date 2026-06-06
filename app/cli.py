@@ -1,4 +1,4 @@
-"""Console entrypoint: ``paper-agent`` launches the local web app.
+"""Console entrypoint: ``prinny`` launches the local web app.
 
 Runs a preflight (Claude/Codex CLI on PATH, Zotero reachable), then starts uvicorn
 and — unless ``--no-open`` — opens the browser. Single local user; no auth.
@@ -38,8 +38,8 @@ def _preflight() -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(prog="paper-agent",
-                                description="Personal research-wiki agent over Zotero collections.")
+    p = argparse.ArgumentParser(prog="prinny",
+                                description="Prinny — personal research-wiki agent over Zotero collections.")
     p.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
     p.add_argument("--port", type=int, default=8000, help="bind port (default 8000)")
     p.add_argument("--no-open", action="store_true", help="don't open the browser")

@@ -8,7 +8,7 @@ thinking** (notes, highlights, beliefs, conversations), with papers as evidence.
 > review and accept**. You do the reading; the tool helps you organize what you wrote and
 > surfaces gaps.
 
-Everything is **local**: data lives in `~/.paper-agent/` as plain Markdown + SQLite. The
+Everything is **local**: data lives in `~/.prinny/` as plain Markdown + SQLite. The
 LLM runs through your **local Claude Code (or Codex) CLI** — there is no API key and no
 hosted backend. The only outbound network calls are to your local Zotero and (on request)
 arXiv.
@@ -36,21 +36,23 @@ git clone <your-repo-url> prinny && cd prinny
 
 # Option A — pipx (isolated):
 pipx install --editable .
-paper-agent                 # starts the app + opens your browser
+prinny                 # starts the app + opens your browser
 
 # Option B — a venv:
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/paper-agent       # or: .venv/bin/uvicorn app.main:app
+.venv/bin/prinny       # or: .venv/bin/uvicorn app.main:app
 ```
 
-`paper-agent` runs a quick preflight (checks the LLM CLI is on PATH and Zotero is
+`prinny` runs a quick preflight (checks the LLM CLI is on PATH and Zotero is
 reachable), then serves `http://127.0.0.1:8000` and opens it. Flags: `--port`,
 `--host`, `--no-open`, `--reload`.
 
-On first run the app creates `~/.paper-agent/` (`config.toml`, `app.sqlite`,
+On first run the app creates `~/.prinny/` (`config.toml`, `app.sqlite`,
 `collections/`). Pick your engine (claude-code / codex) and model on the **Settings**
-page if the defaults aren't right.
+page if the defaults aren't right. (Upgrading from a pre-rename install? An existing
+`~/.paper-agent/` keeps being used automatically — your data isn't moved. Override
+either with the `PRINNY_HOME` env var.)
 
 ### Required setup — Zotero local API
 
@@ -123,7 +125,7 @@ Type these in the collection's side chat:
 ## Storage layout
 
 ```
-~/.paper-agent/
+~/.prinny/
 ├── config.toml                 # engine, model, Zotero paths
 ├── app.sqlite                  # threads/messages, notes, triage, annotations, topics, FTS
 └── collections/<slug>/
@@ -159,7 +161,7 @@ PDFs are **never copied** — they're streamed from Zotero's storage directory.
 
 | File | Responsibility |
 |---|---|
-| `config.py` | `~/.paper-agent/` layout, `config.toml` load/save |
+| `config.py` | `~/.prinny/` layout, `config.toml` load/save |
 | `db.py` | `app.sqlite` schema + migrations, FTS, `connect()` |
 | `zotero.py` | Zotero adapter (`LocalZotero` + `WebZotero` stub) — only Zotero access |
 | `library.py` / `repo.py` | local paper store + chat threads/messages |
@@ -174,7 +176,7 @@ PDFs are **never copied** — they're streamed from Zotero's storage directory.
 | `discover.py` | arXiv search (API + website fallback), gap/stale detection |
 | `topics.py` / `topic_view.py` | research topics (cross-collection investigations) |
 | `notify.py` | background-job notification feed (sidebar bell) |
-| `cli.py` | `paper-agent` console entrypoint + preflight |
+| `cli.py` | `prinny` console entrypoint + preflight |
 | `main.py` | all FastAPI routes |
 
 ---
