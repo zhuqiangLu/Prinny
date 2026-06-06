@@ -9,7 +9,7 @@
   </div>
 </div>
 {% endif %}
-{% with m = {"role": "user", "html": user_html} %}{% include "_chat_bubble.html" %}{% endwith %}
+{% if user_html and user_html|trim %}{% with m = {"role": "user", "html": user_html} %}{% include "_chat_bubble.html" %}{% endwith %}{% endif %}
 {% if error %}
 <div class="flex justify-start">
   <div class="max-w-[85%] rounded-lg px-3 py-2 bg-rose-50 text-rose-700 text-sm border border-rose-200">

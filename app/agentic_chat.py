@@ -59,6 +59,38 @@ _UPDATE_SYSTEM = (
 )
 
 
+def _materialize_images_under(images, home):
+    """Decode base64 data-URL images to files UNDER ``home`` (the agent's cwd) so
+    Claude's Read tool — bounded to the working dir — can open them. Returns
+    (abs_paths, cleanup). Mirrors paper_chat's decoder but cwd-scoped."""
+    import base64
+    import re as _re
+    import shutil
+    import uuid
+    from pathlib import Path
+
+    data_url = _re.compile(r"^data:(image/[\w.+-]+);base64,(.*)$", _re.DOTALL)
+    ext = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg",
+           "image/gif": "gif", "image/webp": "webp"}
+    paths, adir = [], Path(home) / ".pa-attachments"
+    for url in (images or [])[:4]:
+        m = data_url.match(url or "")
+        if not m:
+            continue
+        try:
+            raw = base64.b64decode(m.group(2))
+        except Exception:  # noqa: BLE001 - skip a bad attachment, don't fail the turn
+            continue
+        adir.mkdir(parents=True, exist_ok=True)
+        p = adir / f"{uuid.uuid4().hex}.{ext.get(m.group(1), 'png')}"
+        p.write_bytes(raw)
+        paths.append(str(p))
+
+    def cleanup():
+        shutil.rmtree(adir, ignore_errors=True)
+    return paths, cleanup
+
+
 def parse_prefix(text: str) -> tuple[str | None, str]:
     """If ``text`` begins with ``/<token>`` (token not a reserved literal), return
     (token, remainder); else (None, text). Slug validity is checked by the caller."""
@@ -73,34 +105,48 @@ def parse_prefix(text: str) -> tuple[str | None, str]:
     return token, remainder
 
 
-def answer(slug: str, history: list[dict], user_text: str) -> str:
-    """Answer a /{collection} turn via the agent with read-only MCP tools. Raises
-    ``llm.LLMError`` if the engine is unavailable."""
+def answer(slug: str, history: list[dict], user_text: str, images: list[str] | None = None) -> str:
+    """Answer a /{collection} turn via the agent with read-only MCP tools. Pasted
+    ``images`` are materialized to temp files the agent reads (Claude: Read tool,
+    granted only when images are present; Codex: -i). Raises ``llm.LLMError`` if the
+    engine is unavailable."""
     eng = engine_mod.build_engine(load_config())
     ok, detail = eng.available()
     if not ok:
         raise llm.LLMError(f"{eng.name} is unavailable: {detail}")
     messages = [{"role": m["role"], "content": m["content"]} for m in history
                 if m.get("role") in ("user", "assistant")]
-    messages.append({"role": "user", "content": user_text})
     # Per-collection proactive toggle: when off, the agent keeps its read tools but
     # loses the proposer (the explicit /updatewiki path always keeps it).
-    tools = CHAT_TOOLS
+    tools = list(CHAT_TOOLS)
     try:
         from . import library
         col = library.get_collection(slug) or {}
         if not col.get("wiki_proactive", 1):
-            tools = [t for t in CHAT_TOOLS if not t.endswith("propose_wiki_edit")]
+            tools = [t for t in tools if not t.endswith("propose_wiki_edit")]
     except Exception:  # noqa: BLE001
         pass
+
+    # Images: materialize UNDER the agent's cwd (Claude's Read is bounded to the
+    # working dir — a system temp dir is blocked), grant Read ONLY for this turn,
+    # and clean up after. A plain text turn keeps the minimal MCP-only toolset.
+    from . import paper_chat
+    home = agent_skills.ensure_skills_home("chat")
+    paths, cleanup = _materialize_images_under(images, home)
+    if paths:
+        user_text = paper_chat._with_image_note(user_text, paths)
+        if "Read" not in tools:
+            tools = ["Read"] + tools
+    messages.append({"role": "user", "content": user_text})
     try:
         res = eng.run_once(
             messages, system=_SYSTEM, allowed_tools=agents.effective_tools("chat", tools),
-            mcp_config=mcp_server.stdio_mcp_config(slug),
-            cwd=str(agent_skills.ensure_skills_home("chat")),
+            mcp_config=mcp_server.stdio_mcp_config(slug), cwd=str(home),
         )
     except engine_mod.EngineError as exc:
         raise llm.LLMError(str(exc)) from exc
+    finally:
+        cleanup()
     return res.text
 
 

@@ -1344,10 +1344,11 @@ def chat_post(
         return _paper_subagent_turn(request, slug, col["name"], thread_id, pid, message, agent, images)
 
     # The collection side-chat is AGENTIC by default: a tool-using agent that reads
-    # the live wiki/notes and may propose wiki edits (gated by the per-collection
-    # toggle). Paper turns (pid set) and image turns stay on the plain completion path.
-    if pid is None and not images:
-        return _agentic_chat_turn(request, slug, thread_id, slug, message, message, mode="answer")
+    # the live wiki/notes, may propose wiki edits (gated by the per-collection toggle),
+    # and can view pasted images (materialized to temp files + the Read tool).
+    if pid is None:
+        return _agentic_chat_turn(request, slug, thread_id, slug, message, message,
+                                  mode="answer", images=images)
 
     # /collection (or /wiki) pulls the collection wiki into a per-paper turn.
     include_collection = False
@@ -1651,10 +1652,13 @@ def _chat_command_turn(request, slug, prefix, remainder, original):
     return _chat_static_turn(request, slug, original, "Unknown command. Try `/help`.")
 
 
-def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mode="answer"):
+def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mode="answer",
+                       images=None):
     """A /{collection} turn (or /updatewiki when mode='update'): answer via the agent
-    with read-only MCP tools + the gated wiki proposer. Any wiki proposals the agent
-    creates this turn are surfaced as inline Accept/Dismiss cards."""
+    with read-only MCP tools + the gated wiki proposer. Pasted ``images`` are shown to
+    the agent (temp files + Read tool). Any wiki proposals the agent creates this turn
+    are surfaced as inline Accept/Dismiss cards."""
+    images = images or []
     slugs = {c["slug"] for c in library.list_collections()}
     if mode != "update" and prefix not in slugs:
         avail = ", ".join(sorted(slugs)) or "(none yet)"
@@ -1672,8 +1676,9 @@ def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mo
         if mode == "update":
             assistant_text = agentic_chat.update_wiki(prefix, history, remainder)
         else:
-            assistant_text = agentic_chat.answer(prefix, history, remainder or "(no question)")
-        add_message(thread_id, "user", original, [{"type": "collection", "id": prefix}])
+            assistant_text = agentic_chat.answer(prefix, history, remainder or "(no question)",
+                                                 images=images)
+        add_message(thread_id, "user", original, [{"type": "collection", "id": prefix}], images=images)
         add_message(thread_id, "assistant", assistant_text, [])
     except llm.LLMError as exc:
         error = str(exc)
@@ -1683,7 +1688,7 @@ def _agentic_chat_turn(request, slug, thread_id, prefix, remainder, original, mo
     proposals = [p for p in wiki_propose.list_pending(prefix) if p["id"] not in before]
     return templates.TemplateResponse(
         request, "_chat_turn.html",
-        {"slug": slug, "user_html": render_md(original, slug), "user_images": [],
+        {"slug": slug, "user_html": render_md(original, slug), "user_images": images,
          "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
          "assistant_text": assistant_text, "error": error, "suggestion": None,
          "proposals": proposals,
