@@ -28,13 +28,8 @@
     <textarea name="key_quotes" rows="4" class="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm">{{ note.key_quotes }}</textarea>
   </div>
   <div class="flex items-center gap-3">
-    <label class="text-sm font-medium">Status</label>
-    <select name="status" class="rounded border border-slate-300 px-2 py-1">
-      {% for s in statuses %}
-      <option value="{{ s }}" {% if note.status == s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-    <label class="text-sm font-medium ml-2" title="How this note can ground the wiki. auto = reasoning if you wrote in Thoughts, else seed.">Kind</label>
+    <input type="hidden" name="status" value="{{ note.status or 'unread' }}">
+    <label class="text-sm font-medium" title="How this note can ground the wiki. auto = reasoning if you wrote in Thoughts, else seed.">Kind</label>
     <select name="synth_kind" class="rounded border border-slate-300 px-2 py-1">
       {% for k in ("auto", "seed", "reasoning") %}
       <option value="{{ k }}" {% if note.synth_kind == k %}selected{% endif %}>{{ k }}</option>

@@ -97,10 +97,6 @@
             <button @click="preview()"
                     :class="showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
                     class="rounded px-2 py-0.5">Preview</button>
-            <label class="ml-auto text-xs text-slate-500">Status</label>
-            <select x-model="status" class="rounded border border-slate-300 px-2 py-0.5 text-xs">
-              {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
-            </select>
           </div>
           <textarea x-show="!showPreview" x-model="noteMd"
                     placeholder="Write your note in Markdown… (supports $LaTeX$ math)"
