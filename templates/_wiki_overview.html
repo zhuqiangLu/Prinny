@@ -507,12 +507,22 @@
 {# ===================================================================
    PANE: UNDERSTANDING — accepted beliefs + candidate tray (Stage 3)
    =================================================================== #}
-<div x-show="tab==='understanding'" x-cloak class="space-y-3">
+<div x-show="tab==='understanding'" x-cloak class="relative space-y-3"
+     x-data="{ drafting: false }" @htmx:after-request="drafting = false">
+  {# overlay while the agent drafts belief candidates (slow LLM call) #}
+  <div x-show="drafting" x-cloak class="absolute inset-0 z-30 grid place-items-center rounded bg-white/80 backdrop-blur-[1px]" style="min-height:200px">
+    <div class="flex flex-col items-center gap-2 text-slate-600">
+      <svg class="w-7 h-7 animate-spin text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path></svg>
+      <div class="text-sm font-medium">Drafting beliefs…</div>
+      <div class="text-[11px] text-slate-400">reading your highlights &amp; notes — a minute or so</div>
+    </div>
+  </div>
   <div class="flex items-baseline gap-2">
     <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◆</span> Your Current Understanding</h2>
     {% if overview.can_suggest_beliefs %}
     <form hx-post="/c/{{ slug }}/wiki/beliefs/suggest" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
-      <button class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
+      <button @click="drafting = true"
+              class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
               title="One LLM call: drafts 1-5 candidate beliefs from your reading. Each lands in the tray below for you to accept or dismiss.">
         ✦ Suggest beliefs <span class="htmx-indicator text-violet-400">…</span>
       </button>
