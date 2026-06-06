@@ -166,6 +166,7 @@ def index(request: Request) -> HTMLResponse:
             "source": source,
             "error": error,
             "stats": library.workspace_stats(),
+            "topics": topics_mod.list_topics(),
         },
     )
 
