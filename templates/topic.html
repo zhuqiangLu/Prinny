@@ -14,7 +14,7 @@
   .tc-dots i:nth-child(2){animation-delay:.15s}.tc-dots i:nth-child(3){animation-delay:.3s}
   @keyframes tcb{0%,80%,100%{opacity:.3}40%{opacity:1}}
 </style>
-<div class="flex h-full" x-data="topicShell()" @pa-topic-ask.window="setAsst(true)">
+<div class="flex h-full" x-data="topicShell()" @pa-ask.window="setAsst(true)">
   {# ---- left: the topic content (header + tabs + panes) ---- #}
   <div class="relative flex-1 min-w-0 overflow-y-auto">
 
@@ -122,7 +122,7 @@
               <div class="flex items-center gap-2">
                 <span class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">Research Question</span>
                 <div class="ml-auto flex items-center gap-2">
-                  <button type="button" @click="$dispatch('pa-topic-ask', 'About this research question — ')" class="text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+                  <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'research question', icon:'💬'})" class="text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
                   {% if basics_undo %}
                   <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="Revert the last agent edit">↩ Undo</button></form>
                   {% endif %}
@@ -147,7 +147,7 @@
           <div class="flex items-center gap-2 mb-3">
             <span class="text-violet-600">📊</span>
             <h2 class="text-sm font-semibold text-slate-900">Evidence Summary</h2>
-            <button type="button" @click="$dispatch('pa-topic-ask', 'About the evidence for this topic — ')" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence summary', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
             <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">Details →</button>
           </div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -179,7 +179,7 @@
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col" x-data="{ add: false }">
           <div class="flex items-center gap-2 mb-2">
             <h2 class="text-sm font-semibold text-slate-900">Assumptions</h2>
-            <button type="button" @click="$dispatch('pa-topic-ask', 'About the assumptions behind this topic — ')" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'assumptions', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
             <button @click="viewAll='assumptions'" class="text-xs text-violet-600 hover:underline">View all</button>
           </div>
           <div class="space-y-1.5">
@@ -201,7 +201,7 @@
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
             <h2 class="text-sm font-semibold text-slate-900">Hypotheses</h2>
-            <button type="button" @click="$dispatch('pa-topic-ask', 'About the hypotheses in this topic — ')" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'hypotheses', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
             <button @click="go('hypotheses')" class="text-xs text-violet-600 hover:underline">View all</button>
           </div>
           <div class="space-y-1.5">
@@ -221,7 +221,7 @@
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
             <h2 class="text-sm font-semibold text-slate-900">Evidence</h2>
-            <button type="button" @click="$dispatch('pa-topic-ask', 'About the evidence papers for this topic — ')" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
             <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">View all</button>
           </div>
           <div class="space-y-2">
@@ -688,44 +688,19 @@
     <button type="button" @mousedown.stop @click="setAsst(false)"
             class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer" title="Hide assistant">›</button>
   </div>
-  {# ---- right: Prinny Assistant (topic-grounded, read-only, streaming) ---- #}
+  {# ---- right: Prinny Assistant — same component as the collection chat ---- #}
   <div x-show="asstOpen" x-cloak :style="`width:${asstW}px`" class="shrink-0 h-full">
-  <aside class="h-full border-l border-slate-200 bg-white flex flex-col" x-data="topicChat('{{ t.slug }}')"
-         @pa-topic-ask.window="$nextTick(() => { if ($refs.ta) { $refs.ta.value = $event.detail; $refs.ta.focus(); } })">
-    <div class="shrink-0 px-3 h-14 border-b border-slate-100 flex flex-col justify-center gap-1">
-      <div class="flex items-center gap-2">
-        <span class="text-violet-500">✦</span>
-        <span class="font-semibold text-slate-900 text-sm">Prinny Assistant</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <div x-data="modelPicker('{{ model }}')" x-init="load()" class="min-w-0 flex-1">
-          <select x-model="current" @change="setModel()" title="Model (applies to all chats)"
-                  class="w-full rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] text-slate-600">
-            <template x-for="m in models" :key="m"><option :value="m" x-text="m"></option></template>
-          </select>
-        </div>
-        <div x-data="ctxGauge('{{ model }}')" x-init="init()" class="flex items-center gap-1 shrink-0 text-[10px] text-slate-400" title="Rough context fullness (transcript chars ÷ 4)">
-          <span class="block w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden"><span class="block h-full" :class="pct<75?'bg-emerald-400':pct<90?'bg-amber-400':'bg-rose-500'" :style="`width:${pct}%`"></span></span>
-          <span class="tabular-nums" x-text="`~${pct}%`"></span>
-        </div>
-      </div>
+  <aside class="h-full border-l border-slate-200 bg-white flex flex-col min-h-0">
+    <div class="shrink-0 px-3 py-2.5 border-b border-slate-200 flex items-center gap-2 text-sm">
+      <span class="text-violet-500">✦</span>
+      <span class="font-semibold text-slate-900">Prinny Assistant</span>
     </div>
-    <div id="tc-log" x-ref="log" class="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-      {% for m in chat %}{% include "_chat_bubble.html" %}{% endfor %}
-      {% if not chat %}
-      <p class="text-sm text-slate-400">Ask about this topic — your question, hypotheses, the relevant ideas, or where the gaps are. Grounded in your linked collections.</p>
-      {% endif %}
+    <div class="flex-1 min-h-0">
+      {% set slug = t.slug %}{% set paper_key = "" %}{% set messages = chat %}
+      {% set chat_base = "/t/" ~ t.slug %}{% set artifact_html = topic_artifact_html %}
+      {% set chat_streaming = false %}
+      {% include "_chat.html" %}
     </div>
-    <form @submit.prevent="send()" class="shrink-0 border-t border-slate-200 p-3">
-      <div class="flex gap-2 items-end">
-        <textarea x-ref="ta" rows="2" placeholder="Ask anything about this topic…"
-                  @keydown.enter.prevent="if(!$event.shiftKey) send()"
-                  class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
-        <button type="submit" aria-label="Send" class="shrink-0 grid place-items-center w-10 h-10 rounded bg-slate-900 text-white hover:bg-slate-700">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path></svg>
-        </button>
-      </div>
-    </form>
   </aside>
   </div>{# /assistant width wrapper #}
 </div>

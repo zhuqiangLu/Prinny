@@ -105,6 +105,46 @@ def parse_prefix(text: str) -> tuple[str | None, str]:
     return token, remainder
 
 
+def answer_topic(messages: list[dict], mcp_slug: str | None,
+                 images: list[str] | None = None) -> str:
+    """Answer a research-topic turn agentically. ``messages`` is the topic-grounded
+    transcript from topic_view.chat_messages ([system, …history, user]). Read-only
+    tools are scoped to the topic's primary collection (``mcp_slug``) when present —
+    no wiki proposer (a topic has no section wiki). Pasted images are materialized +
+    read like the collection chat. Raises ``llm.LLMError`` if the engine is down."""
+    from . import paper_chat
+    eng = engine_mod.build_engine(load_config())
+    ok, detail = eng.available()
+    if not ok:
+        raise llm.LLMError(f"{eng.name} is unavailable: {detail}")
+    system, msgs = "", []
+    for m in messages:
+        if m.get("role") == "system" and not system:
+            system = m.get("content", "")
+        elif m.get("role") in ("user", "assistant"):
+            msgs.append({"role": m["role"], "content": m.get("content", "")})
+    # Read-only tools over the primary collection; drop the wiki proposer (topic ≠ wiki).
+    # With no linked collection, the MCP tools can't resolve — answer tool-lessly.
+    tools = ([t for t in CHAT_TOOLS if not t.endswith("propose_wiki_edit")] if mcp_slug else [])
+    home = agent_skills.ensure_skills_home("chat")
+    paths, cleanup = _materialize_images_under(images, home)
+    if paths and msgs:
+        msgs[-1]["content"] = paper_chat._with_image_note(msgs[-1]["content"], paths)
+        if "Read" not in tools:
+            tools = ["Read"] + tools
+    try:
+        res = eng.run_once(
+            msgs, system=system,
+            allowed_tools=(agents.effective_tools("chat", tools) if tools else None),
+            mcp_config=mcp_server.stdio_mcp_config(mcp_slug) if mcp_slug else None,
+            cwd=str(home))
+    except engine_mod.EngineError as exc:
+        raise llm.LLMError(str(exc)) from exc
+    finally:
+        cleanup()
+    return res.text
+
+
 def answer(slug: str, history: list[dict], user_text: str, images: list[str] | None = None) -> str:
     """Answer a /{collection} turn via the agent with read-only MCP tools. Pasted
     ``images`` are materialized to temp files the agent reads (Claude: Read tool,

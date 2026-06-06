@@ -1,4 +1,7 @@
-{# Reusable chat panel. Expects: slug, paper_key (may be ""), messages (list of {role, html}). #}
+{# Reusable chat panel. Expects: slug, paper_key (may be ""), messages (list of {role, html}).
+   chat_base: POST base for this chat's turn/compact/delete endpoints — '/c/<slug>' for a
+   collection (default), '/t/<slug>' for a research topic. #}
+{% set cbase = chat_base|default('/c/' ~ slug) %}
 <style>
   .pa-typing{display:inline-flex;gap:4px;padding:2px 0}
   .pa-typing i{width:6px;height:6px;border-radius:9999px;background:#94a3b8;display:inline-block;
@@ -54,12 +57,12 @@
     {% else %}
     <!-- collection chat: compact into an artifact, or remove the chat -->
     <div class="ml-auto flex items-center gap-2 text-xs shrink-0">
-      <form method="post" action="/c/{{ slug }}/chat/compact"
+      <form method="post" action="{{ cbase }}/chat/compact"
             onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Compact this chat into a summary artifact?\n\n• The back-and-forth history is replaced by a concise summary.\n• The summary carries forward as context for future messages.\n• The original history cannot be recovered.').then(function(o){ if(o) f.submit(); }); return false;">
         <button class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50"
                 title="Summarize the chat into an artifact and clear the history">⊟ Compact</button>
       </form>
-      <form method="post" action="/c/{{ slug }}/chat/delete"
+      <form method="post" action="{{ cbase }}/chat/delete"
             onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Remove the current chat? This deletes the history and any compacted artifact.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
         <button class="rounded border border-rose-200 bg-white px-2 py-0.5 text-rose-600 hover:bg-rose-50"
                 title="Delete the current chat">Remove</button>
@@ -91,7 +94,7 @@
     {% endif %}
   </div>
 
-  <form x-data="chatComposer({{ 'true' if chat_streaming else 'false' }}, '{{ slug }}', '{{ paper_key }}')"
+  <form x-data="chatComposer({{ 'true' if chat_streaming else 'false' }}, '{{ slug }}', '{{ paper_key }}', '{{ cbase }}')"
         class="border-t border-slate-200 p-3"
         @pa-ask.window="onAsk($event.detail)"
         {% if chat_streaming %}@submit.prevent="stream()"{% else %}@submit.prevent="send()"{% endif %}>
@@ -141,13 +144,14 @@
     </div>
   </form>
   <script>
-    function chatComposer(streaming, slug, paperKey) {
+    function chatComposer(streaming, slug, paperKey, base) {
       return {
         images: [],
-        ref: null,                 // {kind,label,key,icon} from "Ask in chat" on a wiki card
+        ref: null,                 // {kind,label,key,icon} from "Ask in chat" on a card
         streaming: !!streaming,
         slug: slug,
         paperKey: paperKey,
+        base: base || ("/c/" + slug),   // POST base: /c/<slug> (collection) or /t/<slug> (topic)
         onAsk(detail) {            // a card dispatched 'pa-ask' → attach a reference chip
           if (!detail) return;
           this.ref = { kind: detail.kind, label: detail.label, key: detail.key || "",
@@ -194,7 +198,7 @@
           // Collection side-chat is agentic (tool-using → blocking). Slash-commands
           // also block. A paper-without-sub-agent turn still streams.
           if (msg.startsWith("/") || !this.paperKey || this.ref) return this.sendBlocking();
-          return this.streamTo(`/c/${this.slug}/chat/stream`);
+          return this.streamTo(`${this.base}/chat/stream`);
         },
         // Per-paper sub-agent turn.
         stream() { return this.streamTo(`/c/${this.slug}/p/${this.paperKey}/chat/stream`); },
@@ -242,7 +246,7 @@
           log.appendChild(a); optimistic.push(a);
           ta.value = ""; this.clear(); this.ref = null; log.scrollTop = log.scrollHeight;
           try {
-            const resp = await fetch(`/c/${this.slug}/chat`, {
+            const resp = await fetch(`${this.base}/chat`, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
                                           images_json: JSON.stringify(imgs),

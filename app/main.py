@@ -258,8 +258,9 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
             reading_error = rjob.get("error")
         topic_view.clear_reading_job(slug)
     thread_id = get_or_create_thread(f"topic:{t['slug']}", None)
-    chat = [{"role": m["role"], "html": render_md(m["content"], "")}
-            for m in get_messages(thread_id, limit=50)]
+    chat = [{"role": m["role"], "html": render_md(m["content"], ""), "images": m.get("images") or []}
+            for m in get_messages(thread_id, limit=50) if m["role"] in ("user", "assistant")]
+    topic_artifact = get_artifact(thread_id)
 
     ev = t["evidence"]
     stats = {"collections": len(t["collections"]),
@@ -293,6 +294,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "reading_running": reading_running,
         "reading_error": reading_error,
         "chat": chat,
+        "topic_artifact_html": render_md(topic_artifact, "") if topic_artifact else "",
         "model": load_config().get("model", ""),
     })
 
@@ -375,6 +377,92 @@ def topic_chat_stream(slug: str, message: str = Form("")):
         yield _ev({"type": "done"})
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.post("/t/{slug}/chat", response_class=HTMLResponse)
+def topic_chat(request: Request, slug: str, message: str = Form(""),
+               images_json: str = Form(""), ref_json: str = Form("")) -> HTMLResponse:
+    """Agentic topic-assistant turn (mirrors the collection chat): grounded in the
+    topic, read-only tools scoped to its primary collection, with pasted images + card
+    reference chips. Renders the same _chat_turn.html. Persists only on success."""
+    t = topics_mod.get_topic(slug)
+    if not t:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    images = _parse_images(images_json)
+    ref = None
+    if ref_json:
+        try:
+            ref = json.loads(ref_json)
+        except (ValueError, TypeError):
+            ref = None
+    # A card reference chip → name the section in the agent's question; the chat shows
+    # only the clean chip. The topic agent already has the full investigation in context.
+    if ref and ref.get("label"):
+        lbl = ref.get("label", "")
+        user_text = (f"Regarding the “{lbl}” of this topic: {message.strip()}" if message.strip()
+                     else f"Tell me about the “{lbl}” of this topic.")
+        original = _ref_display(ref, message)
+    else:
+        user_text = original = message
+
+    thread_id = get_or_create_thread(f"topic:{slug}", None)
+    history = get_messages(thread_id, limit=10)
+    mcp_slug = (t.get("collections") or [None])[0]
+    error, assistant_text = None, ""
+    try:
+        msgs = topic_view.chat_messages(slug, history, user_text)
+        assistant_text = agentic_chat.answer_topic(msgs, mcp_slug, images=images)
+        add_message(thread_id, "user", original, [{"type": "topic", "id": slug}], images=images)
+        add_message(thread_id, "assistant", assistant_text, [])
+    except llm.LLMError as exc:
+        error = str(exc)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("paper_agent.topics").exception("topic chat failed")
+        error = f"Chat failed: {exc}"
+    return templates.TemplateResponse(
+        request, "_chat_turn.html",
+        {"slug": slug, "user_html": render_md(original, slug), "user_images": images,
+         "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
+         "assistant_text": assistant_text, "error": error, "suggestion": None,
+         "usage": llm.usage(), "agentic": True},
+    )
+
+
+@app.post("/t/{slug}/chat/compact")
+def topic_chat_compact(slug: str) -> RedirectResponse:
+    """Compact the topic chat into a summary artifact, then clear history (mirrors the
+    collection chat). History is only cleared if summarization succeeds."""
+    thread_id = get_or_create_thread(f"topic:{slug}", None)
+    live = [m for m in get_messages(thread_id) if m["role"] in ("user", "assistant")]
+    if not live:
+        return RedirectResponse(f"/t/{slug}", status_code=303)
+    parts = []
+    prior = get_artifact(thread_id)
+    if prior:
+        parts.append(f"PREVIOUS SUMMARY (already compacted):\n{prior}")
+    for m in live:
+        parts.append(f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}")
+    try:
+        summary = llm.complete([
+            {"role": "system", "content":
+                "You compact a research-assistant conversation into a concise 'artifact' — a "
+                "faithful briefing that preserves the USER's questions, key findings, decisions, "
+                "open threads, and referenced papers/claims. It replaces the chat history and "
+                "becomes your memory. Don't invent. Compact markdown, short headed sections."},
+            {"role": "user", "content": "\n\n".join(parts)}])
+    except Exception:  # noqa: BLE001 - never destroy history on a failed compaction
+        logging.getLogger("paper_agent.topics").exception("topic chat compaction failed")
+        return RedirectResponse(f"/t/{slug}", status_code=303)
+    clear_messages(thread_id)
+    add_message(thread_id, "system", summary)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
+
+
+@app.post("/t/{slug}/chat/delete")
+def topic_chat_delete(slug: str) -> RedirectResponse:
+    """Remove the topic chat (history + any artifact). A fresh thread is created next load."""
+    delete_thread(get_or_create_thread(f"topic:{slug}", None))
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.post("/t/{slug}/status")
