@@ -12,7 +12,6 @@
 
  - [ ] link experiment to coding agent
 
----
 
 ## Requirements
 
@@ -21,7 +20,6 @@
   backend. Without it the app still runs and you can browse/read/annotate, but chat,
   wiki drafting, suggested reading, and benchmark extraction are disabled.
 
----
 
 
 ## Install & run
@@ -42,12 +40,10 @@ python3 -m venv .venv
 > it is recommended to use Prinny with **Chrome**, safari still have some rendering issue. 
 
 
----
 ## Preview
 <img width="1812" height="909" alt="image" src="https://github.com/user-attachments/assets/e09476ad-37c6-4c61-b332-5ac86966bdc2" />
 
 
---- 
 
 
 ## Zotero setup (Optional, for importing from Zotero)
@@ -68,10 +64,6 @@ A JSON array means it's working. The app prefers this HTTP API and falls back to
 write-back (moving/tagging items in Zotero).
 
 
-
-
-
----
 
 
 <details>
