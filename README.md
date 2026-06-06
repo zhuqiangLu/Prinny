@@ -25,7 +25,7 @@
 ## Install & run
 
 ```bash
-git clone <your-repo-url> prinny && cd prinny
+git clone https://github.com/zhuqiangLu/Prinny.git prinny && cd prinny
 
 # Option A — pipx (isolated):
 pipx install --editable .
