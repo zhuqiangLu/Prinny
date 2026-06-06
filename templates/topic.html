@@ -176,7 +176,6 @@
         {# 1 — Assumptions #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col" x-data="{ add: false }">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">1</span>
             <h2 class="text-sm font-semibold text-slate-900">Assumptions</h2>
             <button @click="viewAll='assumptions'" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
@@ -198,7 +197,6 @@
         {# 2 — Hypotheses #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">2</span>
             <h2 class="text-sm font-semibold text-slate-900">Hypotheses</h2>
             <button @click="go('hypotheses')" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
@@ -218,7 +216,6 @@
         {# 3 — Evidence (paper list) #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">3</span>
             <h2 class="text-sm font-semibold text-slate-900">Evidence</h2>
             <button @click="go('evidence')" class="ml-auto text-xs text-violet-600 hover:underline">View all</button>
           </div>
@@ -282,7 +279,6 @@
         {# 7 — Key Terms #}
         <section class="rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex items-center gap-2 mb-3">
-            <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-violet-100 text-violet-700 text-xs font-semibold">7</span>
             <h2 class="text-sm font-semibold text-slate-900">Key Terms</h2>
           </div>
           {% if gen.key_terms %}

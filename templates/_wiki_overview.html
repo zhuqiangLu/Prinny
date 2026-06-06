@@ -10,9 +10,8 @@
    Tailwind sheet always contains them (we hit JIT races with dynamic classes when
    this template arrives via an HTMX swap). #}
 
-{% macro section_badge(n) %}
-  <span class="inline-flex items-center justify-center w-7 h-7 rounded-md bg-violet-100 text-violet-700 text-sm font-semibold tabular-nums">{{ n }}</span>
-{% endmacro %}
+{# Section number badges removed by request — headers stand on their own. #}
+{% macro section_badge(n) %}{% endmacro %}
 
 {# "Ask in chat" — a card (right-click or its 💬 button) dispatches a reference to
    the side-chat composer, which attaches it as a chip. Reads data-ask-* off the
