@@ -529,9 +529,17 @@ def topic_collections(slug: str, collections: list[str] = Form([])) -> RedirectR
 
 
 @app.post("/t/{slug}/delete")
-def topic_delete(slug: str) -> RedirectResponse:
+def topic_delete(slug: str, redirect: str = Form("/topics")) -> RedirectResponse:
     topics_mod.delete_topic(slug)
-    return RedirectResponse("/topics", status_code=303)
+    dest = redirect if redirect in ("/", "/topics") else "/topics"
+    return RedirectResponse(dest, status_code=303)
+
+
+@app.post("/t/{slug}/duplicate")
+def topic_duplicate(slug: str) -> RedirectResponse:
+    """Clone a topic into a new independent one and open it."""
+    new_slug = topics_mod.duplicate_topic(slug)
+    return RedirectResponse(f"/t/{new_slug or slug}", status_code=303)
 
 
 @app.post("/t/{slug}/hypotheses")

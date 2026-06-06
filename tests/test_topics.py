@@ -105,6 +105,37 @@ def test_reading_history_tracks_accept_reject(db):
     assert h["dismissed_arxiv"] == {"x2"} and h["dismissed_titles"] == ["Dropped paper"]
 
 
+def test_duplicate_topic_clones_investigation(db):
+    """duplicate_topic clones the question + investigation into an independent topic,
+    relinking evidence to the COPY's hypotheses (not the source's)."""
+    slug = topics.create_topic("Orig", "Can X help Y?", collections=["c1"])
+    topics.replace_investigation(
+        slug, assumptions=["A premise."],
+        hypotheses=[{"text": "H one.", "status": "supported", "support_count": 2, "counter_count": 0},
+                    {"text": "H two.", "status": "mixed", "support_count": 1, "counter_count": 1}],
+        evidence=[{"kind": "supporting", "claim": "backs H1", "hyp_index": 0},
+                  {"kind": "counter", "claim": "against H2", "hyp_index": 1}],
+        unknowns=[{"text": "open?", "priority": "high", "hyp_index": 1}],
+        experiments=[{"title": "Exp", "method": "m", "metric": "x", "hyp_index": 0}],
+        generated={"key_terms": ["Alpha"]})
+    topics.add_note(slug, "a note")
+
+    new = topics.duplicate_topic(slug)
+    assert new and new != slug
+    dup = topics.get_topic(new)
+    assert dup["title"] == "Orig (copy)" and dup["collections"] == ["c1"]
+    assert len(dup["hypotheses"]) == 2 and len(dup["assumptions"]) == 1
+    assert len(dup["evidence"]) == 2 and len(dup["unknowns"]) == 1 and len(dup["experiments"]) == 1
+    assert dup["generated"].get("key_terms") == ["Alpha"]
+    assert any(n["body"] == "a note" for n in dup["notes"])
+    # evidence relinked to the COPY's hypotheses, not the source's
+    copy_hyp_ids = {h["id"] for h in dup["hypotheses"]}
+    assert all(e["hypothesis_id"] in copy_hyp_ids for e in dup["evidence"])
+    # independent: deleting the copy leaves the original intact
+    topics.delete_topic(new)
+    assert topics.get_topic(slug) is not None
+
+
 def test_accept_suggestion_creates_and_links_new_collection(db, monkeypatch):
     """'__new__' creates a collection, links it to the topic, and imports there."""
     import app.triage as triage, app.library as library

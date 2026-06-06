@@ -384,16 +384,44 @@
     <p class="text-[12px] text-slate-500 mt-0.5">Questions you're investigating across collections — what you're chasing, not what the field contains.</p>
     {% if topics %}
     {% set TSTATUS = {'investigation': 'bg-violet-100 text-violet-700', 'supported': 'bg-emerald-100 text-emerald-700', 'challenged': 'bg-rose-100 text-rose-700', 'archived': 'bg-slate-100 text-slate-500'} %}
-    <div class="mt-3 grid gap-4" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+    <div x-data="topicCards()" x-init="init()" id="topic-grid" class="mt-3 grid gap-4"
+         style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))"
+         @dragover.prevent="onDragOver($event)" @drop.prevent="onDrop($event)">
       {% for t in topics %}
-      <a href="/t/{{ t.slug }}" class="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition">
+      <div class="tcard group relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-slate-300 transition flex flex-col"
+           data-slug="{{ t.slug }}" @dragstart="onDragStart($event)" @dragend="onDragEnd($event)">
+        <a href="/t/{{ t.slug }}" draggable="false" class="absolute inset-0" aria-label="{{ t.title }}"></a>
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ TSTATUS.get(t.status, 'bg-slate-100 text-slate-500') }}">{{ t.status }}</span>
           <span class="ml-auto text-[11px] text-slate-400">{{ t.n_collections }} collection{{ 's' if t.n_collections != 1 }}</span>
         </div>
         <div class="text-sm font-semibold text-slate-900 leading-snug">{{ t.title }}</div>
         <p class="text-[13px] text-slate-600 mt-1 leading-snug line-clamp-2">{{ t.question }}</p>
-      </a>
+        <!-- footer: drag handle (left) + duplicate + delete (right) -->
+        <div class="relative z-10 mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+          <span class="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 select-none text-base leading-none" title="Drag to reorder"
+                @mousedown="$el.closest('.tcard').setAttribute('draggable', 'true')"
+                @mouseup="$el.closest('.tcard').removeAttribute('draggable')">⠿</span>
+          <div class="flex items-center gap-1">
+            <form method="post" action="/t/{{ t.slug }}/duplicate">
+              <button class="grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100" title="Duplicate this topic" aria-label="Duplicate topic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+                  <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+                </svg>
+              </button>
+            </form>
+            <form method="post" action="/t/{{ t.slug }}/delete"
+                  onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete the topic “{{ t.title }}” and its investigation (assumptions, hypotheses, evidence, notes)? Your collections and papers are untouched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
+              <input type="hidden" name="redirect" value="/">
+              <button class="grid place-items-center w-7 h-7 rounded text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="Delete this topic" aria-label="Delete topic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+                  <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6m3 5v6m4-6v6"/>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
       {% endfor %}
     </div>
     {% else %}
@@ -553,6 +581,45 @@
       },
     };
   }
+  // Research-topic cards: drag-to-reorder, persisted in localStorage (mirrors the
+  // collection cards). No server order column — purely a per-user landing arrangement.
+  function topicCards() {
+    return {
+      order: JSON.parse(localStorage.getItem("pa.topicorder") || "null"),
+      dragSlug: null,
+      grid() { return document.getElementById("topic-grid"); },
+      cards() { return [...this.grid().querySelectorAll(":scope > .tcard")]; },
+      init() {
+        if (!this.order) return;
+        const idx = (s) => { const i = this.order.indexOf(s); return i === -1 ? 1e9 : i; };
+        const cards = this.cards().sort((a, b) => idx(a.dataset.slug) - idx(b.dataset.slug));
+        const g = this.grid(); cards.forEach((c) => g.appendChild(c));
+      },
+      onDragStart(e) {
+        const card = e.target.closest(".tcard"); if (!card) return;
+        this.dragSlug = card.dataset.slug;
+        e.dataTransfer.effectAllowed = "move"; card.classList.add("opacity-40");
+      },
+      onDragEnd(e) {
+        const card = e.target.closest(".tcard");
+        if (card) { card.classList.remove("opacity-40"); card.removeAttribute("draggable"); }
+      },
+      onDragOver(e) {
+        const over = e.target.closest(".tcard");
+        if (!over || !this.dragSlug || over.dataset.slug === this.dragSlug) return;
+        const dragged = this.grid().querySelector(`.tcard[data-slug="${this.dragSlug}"]`);
+        if (!dragged) return;
+        const r = over.getBoundingClientRect();
+        const before = e.clientX < r.left + r.width / 2;
+        this.grid().insertBefore(dragged, before ? over : over.nextSibling);
+      },
+      onDrop() {
+        this.order = this.cards().map((c) => c.dataset.slug);
+        localStorage.setItem("pa.topicorder", JSON.stringify(this.order));
+      },
+    };
+  }
+
   // themeWizard() + extractPalette() now live in base.html (global) so they also work
   // inside the Settings → Appearance panel loaded via HTMX.
 

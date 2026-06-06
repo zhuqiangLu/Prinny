@@ -189,6 +189,39 @@ def _topic_id(con, slug: str) -> int | None:
     return r["id"] if r else None
 
 
+def duplicate_topic(slug: str) -> str | None:
+    """Clone a topic into a new independent one ("X (copy)"): question/description,
+    linked collections, and the full investigation (assumptions, hypotheses, evidence,
+    unknowns, experiments — relinked by hypothesis index — plus generated + notes).
+    Returns the new slug, or None if the source is gone."""
+    src = get_topic(slug)
+    if src is None:
+        return None
+    base = f"{src['title']} (copy)"
+    new_slug = create_topic(base, src["question"], collections=src.get("collections") or [],
+                            description=src.get("description", ""))
+    hyp_idx = {h["id"]: i for i, h in enumerate(src["hypotheses"])}
+    replace_investigation(
+        new_slug,
+        assumptions=[a["text"] for a in src["assumptions"]],
+        hypotheses=[{"text": h["text"], "status": h["status"],
+                     "support_count": h["support_count"], "counter_count": h["counter_count"]}
+                    for h in src["hypotheses"]],
+        evidence=[{"kind": e["kind"], "claim": e["claim"], "paper_ref": e.get("paper_ref"),
+                   "paper_id": e.get("paper_id"), "collection": e.get("collection"),
+                   "hyp_index": hyp_idx.get(e.get("hypothesis_id"))}
+                  for e in src["evidence"]],
+        unknowns=[{"text": u["text"], "priority": u.get("priority", "medium"),
+                   "hyp_index": hyp_idx.get(u.get("hypothesis_id"))} for u in src["unknowns"]],
+        experiments=[{"title": x["title"], "method": x.get("method", ""),
+                      "metric": x.get("metric", ""), "status": x.get("status", "planned"),
+                      "hyp_index": hyp_idx.get(x.get("hypothesis_id"))} for x in src["experiments"]],
+        generated=src.get("generated") or {})
+    for n in reversed(src.get("notes") or []):     # oldest first so order is preserved
+        add_note(new_slug, n["body"])
+    return new_slug
+
+
 def delete_topic(slug: str) -> bool:
     con = connect()
     try:
