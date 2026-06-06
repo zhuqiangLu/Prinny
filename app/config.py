@@ -16,10 +16,39 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Storage layout (see CLAUDE.md "Storage layout")
 # ---------------------------------------------------------------------------
+def _migrate_legacy_home() -> None:
+    """One-time rename of a pre-rename ``~/.paper-agent`` data dir → ``~/.prinny``,
+    rewriting absolute ``.paper-agent`` paths in the moved config.toml (e.g.
+    ``pdf_store_path``). Runs only for a default install (no env override), only when
+    the new home doesn't exist yet, and never under pytest (so a dev/test run can't move
+    real data). Must run BEFORE APP_DIR is resolved so paths point at the new home."""
+    import sys
+    if ("pytest" in sys.modules or os.environ.get("PRINNY_HOME")
+            or os.environ.get("PAPER_AGENT_HOME")):
+        return
+    new, legacy = Path.home() / ".prinny", Path.home() / ".paper-agent"
+    if new.exists() or not legacy.exists():
+        return
+    import shutil
+    try:
+        shutil.move(str(legacy), str(new))
+    except OSError:
+        return
+    cfg = new / "config.toml"
+    try:
+        if cfg.is_file():
+            cfg.write_text(
+                cfg.read_text(encoding="utf-8").replace("/.paper-agent/", "/.prinny/"),
+                encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _resolve_home() -> Path:
     """The data home. Env override wins (PRINNY_HOME, then legacy PAPER_AGENT_HOME).
-    Otherwise default to ~/.prinny, but keep using an existing ~/.paper-agent from a
-    pre-rename install so we never orphan a user's data (no migration, no data move)."""
+    Otherwise ~/.prinny — after _migrate_legacy_home() has moved any pre-rename
+    ~/.paper-agent into place. A leftover ~/.paper-agent (e.g. env-pinned or test) is
+    still honored as a fallback so data is never orphaned."""
     env = os.environ.get("PRINNY_HOME") or os.environ.get("PAPER_AGENT_HOME")
     if env:
         return Path(env)
@@ -27,6 +56,7 @@ def _resolve_home() -> Path:
     return legacy if (legacy.exists() and not new.exists()) else new
 
 
+_migrate_legacy_home()
 APP_DIR = _resolve_home()
 CONFIG_PATH = APP_DIR / "config.toml"
 DB_PATH = APP_DIR / "app.sqlite"
