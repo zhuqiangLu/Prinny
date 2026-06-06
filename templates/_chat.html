@@ -321,7 +321,7 @@
           const stopWorking = () => { if (workEl) workEl.remove(); };   // only on done/error
           ta.value = ""; this.clear();
           log.scrollTop = log.scrollHeight;
-          let acc = "";
+          let acc = "", aborted = false;
           this.controller = new AbortController();
           try {
             const resp = await fetch(url, {
@@ -356,7 +356,8 @@
             }
           } catch (e) {
             statusEl.textContent = "";
-            bodyEl.textContent = e.name === "AbortError" ? (acc + "\n⏹ interrupted") : ("Stream failed: " + e);
+            aborted = e.name === "AbortError";
+            bodyEl.textContent = aborted ? (acc + "\n⏹ interrupted") : ("Stream failed: " + e);
           } finally {
             this.sending = false; this.controller = null;
           }
@@ -372,7 +373,32 @@
               if (d.html) { bodyEl.style.whiteSpace = ""; bodyEl.innerHTML = d.html; if (window.renderMath) window.renderMath(bodyEl); }
             } catch (e) { /* keep the plain text */ }
           }
+          // Offer "capture to thoughts" on a completed reply (same affordance as the
+          // collection chat's server-rendered turns; streamed paper replies are built here).
+          if (acc.trim() && !aborted) this.appendCapture(a, acc);
           log.scrollTop = log.scrollHeight;
+        },
+        // Append the "＋ capture to thoughts" widget after a streamed assistant bubble.
+        // Built in JS (DOM, so the reply text needn't be HTML-escaped) and handed to
+        // htmx/Alpine to wire up; mirrors the block in _chat_turn.html.
+        appendCapture(afterEl, text) {
+          const slug = this.slug;
+          const wrap = document.createElement("div");
+          wrap.className = "flex justify-start";
+          wrap.setAttribute("x-data", "{ open: false }");
+          wrap.innerHTML =
+            '<div class="text-xs">'
+            + '<button type="button" @click="open=!open" class="text-slate-500 hover:text-slate-800 underline">＋ capture to thoughts</button>'
+            + '<form x-show="open" x-cloak class="mt-1 space-y-1 rounded border border-slate-200 bg-slate-50 p-2 w-80" '
+            +   'hx-post="/c/' + slug + '/thoughts/capture" hx-target="find .cap-status" hx-swap="innerHTML">'
+            +   '<input type="hidden" name="agent_text">'
+            +   '<p class="text-slate-500">Saves the reply as a <em>seed (agent)</em> — it can’t ground a wiki assertion. Add your own reasoning to make it count.</p>'
+            +   '<textarea name="your_take" rows="2" placeholder="your take (optional → reasoning)…" class="w-full rounded border border-slate-300 px-2 py-1"></textarea>'
+            +   '<div class="flex items-center gap-2"><button type="submit" class="rounded bg-slate-900 px-2 py-0.5 text-white">Capture</button><span class="cap-status text-emerald-700"></span></div>'
+            + '</form></div>';
+          wrap.querySelector('input[name="agent_text"]').value = text;
+          afterEl.insertAdjacentElement("afterend", wrap);
+          if (window.htmx) window.htmx.process(wrap);     // wire hx-post (Alpine picks up x-data via its observer)
         },
       };
     }
