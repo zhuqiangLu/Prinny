@@ -397,6 +397,16 @@
         </div>
         <div class="text-sm font-semibold text-slate-900 leading-snug">{{ t.title }}</div>
         <p class="text-[13px] text-slate-600 mt-1 leading-snug line-clamp-2">{{ t.question }}</p>
+        {# compact evidence strip — fitted to the card (not the full Evidence Summary block) #}
+        {% if t.n_hyp or t.n_sup or t.n_mis %}
+        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+          {% if t.n_sup %}<span title="Supporting evidence"><span class="text-emerald-600">✓</span> {{ t.n_sup }}</span>{% endif %}
+          {% if t.n_cnt %}<span title="Counter evidence"><span class="text-rose-600">✕</span> {{ t.n_cnt }}</span>{% endif %}
+          {% if t.n_mis %}<span title="Missing-evidence gaps"><span class="text-amber-500">?</span> {{ t.n_mis }}</span>{% endif %}
+          {% if t.n_hyp %}<span title="Hypotheses">🧪 {{ t.n_hyp }}</span>{% endif %}
+          {% if t.confidence %}<span class="ml-auto rounded px-1.5 py-0.5 bg-violet-50 text-violet-700" title="Confidence from hypothesis statuses">🛡 {{ t.confidence }}</span>{% endif %}
+        </div>
+        {% endif %}
         <!-- footer: drag handle (left) + duplicate + delete (right) -->
         <div class="relative z-10 mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
           <span class="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 select-none text-base leading-none" title="Drag to reorder"

@@ -76,12 +76,18 @@ def collection_usage() -> dict:
 
 
 def list_topics() -> list[dict]:
-    """All topics, newest-updated first, with their linked-collection count."""
+    """All topics, newest-updated first, with linked-collection count + a compact
+    evidence breakdown (supporting / counter / missing, hypotheses) for the card."""
     con = connect()
     try:
         rows = con.execute(
-            "SELECT t.*, (SELECT COUNT(*) FROM topic_collections tc WHERE tc.topic_id=t.id) "
-            "AS n_collections FROM research_topics t ORDER BY t.updated_at DESC").fetchall()
+            "SELECT t.*, "
+            "(SELECT COUNT(*) FROM topic_collections tc WHERE tc.topic_id=t.id) AS n_collections, "
+            "(SELECT COUNT(*) FROM topic_evidence e WHERE e.topic_id=t.id AND e.kind='supporting') AS n_sup, "
+            "(SELECT COUNT(*) FROM topic_evidence e WHERE e.topic_id=t.id AND e.kind='counter') AS n_cnt, "
+            "(SELECT COUNT(*) FROM topic_evidence e WHERE e.topic_id=t.id AND e.kind='missing') AS n_mis, "
+            "(SELECT COUNT(*) FROM topic_hypotheses h WHERE h.topic_id=t.id) AS n_hyp "
+            "FROM research_topics t ORDER BY t.updated_at DESC").fetchall()
         return [_row_to_topic(r) for r in rows]
     finally:
         con.close()
@@ -177,7 +183,12 @@ def _row_to_topic(r) -> dict:
             "lifecycle": lifecycle, "lifecycle_label": _LIFECYCLE_LABEL.get(lifecycle, "Investigation"),
             "generated": generated,
             "created_at": r["created_at"], "updated_at": r["updated_at"],
-            "n_collections": r["n_collections"] if "n_collections" in keys else None}
+            "n_collections": r["n_collections"] if "n_collections" in keys else None,
+            "n_sup": r["n_sup"] if "n_sup" in keys else None,
+            "n_cnt": r["n_cnt"] if "n_cnt" in keys else None,
+            "n_mis": r["n_mis"] if "n_mis" in keys else None,
+            "n_hyp": r["n_hyp"] if "n_hyp" in keys else None,
+            "confidence": (generated.get("confidence") or {}).get("label") if generated else None}
 
 
 def _touch(con, slug: str) -> None:
