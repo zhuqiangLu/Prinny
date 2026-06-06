@@ -842,6 +842,10 @@ def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
     parts.append("Be concise and grounded. Name the ideas/papers you reference. If the "
                  "collections don't cover something the question needs, say so honestly "
                  "rather than inventing support. You are read-only: you don't change the "
-                 "user's notes, wiki, hypotheses, or collections.")
+                 "user's notes, wiki, hypotheses, or collections. "
+                 "Answer conversational or general questions DIRECTLY — do NOT call tools "
+                 "for greetings or meta questions. ONLY use the read tools when the "
+                 "question genuinely needs specifics from the linked collections; prefer "
+                 "the fewest tool calls (often zero).")
     return ([{"role": "system", "content": "\n\n".join(parts)}]
             + history + [{"role": "user", "content": user_msg}])
