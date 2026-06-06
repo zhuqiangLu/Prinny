@@ -702,15 +702,18 @@ def upsert_paper(
     arxiv_id: str | None = None,
     zotero_key: str | None = None,
     openreview_id: str | None = None,
+    doi: str | None = None,
+    pdf_url: str | None = None,
     title: str = "(untitled)",
     authors: str = "",
     year: str = "",
     abstract: str = "",
     origin: str = "app-created",
 ) -> int:
-    """Insert or update a paper, deduped by zotero_key then arxiv_id then openreview_id. On
-    update, metadata is overwritten and missing natural keys are backfilled; sync_status/origin
-    are left untouched (don't clobber dirty/local state)."""
+    """Insert or update a paper, deduped by zotero_key then arxiv_id then openreview_id
+    then doi. ``pdf_url`` is an open-access PDF source (e.g. Semantic Scholar) preferred
+    over arXiv. On update, metadata is overwritten and missing natural keys are
+    backfilled; sync_status/origin are left untouched (don't clobber dirty/local state)."""
     con = connect()
     try:
         found = None
@@ -720,14 +723,16 @@ def upsert_paper(
             found = con.execute("SELECT * FROM papers WHERE arxiv_id=?", (arxiv_id,)).fetchone()
         if found is None and openreview_id:
             found = con.execute("SELECT * FROM papers WHERE openreview_id=?", (openreview_id,)).fetchone()
+        if found is None and doi:
+            found = con.execute("SELECT * FROM papers WHERE doi=?", (doi,)).fetchone()
         if found is None:
             sync_status = "synced" if origin == "zotero-import" else "local-only"
             cur = con.execute(
-                """INSERT INTO papers (arxiv_id, zotero_key, openreview_id, title, authors,
-                       year, abstract, origin, sync_status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (arxiv_id, zotero_key, openreview_id, title, authors, year, abstract,
-                 origin, sync_status),
+                """INSERT INTO papers (arxiv_id, zotero_key, openreview_id, doi, pdf_url,
+                       title, authors, year, abstract, origin, sync_status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (arxiv_id, zotero_key, openreview_id, doi, pdf_url, title, authors, year,
+                 abstract, origin, sync_status),
             )
             con.commit()
             return int(cur.lastrowid)
@@ -741,9 +746,11 @@ def upsert_paper(
         con.execute(
             """UPDATE papers SET title=?, authors=?, year=?, abstract=?,
                    arxiv_id=COALESCE(arxiv_id, ?), zotero_key=COALESCE(zotero_key, ?),
-                   openreview_id=COALESCE(openreview_id, ?), updated_at=CURRENT_TIMESTAMP
+                   openreview_id=COALESCE(openreview_id, ?), doi=COALESCE(doi, ?),
+                   pdf_url=COALESCE(pdf_url, ?), updated_at=CURRENT_TIMESTAMP
                WHERE id=?""",
-            (final_title, authors, year, abstract, arxiv_id, zotero_key, openreview_id, pid),
+            (final_title, authors, year, abstract, arxiv_id, zotero_key, openreview_id,
+             doi, pdf_url, pid),
         )
         con.commit()
         return int(pid)

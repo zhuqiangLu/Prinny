@@ -1,0 +1,82 @@
+"""Semantic Scholar adapter — a second paper-discovery source.
+
+Used as a fallback when arXiv rate-limits (429), and for its quality signals
+(venue, citation count) and relevance ranking. A free API key (set in Settings)
+gives a personal rate limit that works on shared/institutional IPs where the
+public quota 429s. Read-only; the only network use is api.semanticscholar.org.
+
+Candidate shape matches the arXiv one (arxiv_id/title/summary/authors) plus extras
+(venue, citation_count, year, doi, pdf_url, s2_id) so the rest of the pipeline —
+LLM pick, validator, triage — is unchanged.
+"""
+from __future__ import annotations
+
+import logging
+
+import httpx
+
+from .config import load_config
+
+logger = logging.getLogger("paper_agent.semantic_scholar")
+
+_SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search"
+_FIELDS = "title,abstract,year,venue,citationCount,externalIds,openAccessPdf,authors"
+_UA = {"User-Agent": "prinny/0.1 (local research wiki)"}
+
+
+class S2Error(RuntimeError):
+    """Semantic Scholar was unreachable or rate-limited."""
+
+
+def _headers() -> dict:
+    h = dict(_UA)
+    key = (load_config().get("semantic_scholar_api_key") or "").strip()
+    if key:
+        h["x-api-key"] = key
+    return h
+
+
+def _to_candidate(p: dict) -> dict | None:
+    """Map an S2 paper object to our candidate shape. None if it has no abstract
+    (the validator needs one to ground relevance)."""
+    abstract = (p.get("abstract") or "").strip()
+    if not abstract:
+        return None
+    ext = p.get("externalIds") or {}
+    oa = p.get("openAccessPdf") or {}
+    return {
+        "arxiv_id": ext.get("ArXiv"),                 # present for most ML/CS papers
+        "doi": ext.get("DOI"),
+        "s2_id": p.get("paperId"),
+        "title": (p.get("title") or "").strip() or "(untitled)",
+        "summary": abstract,
+        "authors": ", ".join(a.get("name", "") for a in (p.get("authors") or []) if a.get("name")),
+        "year": str(p.get("year") or ""),
+        "venue": (p.get("venue") or "").strip(),
+        "citation_count": p.get("citationCount") or 0,
+        "pdf_url": (oa.get("url") or "").strip(),      # open-access PDF (bypasses arXiv)
+    }
+
+
+def search(query: str, max_results: int = 20) -> list[dict]:
+    """Relevance-ranked search. Returns candidates (abstract-bearing only). Raises
+    S2Error on rate-limit / network failure so callers can fall back or surface it."""
+    try:
+        r = httpx.get(_SEARCH, headers=_headers(), timeout=20.0, follow_redirects=True,
+                      params={"query": query, "limit": max(1, min(100, max_results)),
+                              "fields": _FIELDS})
+        if r.status_code == 429:
+            raise S2Error("Semantic Scholar is rate-limiting (HTTP 429). Add a free API key "
+                          "in Settings for a personal quota, or try later.")
+        r.raise_for_status()
+        data = r.json()
+    except S2Error:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        raise S2Error(f"Semantic Scholar unreachable: {exc}")
+    out = []
+    for p in (data.get("data") or []):
+        c = _to_candidate(p)
+        if c:
+            out.append(c)
+    return out

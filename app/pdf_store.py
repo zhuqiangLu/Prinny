@@ -63,18 +63,30 @@ def _paper_pdf_url(paper_id: int) -> str | None:
     con = connect()
     try:
         row = con.execute(
-            "SELECT arxiv_id, openreview_id FROM papers WHERE id=?", (paper_id,)
+            "SELECT arxiv_id, openreview_id, pdf_url FROM papers WHERE id=?", (paper_id,)
         ).fetchone()
     finally:
         con.close()
     if not row:
         return None
+    # Prefer an explicit open-access URL (e.g. Semantic Scholar's openAccessPdf) — it
+    # bypasses arXiv, which matters on networks where arXiv rate-limits.
+    if _col(row, "pdf_url"):
+        return row["pdf_url"].strip()
     if row["arxiv_id"]:
         aid = row["arxiv_id"].strip().removeprefix("arXiv:").removeprefix("arxiv:")
         return f"https://arxiv.org/pdf/{aid}.pdf"
     if row["openreview_id"]:
         return f"https://openreview.net/pdf?id={row['openreview_id']}"
     return None
+
+
+def _col(row, name: str):
+    """Safe column access (row may predate a migration in some test DBs)."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return None
 
 
 def start_download(paper_id: int) -> bool:

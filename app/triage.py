@@ -175,14 +175,18 @@ def _set_status(triage_id: int, status: str) -> None:
         con.close()
 
 
-def _import_candidate(slug: str, *, zotero_key, arxiv_id, title, authors, abstract) -> int:
+def _import_candidate(slug: str, *, zotero_key, arxiv_id, title, authors, abstract,
+                      doi=None, pdf_url=None) -> int:
     """Mint/import a candidate paper into the local store + add it to the collection.
     Pulls its PDF into the store eagerly when the collection's copy_mode is eager.
-    Returns the new paper_id. Reaches Zotero only later, via Sync."""
+    ``doi``/``pdf_url`` carry a non-arXiv (e.g. Semantic Scholar) paper + its
+    open-access PDF source. Returns the new paper_id."""
     origin = "zotero-import" if zotero_key else "arxiv-suggested"
     pid = library.upsert_paper(
         zotero_key=zotero_key or None,
         arxiv_id=arxiv_id or None,
+        doi=doi or None,
+        pdf_url=pdf_url or None,
         title=title or "(untitled)",
         authors=authors or "",
         abstract=abstract or "",
@@ -194,8 +198,8 @@ def _import_candidate(slug: str, *, zotero_key, arxiv_id, title, authors, abstra
     if col and col["copy_mode"] == "eager":
         if zotero_key:
             pdf_store.copy_into_store(pid, get_zotero().pdf_path(zotero_key))
-        elif arxiv_id:
-            pdf_store.fetch_arxiv_pdf(pid, arxiv_id)
+        elif pdf_url or arxiv_id:
+            pdf_store.start_download(pid)        # uses pdf_url if set, else arXiv (see _paper_pdf_url)
     return pid
 
 
@@ -210,6 +214,8 @@ def accept(slug: str, triage_id: int) -> tuple[bool, str]:
         title=item.get("title"),
         authors=item.get("authors"),
         abstract=item.get("abstract"),
+        doi=item.get("doi"),
+        pdf_url=item.get("pdf_url"),
     )
     library.link_triage_paper(triage_id, pid)
     _set_status(triage_id, "accepted")
@@ -284,13 +290,21 @@ def add_arxiv_manual(slug: str, raw_id: str) -> tuple[bool, str]:
 
 def add_from_arxiv(slug: str, arxiv_id: str, title: str, note: str) -> int:
     """Enqueue a discovered arXiv paper into the triage queue (pending)."""
+    return add_candidate(slug, {"arxiv_id": arxiv_id, "title": title}, note)
+
+
+def add_candidate(slug: str, cand: dict, note: str) -> int:
+    """Enqueue a discovered paper (arXiv OR Semantic Scholar) into triage (pending),
+    carrying everything Accept needs: arxiv_id, doi, pdf_url, abstract, authors."""
     con = connect()
     try:
         cur = con.execute(
-            "INSERT INTO triage_items "
-            "(collection_slug, arxiv_id, title, llm_relevance_note, status) "
-            "VALUES (?, ?, ?, ?, 'pending')",
-            (slug, arxiv_id, title, note),
+            "INSERT INTO triage_items (collection_slug, arxiv_id, doi, pdf_url, title, "
+            "abstract, authors, llm_relevance_note, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            (slug, cand.get("arxiv_id"), cand.get("doi"), cand.get("pdf_url"),
+             cand.get("title", ""), cand.get("summary", "") or cand.get("abstract", ""),
+             cand.get("authors", ""), note),
         )
         con.commit()
         return cur.lastrowid

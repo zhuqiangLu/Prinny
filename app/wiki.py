@@ -1271,10 +1271,15 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     except Exception as exc:  # noqa: BLE001
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     added = 0
+    seen_keys = set(have_arxiv) | set(pending_arxiv)
     for c in cands:
-        aid = c.get("arxiv_id")
-        if not aid or aid in have_arxiv or aid in pending_arxiv:
+        # Dedupe by arxiv id when present, else DOI (Semantic Scholar non-arXiv papers).
+        # A candidate with neither key + no PDF source isn't importable — skip it.
+        key = c.get("arxiv_id") or c.get("doi")
+        if not key or key in seen_keys:
             continue
+        if not (c.get("arxiv_id") or c.get("pdf_url")):
+            continue                              # no way to fetch a PDF / import it
         note = c.get("note", "")
         if c.get("verdict") == "pass" and c.get("justification"):
             note = f"{note}  ·  ✓ verified: {c['justification']}"
@@ -1282,8 +1287,10 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
             note = f"{note}  ·  ~ weak match (verify)"
         if c.get("seen_before"):
             note = f"↩ seen before · {note}"
-        if triage.add_from_arxiv(slug, aid, c.get("title", ""), note):
-            pending_arxiv.add(aid)
+        if c.get("venue"):
+            note = f"{note}  ·  {c['venue']}" + (f" · {c['citation_count']} cites" if c.get("citation_count") else "")
+        if triage.add_candidate(slug, c, note):
+            seen_keys.add(key)
             added += 1
     _append_log(slug, f"suggested {added} paper(s) [{purpose}]", seed)
     return {"added": added, "error": None}

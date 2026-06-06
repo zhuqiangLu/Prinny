@@ -262,6 +262,16 @@
               <input type="number" name="recommend_count" min="1" max="50" value="{{ config.recommend_count or '10' }}"
                      class="w-28 rounded border border-slate-300 px-3 py-2 text-sm" />
             </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Semantic Scholar API key
+                <span class="text-xs font-normal text-slate-400">· optional — used when arXiv rate-limits. A free key gives a personal quota that works on shared/institutional networks.</span>
+              </label>
+              <input type="password" name="semantic_scholar_api_key" autocomplete="off"
+                     value="{{ config.semantic_scholar_api_key or '' }}"
+                     placeholder="paste your Semantic Scholar API key"
+                     class="w-full max-w-md rounded border border-slate-300 px-3 py-2 text-sm" />
+              <p class="text-xs text-slate-400 mt-1">Get one free at <span class="font-mono">semanticscholar.org/product/api</span>. Leave blank to use the public quota (may rate-limit on shared IPs).</p>
+            </div>
           </div>
           <div class="{{ sect }}">
             <h3 class="text-sm font-semibold text-slate-700">Highlight scheme</h3>

@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS papers (
   id INTEGER PRIMARY KEY,
   arxiv_id TEXT,                                 -- nullable natural key
   openreview_id TEXT,                            -- nullable; OpenReview note id (PDF source)
+  doi TEXT,                                      -- nullable; key for non-arXiv (e.g. Semantic Scholar) papers
+  pdf_url TEXT,                                  -- nullable; open-access PDF URL (preferred PDF source)
   zotero_key TEXT,                               -- nullable; filled after import/sync
   title TEXT NOT NULL DEFAULT '(untitled)',
   authors TEXT DEFAULT '',
@@ -145,6 +147,8 @@ CREATE TABLE IF NOT EXISTS triage_items (
   title TEXT,
   abstract TEXT,
   authors TEXT,
+  doi TEXT,                                      -- Semantic Scholar / non-arXiv key
+  pdf_url TEXT,                                  -- open-access PDF URL (so Accept can fetch off arXiv)
   llm_relevance_note TEXT,
   status TEXT CHECK(status IN ('pending','accepted','rejected','deferred')) DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -416,6 +420,18 @@ def _migrate(con: sqlite3.Connection) -> None:
     _tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "chat_messages" in _tables and "images" not in {r[1] for r in con.execute("PRAGMA table_info(chat_messages)")}:
         con.execute("ALTER TABLE chat_messages ADD COLUMN images TEXT NOT NULL DEFAULT '[]'")
+    if "papers" in _tables:
+        pcols = {r[1] for r in con.execute("PRAGMA table_info(papers)")}
+        if "doi" not in pcols:
+            con.execute("ALTER TABLE papers ADD COLUMN doi TEXT")
+        if "pdf_url" not in pcols:
+            con.execute("ALTER TABLE papers ADD COLUMN pdf_url TEXT")
+    if "triage_items" in _tables:
+        tcols = {r[1] for r in con.execute("PRAGMA table_info(triage_items)")}
+        if "doi" not in tcols:
+            con.execute("ALTER TABLE triage_items ADD COLUMN doi TEXT")
+        if "pdf_url" not in tcols:
+            con.execute("ALTER TABLE triage_items ADD COLUMN pdf_url TEXT")
     ccols = {r[1] for r in con.execute("PRAGMA table_info(collections)")}
     if "wiki_proactive" not in ccols:
         con.execute("ALTER TABLE collections ADD COLUMN wiki_proactive INTEGER NOT NULL DEFAULT 1")

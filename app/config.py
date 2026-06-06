@@ -48,6 +48,10 @@ DEFAULTS: dict[str, str] = {
     "show_highlight_legend": "true",
     # Wiki "Recommended to add": how many arXiv papers the discovery suggests per run.
     "recommend_count": "10",
+    # Semantic Scholar: a second discovery source + a fallback when arXiv rate-limits.
+    # A free API key (https://www.semanticscholar.org/product/api) gives a personal
+    # rate limit that works on shared/institutional IPs where the public quota 429s.
+    "semantic_scholar_api_key": "",
     "zotero_sqlite_path": str(Path.home() / "Zotero" / "zotero.sqlite"),
     "zotero_api_base": "http://localhost:23119",
     # Local-first store (ADR 0001): the app's own PDF store + Zotero write-back creds.
