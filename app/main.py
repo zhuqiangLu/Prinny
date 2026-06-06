@@ -1331,7 +1331,7 @@ def chat_post(
             ref = None
         if ref and ref.get("label"):
             return _agentic_chat_turn(request, slug, thread_id, slug,
-                                      _ref_instruction(ref, message), _ref_display(ref, message),
+                                      _ref_instruction(ref, message, slug), _ref_display(ref, message),
                                       mode="answer")
     if prefix is not None:
         return _agentic_chat_turn(request, slug, thread_id, prefix, remainder, message)
@@ -1557,23 +1557,65 @@ def _ref_phrase(ref: dict) -> str:
     kind, label = ref.get("kind", ""), ref.get("label", "")
     return {"concept": f"the concept “{label}”", "belief": f"the belief “{label}”",
             "theme": f"the theme “{label}”", "thesis": "the collection's thesis",
-            "landscape": f"the {label.lower()} in this collection's research landscape",
+            "landscape": f"the “{label}” column of the research landscape",
             }.get(kind, f"“{label}”")
 
 
-def _ref_instruction(ref: dict, user_msg: str) -> str:
-    """The (verbose, hidden) question the agent receives for a card reference."""
+def _ref_context(slug: str, ref: dict) -> str:
+    """The actual on-page content for a card reference, so the agent answers from what
+    the user is looking at instead of only the section's name (it can still use its
+    tools to go deeper). Best-effort; '' if nothing resolves."""
+    kind, label = ref.get("kind", ""), ref.get("label", "")
+    try:
+        ov = wiki.load_overview(slug) or {}
+    except Exception:  # noqa: BLE001
+        return ""
+    if kind == "thesis":
+        t = ov.get("thesis") or {}
+        bits = [t.get("one_paragraph", "")]
+        for k in ("core_tension", "key_intuition", "central_question"):
+            if t.get(k):
+                bits.append(f"{k.replace('_', ' ').title()}: {t[k]}")
+        return "\n".join(b for b in bits if b)
+    if kind == "landscape":
+        col = {"problems": "problems", "methods": "methods", "debates": "debates",
+               "open questions": "open_questions"}.get(label.lower())
+        items = (ov.get("landscape") or {}).get(col or "", []) if col else []
+        return "\n".join(f"- {it['text'] if isinstance(it, dict) else it}" for it in items)
+    if kind == "concepts" or kind == "concept":
+        for c in ov.get("concepts") or []:
+            if c.get("name") == label:
+                return f"{c['name']}: {c.get('blurb', '')}"
+    if kind == "belief":
+        for b in ov.get("beliefs") or []:
+            if b.get("title") == label:
+                return b["title"]
+    if kind == "theme":
+        for t in (ov.get("connections") or {}).get("themes", []):
+            if (t.get("name") or f"Theme {t['index']}") == label:
+                return f"{label}: {t.get('description', '')}"
+    return ""
+
+
+def _ref_instruction(ref: dict, user_msg: str, slug: str = "") -> str:
+    """The (verbose, hidden) question the agent receives for a card reference —
+    includes the section's actual current content so the agent answers from what the
+    user is looking at."""
     phrase = _ref_phrase(ref)
+    content = _ref_context(slug, ref) if slug else ""
+    ctx = f"\n\nThis is its current content:\n{content}\n" if content else ""
     if (user_msg or "").strip():
-        return f"Regarding {phrase} in this collection: {user_msg.strip()}"
-    return {
+        return f"Regarding {phrase} in this collection:{ctx}\n{user_msg.strip()}"
+    base = {
         "concept": f"Explain {phrase} in this collection — what it means and which papers ground it.",
+        "concepts": f"Explain {phrase} in this collection — what it means and which papers ground it.",
         "belief": f"Lay out the evidence for and against {phrase}, citing papers in the collection.",
         "theme": f"Summarize {phrase} — the ideas it groups and how its papers connect.",
         "thesis": "Walk me through the collection's thesis — its core tension, key intuition, "
                   "and central question — and how the papers support it.",
         "landscape": f"Walk me through {phrase} and the papers behind them.",
     }.get(ref.get("kind", ""), f"Tell me about {phrase} in this collection.")
+    return f"{base}{ctx}" if ctx else base
 
 
 def _ref_display(ref: dict, user_msg: str) -> str:
