@@ -58,12 +58,19 @@
       </div>
     </label>
 
-    {# optional date cap — exclude papers published before this #}
+    {# recency window — exclude papers older than this #}
     <label class="flex items-center gap-2 text-[11px] text-slate-500">
-      <span>📅 Only papers since</span>
-      <input type="date" name="since" {% if reading_running %}disabled{% endif %}
-             class="rounded border border-slate-300 px-1.5 py-0.5 text-[11px]">
-      <span class="text-slate-400">(optional — older papers are skipped)</span>
+      <span>📅 Released within</span>
+      <select name="months" {% if reading_running %}disabled{% endif %}
+              class="rounded border border-slate-300 px-1.5 py-0.5 text-[11px]">
+        <option value="">All time</option>
+        <option value="1">Past month</option>
+        <option value="3">Past 3 months</option>
+        <option value="6">Past 6 months</option>
+        <option value="12">Past year</option>
+        <option value="36">Past 3 years</option>
+        <option value="60">Past 5 years</option>
+      </select>
     </label>
 
     <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 p-2.5">

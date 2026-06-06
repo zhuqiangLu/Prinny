@@ -420,15 +420,15 @@ def topic_question_undo(slug: str) -> RedirectResponse:
 @app.post("/t/{slug}/reading/suggest")
 def topic_reading_suggest(slug: str, purpose: str = Form("broaden"), target: str = Form(""),
                           custom: str = Form(""), deep: str = Form(""),
-                          since: str = Form("")) -> RedirectResponse:
+                          months: str = Form("")) -> RedirectResponse:
     """Kick off suggested-reading discovery on a background thread; the reading
     pane renders an overlay that polls /reading/status. Redirect is immediate.
-    ``deep`` ('1') routes to the tool-using paper-finder sub-agent; ``since`` caps
-    out papers published before that date."""
+    ``deep`` ('1') routes to the tool-using paper-finder sub-agent; ``months`` caps
+    out papers older than that recency window."""
     if topics_mod.get_topic(slug):
         tgt = int(target) if (target or "").strip().isdigit() else None
         topic_view.start_reading_async(slug, purpose=purpose, target_id=tgt, custom=custom,
-                                       deep=(deep == "1"), since=since)
+                                       deep=(deep == "1"), since=_since_from_months(months))
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -2365,16 +2365,29 @@ def wiki_benchmarks_status(slug: str) -> JSONResponse:
 
 # --- Recommended-papers-to-add (arXiv discovery → triage → collection) --------
 
+def _since_from_months(months: str) -> str:
+    """Turn a recency window (form 'months', e.g. '6' / '12' / '' for all-time) into
+    an absolute 'YYYY-MM' cutoff measured back from today. '' → no cutoff."""
+    m = (months or "").strip()
+    if not m.isdigit() or int(m) <= 0:
+        return ""
+    from datetime import date
+    today = date.today()
+    total = today.year * 12 + (today.month - 1) - int(m)
+    return f"{total // 12:04d}-{total % 12 + 1:02d}"
+
+
 @app.post("/c/{slug}/wiki/recommend-add", response_class=HTMLResponse)
 def wiki_recommend_add(request: Request, slug: str, purpose: str = Form("gaps"),
                        target: str = Form(""), custom: str = Form(""),
-                       deep: str = Form(""), since: str = Form("")) -> HTMLResponse:
+                       deep: str = Form(""), months: str = Form("")) -> HTMLResponse:
     """Kick off arXiv discovery for the chosen purpose on a background thread and
     re-render the panel (which shows the overlay). ``deep`` ('1') routes to the
-    tool-using paper-finder sub-agent; ``since`` caps out papers before that date."""
+    tool-using paper-finder sub-agent; ``months`` caps out papers older than that
+    recency window."""
     _require_collection(slug)
     wiki.start_reading_async(slug, purpose=purpose, target=target, custom=custom,
-                             deep=(deep == "1"), since=since)
+                             deep=(deep == "1"), since=_since_from_months(months))
     return _wiki_panel(request, slug)
 
 
