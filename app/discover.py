@@ -386,10 +386,40 @@ def find_gaps(slug: str) -> list[dict]:
     return out
 
 
+def _paper_yyyymm(c: dict) -> tuple[int, int] | None:
+    """(year, month) for a candidate — from its arXiv id (YYMM.nnnnn) or its `year`
+    field. None when undatable (then a cutoff won't drop it — we don't hide what we
+    can't date)."""
+    m = re.match(r"(\d{2})(\d{2})\.", str(c.get("arxiv_id") or ""))
+    if m:
+        return (2000 + int(m.group(1)), int(m.group(2)))
+    y = str(c.get("year") or "").strip()[:4]
+    if y.isdigit():
+        return (int(y), 12)              # year-only source → lenient within that year
+    return None
+
+
+def passes_since(c: dict, since: str) -> bool:
+    """Keep candidate ``c`` iff its publication date is on/after ``since`` (a cutoff
+    'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD', compared at month granularity)."""
+    since = (since or "").strip()
+    if not since:
+        return True
+    parts = since.split("-")
+    try:
+        cy = int(parts[0])
+        cm = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+    except (ValueError, IndexError):
+        return True
+    pm = _paper_yyyymm(c)
+    return pm is None or pm >= (cy, cm)
+
+
 def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
                         limit: int = 10, intent: str = "",
                         prefer: list[str] | None = None,
-                        avoid: list[str] | None = None) -> list[dict]:
+                        avoid: list[str] | None = None,
+                        since: str = "") -> list[dict]:
     """Recommend arXiv papers, seeded by a free-text FOCUS. Two LLM steps: build
     an arXiv query from the focus, then pick up to ``limit`` of the most relevant
     results, each with a CONCRETE reason. Results already present (by title) are
@@ -428,7 +458,8 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     # Fetch a wider candidate pool than `limit` so the LLM has room to pick the
     # best `limit` after dropping papers already present. Relevance-sorted (not
     # recency) so the pool is on-topic, not just "newest that loosely matches".
-    pool = max(limit * 2, 20)
+    # A `since` cutoff drops older papers, so widen the pool to keep enough.
+    pool = max(limit * 3, 30) if since else max(limit * 2, 20)
     try:
         raw = _arxiv_search(query, max_results=pool)
     except ArxivError as exc:
@@ -442,7 +473,7 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
             # Both providers refused — almost always the shared/NAT-IP 429. Lead with
             # the actionable explanation, not a raw stack of two errors.
             raise ArxivError(_RATE_LIMIT_HINT)
-    results = [r for r in raw if r["title"].lower() not in exclude]
+    results = [r for r in raw if r["title"].lower() not in exclude and passes_since(r, since)]
     if not results:
         return []
     listing = "\n".join(f"{i}. [{r['arxiv_id']}] {r['title']}: {r['summary'][:300]}"

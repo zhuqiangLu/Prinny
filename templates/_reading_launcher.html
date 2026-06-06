@@ -58,6 +58,14 @@
       </div>
     </label>
 
+    {# optional date cap — exclude papers published before this #}
+    <label class="flex items-center gap-2 text-[11px] text-slate-500">
+      <span>📅 Only papers since</span>
+      <input type="date" name="since" {% if reading_running %}disabled{% endif %}
+             class="rounded border border-slate-300 px-1.5 py-0.5 text-[11px]">
+      <span class="text-slate-400">(optional — older papers are skipped)</span>
+    </label>
+
     <div class="flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-100 p-2.5">
       <span class="text-sky-600">🌐</span>
       <span class="text-[11px] text-slate-500 flex-1"><b class="text-slate-600">Powered by arXiv.</b> Results are validated before showing.</span>

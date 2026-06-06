@@ -452,7 +452,7 @@ def clear_reading_job(slug: str) -> None:
 
 
 def start_reading_async(slug: str, purpose: str = "related", target_id=None,
-                        custom: str = "", deep: bool = False) -> bool:
+                        custom: str = "", deep: bool = False, since: str = "") -> bool:
     """Run suggest_reading on a daemon thread; the overlay polls /reading/status."""
     existing = get_reading_job(slug)
     if existing and existing.get("status") == "running":
@@ -464,7 +464,7 @@ def start_reading_async(slug: str, purpose: str = "related", target_id=None,
     def runner():
         try:
             res = suggest_reading(slug, purpose=purpose, target_id=target_id,
-                                  custom=custom, deep=deep)
+                                  custom=custom, deep=deep, since=since)
             err = res.get("error")
             with _READING_LOCK:
                 _READING_JOBS[slug] = {"status": "failed" if err else "done",
@@ -670,7 +670,7 @@ def recommend_collection(slug: str, title: str, abstract: str) -> str:
 
 
 def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
-                    custom: str = "", deep: bool = False) -> dict:
+                    custom: str = "", deep: bool = False, since: str = "") -> dict:
     """Purpose-driven arXiv discovery for a topic. Stores candidates in
     topic_suggestions (pending), tagged with the target so Accept can link them.
     Returns ``{added, error}``."""
@@ -735,11 +735,11 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
     try:
         if deep:                                  # 🔬 Deep search: tool-using sub-agent
             from . import paper_finder
-            cands = paper_finder.deep_find(t["collections"][0], focus, intent, limit=limit)
+            cands = paper_finder.deep_find(t["collections"][0], focus, intent, limit=limit, since=since)
         else:
             cands = discover.find_related_papers(focus, exclude_titles=have_titles, limit=limit,
                                                  intent=intent, prefer=hist["accepted_titles"],
-                                                 avoid=hist["dismissed_titles"])
+                                                 avoid=hist["dismissed_titles"], since=since)
         cands = discover.validate_candidates(target_label or intent, cands, intent)  # find → verify
         cands = discover.rerank_by_profile(                                          # learn → re-rank
             cands, discover.preference_profile(hist["accepted_titles"], hist["dismissed_titles"]),

@@ -25,7 +25,7 @@ FINDER_TOOLS = [f"mcp__pa__{t}" for t in
                  "read_wiki_page", "read_paper_text")]
 
 
-def deep_find(slug: str, focus: str, intent: str, *, limit: int = 10) -> list[dict]:
+def deep_find(slug: str, focus: str, intent: str, *, limit: int = 10, since: str = "") -> list[dict]:
     """Spawn the paper-finder agent (MCP scoped to ``slug``, read-only); parse its
     JSON picks; fetch each arXiv id's metadata so the validator has a real abstract.
     Returns pre-validation candidates ``[{arxiv_id, title, summary, authors, note}]``.
@@ -74,7 +74,9 @@ def deep_find(slug: str, focus: str, intent: str, *, limit: int = 10) -> list[di
         meta = metas.get(p["arxiv_id"])
         if not meta:
             continue                                     # invented / unresolvable id → drop
-        out.append({"arxiv_id": p["arxiv_id"], "title": meta.get("title") or p["title"],
-                    "summary": meta.get("abstract", ""), "authors": meta.get("authors", ""),
-                    "note": p["note"]})
+        cand = {"arxiv_id": p["arxiv_id"], "title": meta.get("title") or p["title"],
+                "summary": meta.get("abstract", ""), "authors": meta.get("authors", ""),
+                "year": meta.get("year", ""), "note": p["note"]}
+        if discover.passes_since(cand, since):           # respect the date cap
+            out.append(cand)
     return out

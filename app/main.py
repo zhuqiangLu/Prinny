@@ -419,14 +419,16 @@ def topic_question_undo(slug: str) -> RedirectResponse:
 # --- topic suggested reading (purpose-driven external discovery) ------------
 @app.post("/t/{slug}/reading/suggest")
 def topic_reading_suggest(slug: str, purpose: str = Form("broaden"), target: str = Form(""),
-                          custom: str = Form(""), deep: str = Form("")) -> RedirectResponse:
+                          custom: str = Form(""), deep: str = Form(""),
+                          since: str = Form("")) -> RedirectResponse:
     """Kick off suggested-reading discovery on a background thread; the reading
     pane renders an overlay that polls /reading/status. Redirect is immediate.
-    ``deep`` ('1') routes to the tool-using paper-finder sub-agent."""
+    ``deep`` ('1') routes to the tool-using paper-finder sub-agent; ``since`` caps
+    out papers published before that date."""
     if topics_mod.get_topic(slug):
         tgt = int(target) if (target or "").strip().isdigit() else None
         topic_view.start_reading_async(slug, purpose=purpose, target_id=tgt, custom=custom,
-                                       deep=(deep == "1"))
+                                       deep=(deep == "1"), since=since)
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
@@ -2366,13 +2368,13 @@ def wiki_benchmarks_status(slug: str) -> JSONResponse:
 @app.post("/c/{slug}/wiki/recommend-add", response_class=HTMLResponse)
 def wiki_recommend_add(request: Request, slug: str, purpose: str = Form("gaps"),
                        target: str = Form(""), custom: str = Form(""),
-                       deep: str = Form("")) -> HTMLResponse:
+                       deep: str = Form(""), since: str = Form("")) -> HTMLResponse:
     """Kick off arXiv discovery for the chosen purpose on a background thread and
     re-render the panel (which shows the overlay). ``deep`` ('1') routes to the
-    tool-using paper-finder sub-agent."""
+    tool-using paper-finder sub-agent; ``since`` caps out papers before that date."""
     _require_collection(slug)
     wiki.start_reading_async(slug, purpose=purpose, target=target, custom=custom,
-                             deep=(deep == "1"))
+                             deep=(deep == "1"), since=since)
     return _wiki_panel(request, slug)
 
 

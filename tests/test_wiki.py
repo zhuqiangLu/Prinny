@@ -653,6 +653,18 @@ def test_concept_crud_and_survives_regenerate(tmp_path, monkeypatch):
     assert "My Renamed" not in wiki._concept_names("vlms")
 
 
+def test_passes_since_date_cap():
+    """The suggested-reading date cap: drop papers earlier than `since`, keep newer +
+    undatable ones (month granularity; arXiv id YYMM or a year field)."""
+    import app.discover as d
+    assert d.passes_since({"arxiv_id": "2606.01234"}, "2026-01") is True    # June 2026 ≥ Jan 2026
+    assert d.passes_since({"arxiv_id": "2401.01234"}, "2026-01") is False   # Jan 2024 < cutoff
+    assert d.passes_since({"year": "2023"}, "2026") is False                # year-only, older
+    assert d.passes_since({"year": "2026"}, "2026-06") is True              # same year → lenient
+    assert d.passes_since({"title": "x"}, "2026") is True                   # undatable → keep
+    assert d.passes_since({"arxiv_id": "2401.0"}, "") is True               # no cutoff → keep
+
+
 def test_preference_profile_and_rerank():
     """Learning: kept-paper words boost, passed-on words penalise, and a
     previously-dismissed candidate is tagged + down-weighted (but not removed)."""
