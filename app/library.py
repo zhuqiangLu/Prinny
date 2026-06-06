@@ -280,9 +280,49 @@ def workspace_stats() -> dict:
             "OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>''"
         ).fetchone()["n"]
         return {"papers": papers or 0, "highlights": highlights or 0,
-                "notes": notes or 0, "unread": unread or 0}
+                "notes": notes or 0, "unread": unread or 0,
+                "storage": _local_storage_human()}
     finally:
         con.close()
+
+
+def _local_storage_human() -> str:
+    """Human-readable estimate of on-disk usage in ~/.prinny: the cached PDF store +
+    app.sqlite + the collections/ tree (wiki, notes, thoughts). Best-effort."""
+    from .config import APP_DIR, DB_PATH, COLLECTIONS_DIR
+    from . import pdf_store
+
+    def _dir_size(p) -> int:
+        total = 0
+        try:
+            for f in p.rglob("*"):
+                if f.is_file():
+                    try:
+                        total += f.stat().st_size
+                    except OSError:
+                        pass
+        except (OSError, AttributeError):
+            pass
+        return total
+
+    total = 0
+    try:
+        total += DB_PATH.stat().st_size if DB_PATH.exists() else 0
+    except OSError:
+        pass
+    total += _dir_size(COLLECTIONS_DIR)
+    try:
+        store = pdf_store.store_dir()            # configured PDF store path
+        if store and store.exists():
+            total += _dir_size(store)
+    except Exception:  # noqa: BLE001
+        total += _dir_size(APP_DIR / "pdfs")     # fall back to the default location
+    # Human units.
+    for unit in ("B", "KB", "MB", "GB"):
+        if total < 1024 or unit == "GB":
+            return f"{total:.0f} {unit}" if unit in ("B", "KB") else f"{total:.1f} {unit}"
+        total /= 1024
+    return f"{total:.1f} GB"
 
 
 def search(q: str, limit: int = 12) -> list[dict]:
@@ -608,8 +648,8 @@ def duplicate_collection(slug: str) -> str | None:
                 (new_slug, t["paper_id"], t["agent_session_id"], t["created_at"], t["last_active_at"]))
             new_tid = cur.lastrowid
             con.execute(
-                "INSERT INTO chat_messages (thread_id, role, content, context_refs, created_at) "
-                "SELECT ?, role, content, context_refs, created_at FROM chat_messages WHERE thread_id=?",
+                "INSERT INTO chat_messages (thread_id, role, content, context_refs, images, created_at) "
+                "SELECT ?, role, content, context_refs, images, created_at FROM chat_messages WHERE thread_id=?",
                 (new_tid, t["id"]))
         con.commit()
     finally:

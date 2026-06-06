@@ -20,12 +20,13 @@
   </div>
 
   <!-- Stats bar -->
-  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-slate-100">
     {% for icon, bg, fg, n, label in [
         ("📄","bg-indigo-50","text-indigo-500", stats.papers, "Papers"),
         ("✦","bg-amber-50","text-amber-500", stats.highlights, "Highlights"),
         ("✎","bg-sky-50","text-sky-500", stats.notes, "Notes"),
-        ("◷","bg-emerald-50","text-emerald-500", stats.unread, "Unread")] %}
+        ("◷","bg-emerald-50","text-emerald-500", stats.unread, "Unread"),
+        ("🗄","bg-slate-100","text-slate-500", stats.storage, "Local storage")] %}
     <div class="flex items-center gap-3 px-5 py-4">
       <span class="grid place-items-center w-10 h-10 shrink-0 rounded-xl {{ bg }} {{ fg }} text-lg">{{ icon }}</span>
       <span><span class="block text-xl font-semibold text-slate-900 tabular-nums leading-none">{{ n }}</span>

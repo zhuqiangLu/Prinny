@@ -115,6 +115,7 @@
             <p class="text-xs text-slate-400">Saved with the Save button below.</p>
           </div>
 
+          {% if false %}{# Theme picker removed — light/dark + the default scene are enough. #}
           <!-- Theme: applies immediately (separate from Save) -->
           <div class="{{ sect }}" x-data="themeWizard()">
             <div class="flex items-center justify-between mb-1">
@@ -185,6 +186,7 @@
                       x-text="busy ? 'Applying…' : 'Apply theme'"></button>
             </div>
           </div>
+          {% endif %}
 
           <!-- Custom logo & button icons -->
           <div class="{{ sect }} text-xs text-slate-500 space-y-1.5">
