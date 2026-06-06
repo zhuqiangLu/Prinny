@@ -2152,14 +2152,20 @@ def thoughts_create(slug: str, text: str = Form(...), synth_kind: str = Form("se
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
+def _thoughts_panel_response(request: Request, slug: str) -> HTMLResponse:
+    """Render the Thoughts tab fragment with each body pre-rendered to markdown HTML."""
+    items = thoughts_mod.list_thoughts(slug)
+    for t in items:
+        t["body_html"] = render_md(t["body"], slug)
+    return templates.TemplateResponse(
+        request, "_thoughts_panel.html", {"slug": slug, "thoughts": items})
+
+
 @app.get("/c/{slug}/thoughts/panel", response_class=HTMLResponse)
 def thoughts_panel(request: Request, slug: str) -> HTMLResponse:
     """Thoughts tab body for the collection chat panel (HTMX-loaded)."""
     _require_collection(slug)
-    return templates.TemplateResponse(
-        request, "_thoughts_panel.html",
-        {"slug": slug, "thoughts": thoughts_mod.list_thoughts(slug)},
-    )
+    return _thoughts_panel_response(request, slug)
 
 
 @app.post("/c/{slug}/thoughts/add", response_class=HTMLResponse)
@@ -2170,21 +2176,24 @@ def thoughts_add(
     _require_collection(slug)
     if text.strip():
         thoughts_mod.create_thought(slug, text.strip(), synth_kind=synth_kind, author_origin="human")
-    return templates.TemplateResponse(
-        request, "_thoughts_panel.html",
-        {"slug": slug, "thoughts": thoughts_mod.list_thoughts(slug)},
-    )
+    return _thoughts_panel_response(request, slug)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/update")
-def thoughts_update(slug: str, tid: str, text: str = Form(...)) -> RedirectResponse:
+def thoughts_update(request: Request, slug: str, tid: str, text: str = Form(...)):
+    """Edit a thought. From the Thoughts-tab panel (HTMX) → return the refreshed panel;
+    from the full /thoughts page (plain form) → redirect back to it."""
     thoughts_mod.update_thought(slug, tid, text.strip())
+    if request.headers.get("HX-Request"):
+        return _thoughts_panel_response(request, slug)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/delete")
-def thoughts_delete(slug: str, tid: str) -> RedirectResponse:
+def thoughts_delete(request: Request, slug: str, tid: str):
     thoughts_mod.delete_thought(slug, tid)
+    if request.headers.get("HX-Request"):
+        return _thoughts_panel_response(request, slug)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 

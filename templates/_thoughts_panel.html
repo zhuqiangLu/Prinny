@@ -1,9 +1,10 @@
-{# Thoughts tab body (collection chat panel). Quick add + recent list; full
-   management (edit/delete/consolidate) lives on the /thoughts page. #}
+{# Thoughts tab body (collection chat panel). Quick add + recent cards. Each card
+   renders its body as markdown, expands on click, and is editable inline. Full
+   management (supersede/consolidate) lives on the /thoughts page. #}
 <div id="thoughts-panel" class="space-y-3">
   <form hx-post="/c/{{ slug }}/thoughts/add" hx-target="#thoughts-panel" hx-swap="outerHTML"
         hx-on::after-request="if(event.detail.successful) this.reset()">
-    <textarea name="text" rows="3" required placeholder="A new thought…"
+    <textarea name="text" rows="3" required placeholder="A new thought… (markdown supported)"
               class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
     <div class="mt-1 flex items-center gap-2">
       <button class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add thought</button>
@@ -20,13 +21,42 @@
   {% else %}
   <ul class="space-y-2">
     {% for t in thoughts %}
-    <li class="rounded border border-slate-200 p-2">
-      <div class="text-xs text-slate-400">{{ t.created }}
-        {% if t.synth_kind == "reasoning" %}<span class="ml-1 rounded bg-indigo-100 text-indigo-700 px-1">reasoning</span>{% endif %}
-        {% if t.author_origin == "agent" %}<span class="ml-1 rounded bg-amber-100 text-amber-700 px-1">agent</span>{% endif %}
-        {% for tag in t.tags %}<span class="ml-1 rounded bg-slate-100 px-1">{{ tag }}</span>{% endfor %}
+    <li class="rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
+        x-data="{ open: false, editing: false }">
+      {# header: meta + badges + expand chevron #}
+      <div class="flex items-center gap-1.5 px-2.5 pt-2 text-xs text-slate-400 cursor-pointer select-none"
+           @click="open = !open">
+        <span>{{ t.created }}</span>
+        {% if t.synth_kind == "reasoning" %}<span class="rounded bg-indigo-100 text-indigo-700 px-1">reasoning</span>{% endif %}
+        {% if t.author_origin == "agent" %}<span class="rounded bg-amber-100 text-amber-700 px-1">agent</span>{% endif %}
+        {% for tag in t.tags %}<span class="rounded bg-slate-100 px-1">{{ tag }}</span>{% endfor %}
+        <svg class="ml-auto w-3.5 h-3.5 transition-transform" :class="open && 'rotate-180'"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
       </div>
-      <div class="text-sm mt-0.5 text-slate-700" style="white-space:pre-wrap">{{ t.body }}</div>
+      {# rendered markdown body — clamped when collapsed (click to expand), full when open #}
+      <div x-show="!editing"
+           class="prose prose-sm max-w-none px-2.5 pb-2.5 pt-1 text-slate-700 prose-pre:text-xs"
+           :class="open ? '' : 'max-h-24 overflow-hidden cursor-pointer'"
+           @click="if(!open) open = true">{{ t.body_html|safe }}</div>
+      {# actions (only when expanded) #}
+      <div x-show="open && !editing" x-cloak class="flex items-center gap-3 px-2.5 pb-2.5 text-xs">
+        <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ Edit</button>
+        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#thoughts-panel" hx-swap="outerHTML"
+              hx-confirm="Delete this thought? This cannot be undone.">
+          <button class="text-rose-600 hover:text-rose-700">Delete</button>
+        </form>
+      </div>
+      {# inline editor #}
+      <div x-show="editing" x-cloak class="p-2.5">
+        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/update" hx-target="#thoughts-panel" hx-swap="outerHTML">
+          <textarea name="text" rows="6"
+                    class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ t.body }}</textarea>
+          <div class="mt-1 flex items-center gap-2">
+            <button class="rounded bg-slate-900 px-3 py-1 text-xs text-white hover:bg-slate-700">Save</button>
+            <button type="button" @click="editing = false" class="text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+          </div>
+        </form>
+      </div>
     </li>
     {% endfor %}
   </ul>
