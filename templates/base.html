@@ -216,8 +216,7 @@
       </div>
     </nav>
     <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">
-      <button type="button" @click="settingsOpen = true" hx-get="/settings/form?cat=agents" hx-target="#settings-modal-body" hx-swap="innerHTML"
-              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">🤖 <span>Agents</span></button>
+      {# Agents tab hidden from the sidebar — still reachable as a Settings category. #}
       <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
               class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">⚙ <span>Settings</span></button>
       <button type="button" @click="toggleTheme()"
