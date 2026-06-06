@@ -81,30 +81,6 @@
     </div>
   </div>
 
-  <!-- Export wiki: pick sections → standalone print-friendly page (read / Save as PDF) -->
-  <div x-show="wikiExportOpen" x-cloak @keydown.escape.window="wikiExportOpen = false" @click.self="wikiExportOpen = false"
-       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
-    <div class="bg-white rounded-lg shadow-xl w-[min(440px,92vw)] p-5">
-      <div class="flex items-center justify-between mb-1">
-        <h2 class="font-semibold">⬇ Export wiki — “{{ name }}”</h2>
-        <button type="button" @click="wikiExportOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
-      </div>
-      <p class="text-sm text-slate-500 mb-3">Choose what to include. Opens a clean page you can read or <b>Print → Save as PDF</b>.</p>
-      <div class="space-y-1.5 mb-4">
-        {% for key, label in [('thesis','Collection Thesis'),('landscape','Research Landscape'),('concepts','Concepts'),('understanding','Your Understanding (beliefs)'),('benchmarks','Benchmarks'),('connections','Connections & themes'),('papers','Papers')] %}
-        <label class="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="wx" value="{{ key }}" checked class="accent-violet-600"> {{ label }}</label>
-        {% endfor %}
-      </div>
-      <div class="flex items-center gap-2 justify-end">
-        <button type="button" @click="wikiExportOpen = false" class="text-sm text-slate-500 hover:text-slate-700 px-2 py-1">Cancel</button>
-        <button type="button" @click="
-          const ks = [...$root.querySelectorAll('input[name=wx]:checked')].map(c => c.value);
-          if (ks.length) { window.open('/c/{{ slug }}/wiki/export?sections=' + ks.join(','), '_blank'); wikiExportOpen = false; }"
-          class="rounded-lg bg-violet-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-violet-700">Open export →</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Export / sync destination chooser -->
   <div x-show="syncOpen" x-cloak @keydown.escape.window="syncOpen = false" @click.self="syncOpen = false"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
@@ -315,7 +291,6 @@
       syncWith: false,     // ⇅ Pull-from-Zotero sync-preview modal
       graveOpen: false,
       dupOpen: false,
-      wikiExportOpen: false,   // ⬇ Export wiki (section picker → standalone page)
       init() {
         // A notification link (/c/<slug>?tab=benchmarks) jumps straight to that tab.
         const qt = new URLSearchParams(location.search).get("tab");
