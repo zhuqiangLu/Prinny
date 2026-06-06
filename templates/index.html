@@ -348,7 +348,7 @@
               </button>
             </form>
             <form method="post" action="/c/{{ c.slug }}/delete"
-                  onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete “{{ c.name }}” and everything in it (notes, highlights, chat, wiki for this collection)? Papers also in another collection are kept there; your Zotero library is never touched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
+                  {% if c.topics_using %}onsubmit="event.preventDefault(); window.paAlert('Can\'t delete “{{ c.name }}” — it\'s linked to {{ c.topics_using }} research topic{{ 's' if c.topics_using != 1 }} as evidence. Unlink it from {{ 'those topics' if c.topics_using != 1 else 'that topic' }} (topic → Manage collections) first.'); return false;"{% else %}onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete “{{ c.name }}” and everything in it (notes, highlights, chat, wiki for this collection)? Papers also in another collection are kept there; your Zotero library is never touched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;"{% endif %}>
               <button class="grid place-items-center w-7 h-7 rounded text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="Delete this collection locally" aria-label="Delete collection">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
                   <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6m3 5v6m4-6v6"/>

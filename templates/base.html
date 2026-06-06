@@ -291,13 +291,17 @@
         <h2 class="font-semibold text-slate-900 mb-2">Delete <span x-text="kind === 'topic' ? 'topic' : 'collection'"></span> “<span x-text="name"></span>”?</h2>
         <template x-if="kind === 'collection'">
           <div class="space-y-2 text-sm">
-            <template x-if="topics > 0">
-              <p class="rounded bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-amber-800 text-xs">⚠ Used as evidence by <b x-text="topics"></b> research topic<span x-show="topics !== 1">s</span> — they'll lose this source.</p>
+            <template x-if="blocked">
+              <p class="rounded bg-rose-50 border border-rose-200 px-2.5 py-1.5 text-rose-800 text-xs">🔒 Can't delete — used as evidence by <b x-text="topics"></b> research topic<span x-show="topics !== 1">s</span>. Unlink it there first (topic → Manage collections), then delete.</p>
             </template>
-            <p class="text-slate-600">This permanently removes this collection's <b>notes, highlights, wiki, and thoughts</b>, and purges any paper left in no other collection. <b>Zotero is untouched.</b></p>
-            <label class="block text-xs text-slate-500">Type <b class="text-slate-700" x-text="name"></b> to confirm:</label>
-            <input x-model="typed" @keydown.enter.prevent="submit()" spellcheck="false"
-                   class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+            <template x-if="!blocked">
+              <div class="space-y-2">
+                <p class="text-slate-600">This permanently removes this collection's <b>notes, highlights, wiki, and thoughts</b>, and purges any paper left in no other collection. <b>Zotero is untouched.</b></p>
+                <label class="block text-xs text-slate-500">Type <b class="text-slate-700" x-text="name"></b> to confirm:</label>
+                <input x-model="typed" @keydown.enter.prevent="submit()" spellcheck="false"
+                       class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+              </div>
+            </template>
           </div>
         </template>
         <template x-if="kind === 'topic'">
@@ -377,7 +381,8 @@
       return {
         open: false, kind: "", slug: "", name: "", topics: 0, typed: "",
         get action() { return this.kind === "topic" ? `/t/${this.slug}/delete` : `/c/${this.slug}/delete`; },
-        get ready() { return this.kind === "topic" || this.typed.trim() === (this.name || "").trim(); },
+        get blocked() { return this.kind === "collection" && this.topics > 0; },   // linked-topic guard
+        get ready() { return !this.blocked && (this.kind === "topic" || this.typed.trim() === (this.name || "").trim()); },
         show(d) {
           this.kind = d.kind; this.slug = d.slug; this.name = d.name || "";
           this.topics = d.topics || 0; this.typed = ""; this.open = true;

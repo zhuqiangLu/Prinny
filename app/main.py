@@ -153,6 +153,9 @@ def index(request: Request) -> HTMLResponse:
     # Zotero closed). We also offer Zotero collections not yet activated, but that
     # read is best-effort and degrades gracefully if Zotero is unreachable.
     collections = library.list_collections(with_activity=True)
+    _usage = topics_mod.collection_usage()           # {slug: n_topics} — drives the delete guard
+    for c in collections:
+        c["topics_using"] = _usage.get(c["slug"], 0)
     available = []
     source = error = None
     try:
@@ -987,7 +990,16 @@ def collection_summary(slug: str, summary: str = Form("")) -> RedirectResponse:
 
 @app.post("/c/{slug}/delete")
 def collection_delete(slug: str) -> RedirectResponse:
-    _require_collection(slug)
+    col = _require_collection(slug)
+    # Guard: a research topic uses this collection as evidence — deleting it would
+    # orphan that investigation. Refuse; the user must unlink it from the topic(s) first.
+    n = topics_mod.collection_usage().get(slug, 0)
+    if n:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Can't delete “{col['name']}”: it's linked to {n} research topic"
+                    f"{'s' if n != 1 else ''} as evidence. Unlink it from "
+                    f"{'those topics' if n != 1 else 'that topic'} (topic → Manage collections) first."))
     library.delete_collection(slug)
     return RedirectResponse("/", status_code=303)
 
