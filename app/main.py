@@ -116,10 +116,19 @@ def _shutdown() -> None:
     live_session.shutdown_all()   # don't orphan persistent chat processes
 
 
+def _active_job_count() -> int:
+    """Background jobs currently running across all in-memory registries
+    (wiki: draft / benchmark / reading; topic: generate / reading)."""
+    regs = [wiki._DRAFT_JOBS, wiki._BENCH_JOBS, wiki._READING_JOBS,
+            topic_view._GEN_JOBS, topic_view._READING_JOBS]
+    return sum(1 for reg in regs for job in list(reg.values())
+               if (job or {}).get("status") == "running")
+
+
 @app.get("/notifications", response_class=JSONResponse)
 def notifications_feed() -> JSONResponse:
-    """Global background-job notification feed for the sidebar bell."""
-    return JSONResponse(notify.feed())
+    """Global background-job feed + running count for the sidebar Background Jobs item."""
+    return JSONResponse({**notify.feed(), "running": _active_job_count()})
 
 
 @app.post("/notifications/seen", response_class=JSONResponse)

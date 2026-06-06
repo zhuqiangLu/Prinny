@@ -81,6 +81,13 @@
     html.dark .border-rose-100, html.dark .border-violet-100, html.dark .border-indigo-100,
     html.dark .border-sky-200, html.dark .border-amber-200, html.dark .border-emerald-200,
     html.dark .border-rose-200, html.dark .border-violet-200 { border-color:rgba(148,163,184,.20) !important; }
+    /* Tinted gradient headers (e.g. the topic page's violet workspace header) stay
+       light otherwise → light-remapped title text is invisible. Repaint the stops. */
+    html.dark .from-violet-50 { --tw-gradient-from:#241f43 var(--tw-gradient-from-position) !important;
+      --tw-gradient-to:rgb(36 31 67 / 0) var(--tw-gradient-to-position) !important;
+      --tw-gradient-stops:var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+    html.dark .to-white { --tw-gradient-to:#0f172a var(--tw-gradient-to-position) !important; }
+    html.dark .border-violet-100 { border-color:rgba(167,139,250,.18) !important; }
     /* hover states */
     html.dark .hover\:bg-slate-50:hover { background-color:#334155 !important; }
     html.dark .hover\:bg-slate-100:hover { background-color:#3b4a5e !important; }
@@ -162,27 +169,6 @@
         <span class="truncate">{{ b.app_name }}</span>
       </a>
       <div class="ml-auto flex items-center gap-1">
-        {# notification bell: global feed of finished background jobs. A pulsing dot
-           when there are unseen completions; opening the list marks them seen. #}
-        <div class="relative" x-data="{ open: false, unseen: 0, items: [],
-               feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.items = d.items; }).catch(() => {}); },
-               toggle() { this.open = !this.open; if (this.open && this.unseen) { fetch('/notifications/seen', { method: 'POST' }).then(() => this.unseen = 0); } } }"
-             x-init="feed(); setInterval(() => feed(), 12000)">
-          <button type="button" @click="toggle()" class="relative grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                  title="Notifications" aria-label="Notifications">🔔
-            <span x-show="unseen > 0" x-cloak class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-violet-500 ring-2 ring-white animate-pulse"></span>
-          </button>
-          <div x-show="open" x-cloak @click.outside="open = false"
-               class="absolute left-0 mt-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
-            <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Activity</div>
-            <template x-for="n in items" :key="n.id">
-              <a :href="n.link || '#'" class="block px-3 py-2 hover:bg-slate-50 border-b border-slate-50 leading-snug">
-                <span :class="n.ok ? 'text-slate-700' : 'text-rose-700'" x-text="n.message"></span>
-              </a>
-            </template>
-            <p x-show="!items.length" class="px-3 py-3 text-xs text-slate-400 text-center">No recent activity.</p>
-          </div>
-        </div>
         <button type="button" @click="toggleNav()" class="grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                 title="Hide sidebar" aria-label="Hide sidebar">‹</button>
       </div>
@@ -236,7 +222,32 @@
       </div>
     </nav>
     <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">
-      {# Agents tab hidden from the sidebar — still reachable as a Settings category. #}
+      {# Background Jobs: global feed of running/finished background work. Green dot when
+         anything is active or unseen; opening the list marks completions seen. #}
+      <div class="relative" x-data="{ open: false, unseen: 0, running: 0, items: [],
+             feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.running = d.running || 0; this.items = d.items; }).catch(() => {}); },
+             toggle() { this.open = !this.open; if (this.open && this.unseen) { fetch('/notifications/seen', { method: 'POST' }).then(() => this.unseen = 0); } } }"
+           x-init="feed(); setInterval(() => feed(), 8000)">
+        <button type="button" @click="toggle()"
+                class="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50">
+          <span class="shrink-0 w-2.5 h-2.5 rounded-full" :class="running > 0 ? 'bg-emerald-500 animate-pulse' : (unseen > 0 ? 'bg-emerald-500' : 'bg-slate-300')"></span>
+          <span class="min-w-0">
+            <span class="block font-medium text-slate-800 leading-tight">Background Jobs</span>
+            <span class="block text-[11px] text-slate-400 leading-tight"
+                  x-text="running > 0 ? (running + ' running') : (items.length ? items.length + ' recent' : 'idle')"></span>
+          </span>
+        </button>
+        <div x-show="open" x-cloak @click.outside="open = false"
+             class="absolute left-0 bottom-full mb-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
+          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Activity</div>
+          <template x-for="n in items" :key="n.id">
+            <a :href="n.link || '#'" class="block px-3 py-2 hover:bg-slate-50 border-b border-slate-50 leading-snug">
+              <span :class="n.ok ? 'text-slate-700' : 'text-rose-700'" x-text="n.message"></span>
+            </a>
+          </template>
+          <p x-show="!items.length" class="px-3 py-3 text-xs text-slate-400 text-center">No recent activity.</p>
+        </div>
+      </div>
       <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
               class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100">⚙ <span>Settings</span></button>
       <button type="button" @click="toggleTheme()"
