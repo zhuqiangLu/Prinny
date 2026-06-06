@@ -131,6 +131,33 @@
   </section>
   {% endif %}
 
+  {# --- Your Current Understanding (accepted beliefs) — surfaced on the overview so
+        the collection's focus is visible here, and re-fed into Regenerate. --- #}
+  {% if overview.beliefs %}
+  <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-violet-500">◆</span>
+      <h2 class="text-sm font-semibold text-slate-900">Your Current Understanding</h2>
+      <span class="hidden sm:inline text-xs text-slate-400">— beliefs you've accepted; these orient the wiki</span>
+      <button type="button" @click="go('understanding')" class="ml-auto text-[11px] text-violet-600 hover:underline">Manage →</button>
+    </div>
+    <ul class="space-y-1.5">
+      {% for b in overview.beliefs %}
+      <li class="flex items-start gap-2 text-sm text-slate-700">
+        <span class="text-violet-400 mt-0.5">◆</span>
+        <span class="flex-1 min-w-0">{{ b.title }}</span>
+        <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] bg-white border border-violet-200 text-violet-700">{{ b.confidence }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {# discoverable Regenerate that folds these beliefs into the thesis/landscape #}
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="mt-2.5">
+      <button class="text-[11px] text-violet-700 hover:underline"
+              title="Re-draft the Field Model so the Thesis & Landscape foreground these beliefs">↻ Regenerate to fold these into the thesis</button>
+    </form>
+  </section>
+  {% endif %}
+
   {# --- Section 2: Research Landscape (teaser; full lists in their own tabs) --- #}
   {% if overview.landscape.problems or overview.landscape.methods
         or overview.landscape.debates or overview.landscape.open_questions %}

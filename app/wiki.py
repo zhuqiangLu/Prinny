@@ -1416,8 +1416,22 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     from . import agent_skills
     system = (agent_skills.skill_body("field-model")
               or "Output JSON: {thesis:{one_paragraph,core_tension,key_intuition,central_question}, landscape:{problems[],methods[],debates[],open_questions[]}}.")
+    # Fold in the researcher's accepted beliefs so a regenerate ORIENTS the thesis +
+    # landscape around the user's stated focus (the wiki is their understanding, papers
+    # are evidence). User-owned signal, so it's legitimate to foreground — not invent.
+    user_content = "Papers:\n\n" + digest
+    _accepted = list_accepted_beliefs(slug)
+    if _accepted:
+        _focus = "\n".join(f"- {b['title']} (confidence: {b.get('confidence', 'emerging')})"
+                           for b in _accepted)
+        user_content += (
+            "\n\n=== RESEARCHER'S CURRENT UNDERSTANDING ===\n"
+            "The researcher has ACCEPTED these beliefs about this collection. Treat them as "
+            "their stated focus: foreground them in the Thesis (especially core_tension / "
+            "key_intuition / central_question) and let them shape which Landscape items lead. "
+            "Do not contradict or omit them; do not fabricate beyond the papers:\n" + _focus + "\n")
     msgs = [{"role": "system", "content": system},
-            {"role": "user", "content": "Papers:\n\n" + digest}]
+            {"role": "user", "content": user_content}]
     # The field-model agent is non-deterministic — a run occasionally returns prose
     # around the JSON, a truncated object, or nothing. Retry once before giving up,
     # and log the raw output so a real failure is debuggable (not just "no output").
