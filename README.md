@@ -1,5 +1,5 @@
 # Prinny — your paper reading sidekick 
-<img width="2172" height="724" alt="image" src="https://github.com/user-attachments/assets/7674f484-f5de-482e-b512-b014d3c0db9c" />
+<img width="2170" height="725" alt="image" src="https://github.com/user-attachments/assets/2eac12c2-99df-4ad4-ba64-236d14559f06" />
 
 **Turn papers, highlights, notes, and conversations into a living mental model of your research field.**
 
@@ -8,6 +8,8 @@
 > review and accept**. You do the reading; the tool helps you organize what you wrote and
 > surfaces gaps.
 
+**TODO
+[] link experiment to coding agent
 ---
 
 ## Requirements
