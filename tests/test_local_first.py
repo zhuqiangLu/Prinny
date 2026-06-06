@@ -382,7 +382,7 @@ def test_arxiv_search_falls_back_to_website_on_api_failure(monkeypatch):
         raise discover.ArxivError("429")
     monkeypatch.setattr(discover, "_arxiv_get", _boom)
     monkeypatch.setattr(discover, "_arxiv_search_html",
-                        lambda q, max_results=10: [{"arxiv_id": "2501.0001", "title": "T", "summary": "s"}])
+                        lambda q, max_results=10, sort="relevance": [{"arxiv_id": "2501.0001", "title": "T", "summary": "s"}])
     out = discover._arxiv_search("all:x", max_results=5)
     assert out and out[0]["arxiv_id"] == "2501.0001"
 

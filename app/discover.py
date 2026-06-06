@@ -116,7 +116,7 @@ def _web_get(url: str, params: dict | None = None, timeout: float = 30.0, retrie
     raise ArxivError(f"arXiv website unreachable: {last}")
 
 
-def _arxiv_search_html(query: str, max_results: int = 10) -> list[dict]:
+def _arxiv_search_html(query: str, max_results: int = 10, sort: str = "relevance") -> list[dict]:
     """Search via the arxiv.org/search HTML page (each result carries id + title +
     full abstract). Returns the same shape as the API search."""
     # The website's `query` param is plain text and ANDs every term, so a long
@@ -125,7 +125,9 @@ def _arxiv_search_html(query: str, max_results: int = 10) -> list[dict]:
     # the AND still returns a usable pool.
     q = re.sub(r"\b(?:all|ti|abs|au|cat|co|jr|rn|id):", " ", query or "")
     q = " ".join(re.sub(r'["()]', " ", q).split()[:6]) or (query or "")
-    r = _web_get(f"{ARXIV_WEB}/search/", params={"searchtype": "all", "query": q, "start": 0})
+    order = "-announced_date_first" if sort == "submittedDate" else "relevance"
+    r = _web_get(f"{ARXIV_WEB}/search/",
+                 params={"searchtype": "all", "query": q, "start": 0, "order": order})
     out = []
     for block in re.findall(r'<li class="arxiv-result">.*?</li>', r.text, re.S):
         idm = re.search(r"arxiv\.org/abs/(\d{4}\.\d{4,5})", block)
@@ -165,15 +167,18 @@ def _arxiv_meta_html(raw_id: str) -> dict | None:
 
 
 # --- gaps ------------------------------------------------------------------
-def _arxiv_search(query: str, max_results: int = 10) -> list[dict]:
+def _arxiv_search(query: str, max_results: int = 10, sort: str = "relevance") -> list[dict]:
     """Search arXiv. Tries the API, then falls back to the website HTML page when
-    the API fails (429/timeout). Raises ArxivError only if BOTH are unreachable."""
+    the API fails (429/timeout). ``sort`` is 'relevance' (default — on-topic first)
+    or 'submittedDate' (newest first, for explicit 'latest' searches). Raises
+    ArxivError only if BOTH are unreachable."""
+    sort = sort if sort in ("relevance", "submittedDate") else "relevance"
     try:
         r = _arxiv_get({"search_query": query, "max_results": max_results,
-                        "sortBy": "submittedDate", "sortOrder": "descending"})
+                        "sortBy": sort, "sortOrder": "descending"})
     except ArxivError as exc:
         logger.warning("arxiv API search failed (%s); falling back to website", exc)
-        return _arxiv_search_html(query, max_results)
+        return _arxiv_search_html(query, max_results, sort=sort)
     root = ET.fromstring(r.text)
     out = []
     for entry in root.findall(f"{ATOM}entry"):
@@ -393,15 +398,20 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     exclude = {t.lower() for t in (exclude_titles or set())}
     try:
         query_resp = llm.complete([
-            {"role": "system", "content": "Output only a short arXiv search query string."},
+            {"role": "system", "content": "Output only a short arXiv search query string (3-6 keywords)."},
             {"role": "user", "content": f"FOCUS:\n{seed}\n\n"
-             f"Give a concise arXiv search query (keywords) for recent papers that {q_goal}."},
+             f"Give a concise arXiv search query for papers that {q_goal}. CRITICAL: anchor the "
+             "query on this collection's DEFINING subject/domain (the specific modality, task, or "
+             "object it's about) so results stay on-topic — don't reduce it to generic ML terms "
+             "(e.g. 'reasoning', 'memory', 'attention', 'efficiency') that match unrelated work. "
+             "Lead with the domain-anchor terms."},
         ]).strip().strip('"')
     except Exception:  # noqa: BLE001
         return []
     query = f"all:{query_resp}" if ":" not in query_resp else query_resp
     # Fetch a wider candidate pool than `limit` so the LLM has room to pick the
-    # best `limit` after dropping papers already present.
+    # best `limit` after dropping papers already present. Relevance-sorted (not
+    # recency) so the pool is on-topic, not just "newest that loosely matches".
     pool = max(limit * 2, 20)
     results = [r for r in _arxiv_search(query, max_results=pool)
                if r["title"].lower() not in exclude]
@@ -527,10 +537,14 @@ def rerank_by_profile(candidates: list[dict], profile: dict,
     for i, c in enumerate(candidates):
         toks = _tokens(f"{c.get('title','')} {c.get('summary','')}")
         seen = c.get("arxiv_id") in dismissed_arxiv
+        # Strong (validator 'pass') matches lead; 'weak' sort beneath them. Then the
+        # learned preference score; then finder order. So the on-topic, verified
+        # suggestions are at the top and borderline ones don't bury them.
+        verdict_rank = 0 if c.get("verdict") == "pass" else 1
         score = len(toks & boost) - len(toks & penalise) - (2 if seen else 0)
-        scored.append((-score, i, {**c, "seen_before": seen}))
-    scored.sort(key=lambda x: (x[0], x[1]))      # score desc, then finder order
-    return [c for _s, _i, c in scored]
+        scored.append((verdict_rank, -score, i, {**c, "seen_before": seen}))
+    scored.sort(key=lambda x: (x[0], x[1], x[2]))   # pass>weak, score desc, finder order
+    return [c for _v, _s, _i, c in scored]
 
 
 # --- stale papers ----------------------------------------------------------
