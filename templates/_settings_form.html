@@ -16,13 +16,11 @@
     <div class="flex gap-8">
       {# --- sidebar (Apple-style: icon + label, rounded selection) --- #}
       <nav class="w-52 shrink-0 space-y-1 text-sm">
-        {% set cats = [("engine","Engine & model","⚙"),("appearance","Appearance","🎨"),("agents","Agents","🤖"),("zotero","Zotero","📚"),("storage","Storage","🗄"),("display","Reading & display","📖"),("advanced","Advanced","🧪")] %}
-        {% for key, label, icon in cats %}
+        {% set cats = [("engine","Engine & model"),("appearance","Appearance"),("agents","Agents"),("zotero","Zotero"),("storage","Storage"),("display","Reading & display"),("advanced","Advanced")] %}
+        {% for key, label in cats %}
         <button type="button" @click="cat = '{{ key }}'"
                 :class="cat === '{{ key }}' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'"
-                class="flex items-center gap-2.5 w-full text-left rounded-lg px-2.5 py-2">
-          <span class="grid place-items-center w-6 h-6 shrink-0 rounded-md text-sm"
-                :class="cat === '{{ key }}' ? 'bg-white/20' : 'bg-slate-100'">{{ icon }}</span>
+                class="flex items-center w-full text-left rounded-lg px-3 py-2">
           <span class="truncate">{{ label }}</span>
         </button>
         {% endfor %}
