@@ -9,6 +9,10 @@
                 'method':  ('🔧','text-sky-700','border-sky-200','bg-sky-50'),
                 'problem': ('🚩','text-rose-700','border-rose-200','bg-rose-50')}[e.kind]
                 or ('•','text-slate-700','border-slate-200','bg-slate-50') %}
+{% set KS = {'problem': ('#f43f5e','bg-rose-50 text-rose-700 border-rose-200'),
+             'method':  ('#0ea5e9','bg-sky-50 text-sky-700 border-sky-200'),
+             'concept': ('#7c3aed','bg-violet-50 text-violet-700 border-violet-200'),
+             'belief':  ('#f59e0b','bg-amber-50 text-amber-800 border-amber-200')} %}
 <div x-data="{ editing: false }">
   <div class="flex items-start gap-2 mb-1">
     <span class="text-lg">{{ style[0] }}</span>
@@ -67,8 +71,10 @@
   <p class="text-xs font-medium text-slate-500 mb-1.5">Related</p>
   <div class="flex flex-wrap gap-1.5">
     {% for r in e.related %}
-    <button type="button" class="text-[11px] rounded px-1.5 py-0.5 border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-            hx-get="/c/{{ slug }}/wiki/entity?key={{ r.key|urlencode }}" hx-target="#entity-modal-body" hx-swap="innerHTML">{{ r.label|truncate(34) }}</button>
+    {% set ks = KS.get(r.kind, ('#94a3b8','bg-slate-50 text-slate-600 border-slate-200')) %}
+    <button type="button" class="inline-flex items-start gap-1 text-[11px] rounded px-1.5 py-0.5 border text-left hover:opacity-80 {{ ks[1] }}"
+            hx-get="/c/{{ slug }}/wiki/entity?key={{ r.key|urlencode }}" hx-target="#entity-modal-body" hx-swap="innerHTML">
+      <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1" style="background:{{ ks[0] }}"></span><span>{{ r.label }}</span></button>
     {% endfor %}
   </div>
   {% endif %}

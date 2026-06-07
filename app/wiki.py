@@ -2944,6 +2944,18 @@ def connection_view(slug: str) -> dict | None:
             "needs_naming": any(t["name"] is None for t in themes)}
 
 
+def theme_detail(slug: str, sig: str) -> dict | None:
+    """The full theme record (entities, binding papers, explanation, cohesion) for the
+    Map's theme popup — looked up by sig from the live connection view."""
+    cx = connection_view(slug)
+    if not cx:
+        return None
+    for t in cx.get("themes", []):
+        if t.get("sig") == sig:
+            return t
+    return None
+
+
 def entity_detail(slug: str, key: str) -> dict | None:
     """Rich detail for one Map entity (concept/method/problem): description, top papers,
     related entities. Concepts include blurb + attention score (editable in the popup)."""

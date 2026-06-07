@@ -2612,6 +2612,14 @@ def _regen_gate(request: Request, slug: str) -> HTMLResponse:
     })
 
 
+@app.get("/c/{slug}/wiki/theme", response_class=HTMLResponse)
+def wiki_theme_detail(request: Request, slug: str, sig: str = "") -> HTMLResponse:
+    """Theme detail popup (entities by kind, binding papers, explanation, rename)."""
+    _require_collection(slug)
+    return templates.TemplateResponse(request, "_theme_detail.html",
+                                      {"slug": slug, "t": wiki.theme_detail(slug, sig)})
+
+
 @app.get("/c/{slug}/wiki/entity", response_class=HTMLResponse)
 def wiki_entity_detail(request: Request, slug: str, key: str = "") -> HTMLResponse:
     """Detail popup for a Map entity (concept/method/problem): description, top papers,

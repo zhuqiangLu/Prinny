@@ -599,11 +599,6 @@
     <div class="flex items-baseline gap-2 mb-1">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⊞</span> Map</h2>
     </div>
-    <p class="text-xs text-slate-500 mb-3">
-      The collection forms <b class="text-slate-700">{{ ov.themes }}</b> theme{{ 's' if ov.themes != 1 }}
-      across <b class="text-slate-700">{{ ov.ideas }}</b> idea{{ 's' if ov.ideas != 1 }}
-      and <b class="text-slate-700">{{ ov.papers }}</b> paper{{ 's' if ov.papers != 1 }}.
-    </p>
     <style>
       .kg-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .5rem; }
       .kg-2col { display: block; }   /* card view and graph view are toggled, not side-by-side */
@@ -641,7 +636,7 @@
        Concepts show blurb + attention score and an Add button; all are paper-anchored. #}
     <div x-show="['concept','method','problem'].includes(mapView)" x-cloak class="mb-4">
       <div class="flex items-center gap-2 mb-2">
-        <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — ideas you attend to (synonyms drive Focus).' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
+        <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — the recurring ideas in this collection; your highlights/notes on them drive Focus.' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
         <button type="button" @click="mapView = 'theme'" class="ml-auto text-[11px] text-slate-400 hover:text-slate-700">← back to themes</button>
       </div>
       {% set ENT = {'concept': ('◈','border-violet-200','bg-violet-50/40','text-violet-800'),
@@ -685,12 +680,12 @@
         <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
-        <div class="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow transition" x-data="{ detail: false, editing: false }"
+        <div class="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow hover:border-slate-300 transition" x-data="{ editing: false }"
              data-ask-kind="theme" data-ask-label="{{ t.name or ('Theme ' ~ t.index) }}" data-ask-icon="⚯"
              @contextmenu.prevent="window.paAskEl($el)">
-          <div class="p-4 cursor-pointer" @click="detail = !detail">
+          <div class="p-4 cursor-pointer" @click="entityOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/theme?sig={{ t.sig }}', { target: '#entity-modal-body', swap: 'innerHTML' })">
             <div class="flex items-start gap-3">
-              <div class="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums shrink-0 {{ theme_color(t.index)|trim }}">{{ t.index }}</div>
+              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm {{ theme_color(t.index)|trim }}">◆</span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
@@ -706,7 +701,7 @@
                   <button type="button" x-show="!editing" @click.stop="editing = true" title="Rename theme" class="text-[12px] text-slate-300 hover:text-violet-600">✎</button>
                   <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)" class="opacity-0 group-hover:opacity-100 transition text-[12px] text-slate-300 hover:text-violet-600">💬</button>
                   {% if t.user_named %}<span class="text-[9px] text-slate-300" title="You named this theme">· yours</span>{% endif %}
-                  <span class="ml-auto text-[11px] text-slate-400" x-text="detail ? '▾' : '▸'"></span>
+                  <span class="ml-auto text-[11px] text-slate-300">▸</span>
                 </div>
                 {% if t.description %}
                 <p class="text-[12.5px] text-slate-600 mt-1 leading-snug">{{ t.description }}</p>
@@ -732,29 +727,6 @@
                   {% endif %}
                 </div>
               </div>
-            </div>
-          </div>
-          <div x-show="detail" x-cloak class="px-4 pb-4 -mt-1">
-            <div class="border-t border-slate-100 pt-3">
-              {% if t.explanation %}<p class="text-[12.5px] text-slate-600 leading-relaxed mb-3">{{ t.explanation }}</p>
-              {% else %}<p class="text-[11px] text-slate-400 italic mb-3">No agent explanation yet — it's written on the next ↻ Regenerate.</p>{% endif %}
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">All ideas ({{ t.n_ideas }})</div>
-              <div class="flex flex-wrap gap-1.5 mb-3">
-                {% for kind in ['problem', 'method', 'concept', 'belief'] %}
-                  {% for e in t.entities if e.kind == kind %}
-                  <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border max-w-full {{ KIND_STYLE[kind].cls }}">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0" style="background:{{ KIND_STYLE[kind].dot }}"></span><span class="min-w-0">{{ e.label }}</span>
-                  </span>
-                  {% endfor %}
-                {% endfor %}
-              </div>
-              {% if t.key_papers %}
-              <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Binding papers</div>
-              <ul class="space-y-1 mb-2">
-                {% for k in t.key_papers %}<li><a href="/c/{{ slug }}/p/{{ k.id }}" class="text-[12px] text-violet-700 hover:underline">{{ k.title|truncate(60) }}</a></li>{% endfor %}
-              </ul>
-              {% endif %}
-              <p class="text-[10px] text-slate-400">Connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.</p>
             </div>
           </div>
         </div>
