@@ -11,6 +11,7 @@
 **TODO**  
 
  - [ ] link experiment to coding agent
+ - [ ] "update available" notification — show current version (git SHA + date) and a manual "Check for updates" (git fetch + compare to origin/main → "N commits behind, run `git pull`"); notify only, never auto-update; opt-in startup auto-check to keep the no-phone-home default
 
 
 ## Requirements
