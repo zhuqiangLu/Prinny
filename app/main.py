@@ -1459,12 +1459,29 @@ def chat_post(
     if prefix is not None:
         return _agentic_chat_turn(request, slug, thread_id, prefix, remainder, message)
 
+    # /collection (or /wiki) folds the collection wiki into THIS paper turn. Handled here —
+    # before the sub-agent dispatch — so the literal token never reaches a CLI session
+    # (which would treat "/collection" as its own slash command → "Unknown command").
+    include_collection = False
+    if pid is not None:
+        for token in ("/collection", "/wiki"):
+            if token in message:
+                include_collection = True
+                message = message.replace(token, "").strip()
+
     # Interactive paper sub-agent (PAPER_CHAT_AGENT P8): when a paper with a cached PDF
     # is open, the turn goes to a persistent CLI session that reads the PDF itself.
     # Pasted images reach it via files (Claude Read / Codex -i).
     agent = paper_chat.get_agent(pid)
     if agent is not None:
-        return _paper_subagent_turn(request, slug, col["name"], thread_id, pid, message, agent, images)
+        agent_message = message
+        if include_collection:                       # prepend the wiki for the agent, keep the bubble clean
+            wctx = context._wiki_overview(slug)
+            if wctx:
+                agent_message = (f"Here is this paper's collection wiki, for context:\n\n{wctx}\n\n"
+                                 f"Now, about THIS paper: {message}")
+        return _paper_subagent_turn(request, slug, col["name"], thread_id, pid, message, agent,
+                                    images, agent_message=agent_message)
 
     # The collection side-chat is AGENTIC by default: a tool-using agent that reads
     # the live wiki/notes, may propose wiki edits (gated by the per-collection toggle),
@@ -1473,13 +1490,7 @@ def chat_post(
         return _agentic_chat_turn(request, slug, thread_id, slug, message, message,
                                   mode="answer", images=images)
 
-    # /collection (or /wiki) pulls the collection wiki into a per-paper turn.
-    include_collection = False
-    for token in ("/collection", "/wiki"):
-        if token in message:
-            include_collection = True
-            message = message.replace(token, "").strip()
-
+    # include_collection (the /collection or /wiki token) was resolved above.
     messages, refs = context.build_messages(
         slug, col["name"], history, message, pid, include_collection,
         images=images, artifact=get_artifact(thread_id),
@@ -1622,16 +1633,21 @@ def paper_chat_stream(slug: str, paper_id: int, message: str = Form(""),
     return StreamingResponse(gen(), media_type="application/x-ndjson")
 
 
-def _paper_subagent_turn(request, slug, name, thread_id, paper_id, message, agent, images=None):
+def _paper_subagent_turn(request, slug, name, thread_id, paper_id, message, agent, images=None,
+                         agent_message=None):
     """One turn of the interactive paper sub-agent (reads the PDF + the user's notes via
-    a persistent CLI session). Read-only; nothing is saved to notes/wiki here."""
+    a persistent CLI session). Read-only; nothing is saved to notes/wiki here.
+
+    ``message`` is what the user sees/stores; ``agent_message`` (defaults to it) is what
+    the agent receives — they differ when /collection prepends the wiki for context."""
     paper = library.get_paper(paper_id)
     title = paper["title"] if paper else str(paper_id)
     error, assistant_text = None, ""
     stored = message + (f"\n\n_({len(images)} image{'s' if len(images) != 1 else ''} attached)_"
                         if images else "")
     try:
-        res = agent.answer(slug, name, thread_id, paper_id, title, message, images)
+        res = agent.answer(slug, name, thread_id, paper_id, title,
+                           agent_message if agent_message is not None else message, images)
         assistant_text = res.reply
         add_message(thread_id, "user", stored or "(image)", [{"type": "paper", "id": paper_id}])
         add_message(thread_id, "assistant", assistant_text, [{"type": "paper", "id": paper_id}])
