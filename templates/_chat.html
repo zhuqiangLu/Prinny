@@ -137,6 +137,15 @@
       <span class="ml-1 text-[11px] text-slate-400">ask about this — or just hit send</span>
     </div>
 
+    <!-- active command pill (from the "+" button or "/" menu) -->
+    <div x-show="cmd" x-cloak class="mb-2">
+      <span class="inline-flex items-center gap-1 max-w-full rounded-md border border-violet-200 bg-violet-100 px-2 py-1 text-xs font-mono text-violet-700">
+        <span x-text="cmd ? cmd.c : ''" class="truncate"></span>
+        <button type="button" @click="cmd = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="Remove command">✕</button>
+      </span>
+      <span class="ml-1 text-[11px] text-slate-400" x-text="cmd ? (cmd.kind === 'modifier' ? 'stays on until removed' : (cmd.hint || 'type your input…')) : ''"></span>
+    </div>
+
     <!-- drag lever: pull up/down to resize the input -->
     <div class="-mt-1 mb-1.5 flex justify-center cursor-row-resize group"
          @mousedown.prevent="startResize($event)" title="Drag to resize the input">
@@ -200,21 +209,24 @@
       return {
         images: [],
         ref: null,                 // {kind,label,key,icon} from "Ask in chat" on a card
+        cmd: null,                 // active command pill {c,d,kind}: 'arg'|'modifier' (mutually exclusive with ref)
         sending: false,            // a turn is in flight — Send becomes Stop (interrupt)
         controller: null,          // AbortController for the in-flight turn (Esc/Stop)
         interrupt() { if (this.controller) { try { this.controller.abort(); } catch (e) {} } },
         // --- slash-command autocomplete ---
         cmdOpen: false, cmdItems: [], cmdIdx: 0,
         allCmds() {
+          // kind: 'action' runs on pick; 'arg' becomes a per-turn pill (you type the arg);
+          // 'modifier' becomes a sticky pill (stays across turns until removed).
           const base = [
-            { c: "/help", d: "Show available commands", noArg: true },
-            { c: "/thought", d: "Save a note to your thought stream" },
-            { c: "/find", d: "Find external papers → Suggested reading" },
-            { c: "/gaps", d: "Find papers that fill your wiki's gaps", noArg: true },
-            { c: "/belief", d: "Propose a belief (Accept/Dismiss card)" },
-            { c: "/updatewiki", d: "Propose wiki edits now" },
+            { c: "/help", d: "Show available commands", kind: "action" },
+            { c: "/thought", d: "Save a note to your thought stream", kind: "arg", hint: "your note…" },
+            { c: "/find", d: "Find external papers → Suggested reading", kind: "arg", hint: "focus (optional)…" },
+            { c: "/gaps", d: "Find papers that fill your wiki's gaps", kind: "action" },
+            { c: "/belief", d: "Propose a belief (Accept/Dismiss card)", kind: "arg", hint: "your claim…" },
+            { c: "/updatewiki", d: "Propose wiki edits now", kind: "arg", hint: "instruction (optional)…" },
           ];
-          if (this.paperKey) base.unshift({ c: "/collection", d: "Add the collection wiki to this turn", noArg: true });
+          if (this.paperKey) base.unshift({ c: "/collection", d: "Include the collection wiki in this turn", kind: "modifier" });
           return base;
         },
         onSlashInput() {
@@ -232,10 +244,19 @@
           this.pickCmd(this.cmdItems[this.cmdIdx]);
           this.cmdOpen = false;
         },
-        // Insert a chosen command into the box (used by both the "/" menu and the "+" button).
+        // Pick a command (from the "/" menu or the "+" button). Action commands run now;
+        // arg/modifier commands become a pill in the strip (mutually exclusive with a ref).
         pickCmd(sel) {
+          this.cmdOpen = false;
           const ta = this.$refs.msg;
-          ta.value = sel.c + (sel.noArg ? "" : " ");   // arg-taking commands get a trailing space
+          if (sel.kind === "action") {           // no argument → run immediately
+            ta.value = sel.c;
+            ta.form.requestSubmit();
+            return;
+          }
+          this.cmd = sel;                         // arg/modifier → pill
+          this.ref = null;                        // exclusive with the reference chip
+          ta.value = "";                          // clear any typed "/cmd" — the box now holds just the arg
           ta.focus();
         },
         streaming: !!streaming,
@@ -244,6 +265,7 @@
         base: base || ("/c/" + slug),   // POST base: /c/<slug> (collection) or /t/<slug> (topic)
         onAsk(detail) {            // a card dispatched 'pa-ask' → attach a reference chip
           if (!detail) return;
+          this.cmd = null;         // exclusive with a command pill
           this.ref = { kind: detail.kind, label: detail.label, key: detail.key || "",
                        icon: detail.icon || "◆" };
           const ta = this.$el.querySelector('textarea[name="message"]');
@@ -288,7 +310,7 @@
           const msg = (ta.value || "").trim();
           // Collection side-chat is agentic (tool-using → blocking). Slash-commands
           // also block. A paper-without-sub-agent turn still streams.
-          if (msg.startsWith("/") || !this.paperKey || this.ref) return this.sendBlocking();
+          if (this.cmd || msg.startsWith("/") || !this.paperKey || this.ref) return this.sendBlocking();
           return this.streamTo(`${this.base}/chat/stream`);
         },
         // Per-paper sub-agent turn.
@@ -302,7 +324,8 @@
           const msg = (ta.value || "").trim();
           const imgs = this.images.slice();
           const refData = this.ref;                       // capture before clearing
-          if (!msg && !imgs.length && !refData) return;
+          const cmdData = this.cmd;                        // active command pill (if any)
+          if (!msg && !imgs.length && !refData && !cmdData) return;
           this.sending = true;                            // lock until the turn returns
           const log = document.getElementById("chat-log");
           const optimistic = [];                          // nodes to drop when the server turn arrives
@@ -321,13 +344,14 @@
             });
             ir.appendChild(wrap); log.appendChild(ir); optimistic.push(ir);
           }
-          // optimistic user text bubble (only when there's text or a card ref)
+          // optimistic user text bubble (only when there's text, a card ref, or a command)
           const refPrefix = refData ? (refData.icon + " " + refData.label + (msg ? " — " : "")) : "";
-          if (msg || refData) {
+          const cmdPrefix = cmdData ? (cmdData.c + " ") : "";
+          if (msg || refData || cmdData) {
             const u = document.createElement("div");
             u.className = "flex justify-end";
             u.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-900 text-white"></div>';
-            u.firstElementChild.textContent = refPrefix + msg;
+            u.firstElementChild.textContent = cmdPrefix + refPrefix + msg;
             log.appendChild(u); optimistic.push(u);
           }
           // typing bubble
@@ -336,12 +360,14 @@
           a.innerHTML = '<div class="prose prose-sm max-w-[85%] rounded-lg px-3 py-2 bg-slate-100">'
                       + '<div class="pa-working"><span class="pa-typing" aria-label="working"><i></i><i></i><i></i></span></div></div>';
           log.appendChild(a); optimistic.push(a);
-          ta.value = ""; this.clear(); this.ref = null; log.scrollTop = log.scrollHeight;
+          ta.value = ""; this.clear(); this.ref = null;
+          if (!cmdData || cmdData.kind !== "modifier") this.cmd = null;   // arg clears; sticky modifier stays
+          log.scrollTop = log.scrollHeight;
           this.controller = new AbortController();
           try {
             const resp = await fetch(`${this.base}/chat`, {
               method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({ message: msg, paper_key: this.paperKey || "",
+              body: new URLSearchParams({ message: cmdPrefix + msg, paper_key: this.paperKey || "",
                                           images_json: JSON.stringify(imgs),
                                           ref_json: refData ? JSON.stringify(refData) : "" }),
               signal: this.controller.signal,
@@ -352,7 +378,7 @@
             if (window.htmx && log.lastElementChild) window.htmx.process(log.lastElementChild);
           } catch (e) {
             optimistic.forEach((n) => n.remove());        // drop the optimistic bubbles
-            if (e.name === "AbortError") { ta.value = msg; this.images = imgs; this.ref = refData; }  // interrupted — restore the draft
+            if (e.name === "AbortError") { ta.value = msg; this.images = imgs; this.ref = refData; this.cmd = cmdData; }  // interrupted — restore the draft
             else { const w = a.querySelector(".pa-working"); if (w) w.textContent = "Send failed: " + e; log.appendChild(a); }
           } finally {
             this.sending = false; this.controller = null;
