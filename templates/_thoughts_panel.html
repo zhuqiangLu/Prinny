@@ -60,8 +60,21 @@
            :class="open ? '' : 'max-h-24 overflow-hidden cursor-pointer'"
            @click="if(!open) open = true">{{ t.body_html|safe }}</div>
       {# actions (only when expanded) #}
-      <div x-show="open && !editing" x-cloak class="flex items-center gap-3 px-2.5 pb-2.5 text-xs">
+      <div x-show="open && !editing" x-cloak class="flex items-center gap-3 px-2.5 pb-2.5 text-xs flex-wrap">
         <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ Edit</button>
+        {# link this thought to a paper (anchors it; chip then shows). Posts on change. #}
+        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/anchor" hx-target="#{{ pid }}" hx-swap="outerHTML"
+              hx-trigger="change" class="inline-flex items-center gap-1">
+          <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
+          <input type="hidden" name="panel_id" value="{{ pid }}">
+          <span class="text-slate-400">📄</span>
+          <select name="link_paper" class="rounded border border-slate-300 px-1 py-0.5 text-xs max-w-[12rem]">
+            <option value="">{{ 'Linked — change/unlink' if t.paper_key else 'Link to paper…' }}</option>
+            {% for pp in papers %}
+            <option value="{{ pp.id }}" {% if t.paper_key == (pp.id|string) %}selected{% endif %}>{{ pp.title|truncate(46) }}</option>
+            {% endfor %}
+          </select>
+        </form>
         <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#{{ pid }}" hx-swap="outerHTML"
               hx-confirm="Delete this thought? This cannot be undone.">
           <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">

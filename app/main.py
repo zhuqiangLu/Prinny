@@ -2342,9 +2342,11 @@ def _thoughts_panel_response(request: Request, slug: str, paper_key: str = "",
             if _titles[pk]:
                 t["paper_title"] = _titles[pk]
                 t["paper_link"] = f"/c/{slug}/p/{pk}"
+    papers = [{"id": p["id"], "title": p.get("title") or ""} for p in library.list_papers(slug)]
     return templates.TemplateResponse(
         request, "_thoughts_panel.html",
-        {"slug": slug, "thoughts": items, "paper_key": paper_key, "panel_id": panel_id})
+        {"slug": slug, "thoughts": items, "paper_key": paper_key, "panel_id": panel_id,
+         "papers": papers})
 
 
 @app.get("/c/{slug}/thoughts/panel", response_class=HTMLResponse)
@@ -2376,6 +2378,16 @@ def thoughts_update(request: Request, slug: str, tid: str, text: str = Form(...)
     if request.headers.get("HX-Request"):
         return _thoughts_panel_response(request, slug, paper_key, panel_id)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
+
+
+@app.post("/c/{slug}/thoughts/{tid}/anchor", response_class=HTMLResponse)
+def thoughts_anchor(request: Request, slug: str, tid: str, link_paper: str = Form(""),
+                    paper_key: str = Form(""), panel_id: str = Form("thoughts-panel")):
+    """Link (or unlink) a thought to a paper. `link_paper` is the chosen paper id (or '');
+    paper_key/panel_id keep the panel scope on re-render."""
+    _require_collection(slug)
+    thoughts_mod.set_paper(slug, tid, link_paper or None)
+    return _thoughts_panel_response(request, slug, paper_key, panel_id)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/delete")

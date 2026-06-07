@@ -83,6 +83,7 @@ def get_thought(slug: str, tid: str) -> dict | None:
         "synth_kind": _norm_kind(meta.get("synth_kind")),
         "author_origin": _norm_origin(meta.get("author_origin")),
         "prompted_by": meta.get("prompted_by", ""),
+        "paper_key": str(meta.get("paper_key") or ""),
         "body": body.strip(),
     }
 
@@ -132,6 +133,22 @@ def update_thought(slug: str, tid: str, text: str, synth_kind: str | None = None
     meta["author_origin"] = _norm_origin(meta.get("author_origin"))
     meta["synth_kind"] = _norm_kind(synth_kind if synth_kind is not None else meta.get("synth_kind"))
     p.write_text(frontmatter.dump(meta, text), encoding="utf-8")
+    return True
+
+
+def set_paper(slug: str, tid: str, paper_key: str | None) -> bool:
+    """Anchor (or unanchor) a thought to a paper — sets/clears paper_key in frontmatter,
+    preserving everything else. Lets the user link orphan thoughts (captured before
+    anchoring, or from the collection chat)."""
+    p = _path(slug, tid)
+    if not p.exists():
+        return False
+    meta, body = frontmatter.parse(p.read_text(encoding="utf-8"))
+    if paper_key:
+        meta["paper_key"] = str(paper_key)
+    else:
+        meta.pop("paper_key", None)
+    p.write_text(frontmatter.dump(meta, body), encoding="utf-8")
     return True
 
 
