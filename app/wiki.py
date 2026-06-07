@@ -1307,6 +1307,20 @@ def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -
     if purpose == "adjacent":
         return (f"{para}\n\nConcepts: {', '.join(concepts)}".strip(),
                 "come from an adjacent area this collection doesn't yet cover but that connects to it")
+    if purpose == "similar":
+        # Seed from THE paper being read (title + abstract); bias toward collection focus.
+        from . import library as _lib
+        pid = int(target) if (target and str(target).isdigit()) else None
+        p = _lib.get_paper(pid) if pid else None
+        title = (p or {}).get("title", "") or ""
+        abstract = ((p or {}).get("abstract") or "").strip()
+        if not abstract and pid:
+            abstract = _pdf_abstract(pid)
+        seed = f"Paper: {title}\n\nAbstract: {abstract[:1500]}".strip()
+        foc = ", ".join(concepts[:8])
+        intent = ("be closely similar in topic and method to the paper above"
+                  + (f", and connect to this collection's themes ({foc})" if foc else ""))
+        return (seed, intent)
     if purpose == "custom":
         return (_add_seed(slug), custom.strip() or "be worth reading next for this collection")
     return (_add_seed(slug), "")        # default: original 'extend/fill gaps' framing

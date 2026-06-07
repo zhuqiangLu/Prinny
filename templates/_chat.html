@@ -218,7 +218,17 @@
         allCmds() {
           // kind: 'action' runs on pick; 'arg' becomes a per-turn pill (you type the arg);
           // 'modifier' becomes a sticky pill (stays across turns until removed).
-          const base = [
+          // Paper chat = paper-relevant commands only; collection-level ones live in the
+          // collection chat.
+          if (this.paperKey) {
+            return [
+              { c: "/collection", d: "Include the collection wiki in this turn", kind: "modifier" },
+              { c: "/find", d: "Find papers similar to this paper", kind: "arg", hint: "focus (optional)…" },
+              { c: "/thought", d: "Save a note on this paper", kind: "arg", hint: "your note…" },
+              { c: "/help", d: "Show available commands", kind: "action" },
+            ];
+          }
+          return [
             { c: "/help", d: "Show available commands", kind: "action" },
             { c: "/thought", d: "Save a note to your thought stream", kind: "arg", hint: "your note…" },
             { c: "/find", d: "Find external papers → Suggested reading", kind: "arg", hint: "focus (optional)…" },
@@ -226,8 +236,6 @@
             { c: "/belief", d: "Propose a belief (Accept/Dismiss card)", kind: "arg", hint: "your claim…" },
             { c: "/updatewiki", d: "Propose wiki edits now", kind: "arg", hint: "instruction (optional)…" },
           ];
-          if (this.paperKey) base.unshift({ c: "/collection", d: "Include the collection wiki in this turn", kind: "modifier" });
-          return base;
         },
         onSlashInput() {
           const ta = this.$refs.msg;

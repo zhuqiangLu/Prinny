@@ -1776,7 +1776,10 @@ def _chat_command_turn(request, slug, prefix, remainder, original, paper_key: st
         where = "this paper's notes" if paper_key else "your **thought stream**"
         return _chat_static_turn(request, slug, original, f"✓ Saved to {where}.")
     if prefix == "find":
-        if text:
+        if paper_key:                       # in a paper chat → find papers SIMILAR to this paper
+            wiki.start_reading_async(slug, purpose="similar", target=paper_key, custom=text)
+            what = "similar to this paper" + (f", focused on “{text}”" if text else "")
+        elif text:
             wiki.start_reading_async(slug, purpose="custom", custom=text)
             what = f"matching “{text}”"
         else:
@@ -1861,6 +1864,19 @@ def wiki_set_proactive(slug: str, on: str = Form("")) -> HTMLResponse:
     _require_collection(slug)
     library.set_wiki_proactive(slug, on == "1")
     return HTMLResponse('on' if on == "1" else 'off')
+
+
+@app.post("/c/{slug}/p/{paper_id}/find-similar", response_class=HTMLResponse)
+def paper_find_similar(slug: str, paper_id: int) -> HTMLResponse:
+    """Fire the discovery agent seeded by THIS paper (similar work, biased to the
+    collection's focus). Results land in the collection's Suggested reading tab."""
+    _require_collection(slug)
+    if library.get_paper(paper_id) is None:
+        raise HTTPException(status_code=404, detail="No paper")
+    started = wiki.start_reading_async(slug, purpose="similar", target=str(paper_id))
+    msg = ("🔎 Searching for similar papers… they'll appear in this collection's "
+           "Suggested reading." if started else "A search is already running — check Suggested reading.")
+    return HTMLResponse(f'<span class="text-emerald-700">{msg}</span>')
 
 
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)
