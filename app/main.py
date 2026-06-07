@@ -1279,6 +1279,16 @@ def papers_remove(slug: str, paper_ids: list[int] = Form(default=[])) -> Redirec
     return RedirectResponse(f"/c/{slug}", status_code=303)
 
 
+@app.post("/c/{slug}/wiki/papers/remove", response_class=HTMLResponse)
+def wiki_papers_remove(request: Request, slug: str, paper_ids: list[int] = Form(default=[])) -> HTMLResponse:
+    """Remove the selected papers from the wiki Papers tab (multi-select). Stages removal
+    (→ Graveyard, restorable; applied to Zotero on next Sync) and re-renders the panel."""
+    _require_collection(slug)
+    for pid in paper_ids:
+        library.stage_removal(slug, pid)
+    return _wiki_panel(request, slug)
+
+
 @app.get("/c/{slug}/graveyard", response_class=HTMLResponse)
 def graveyard_panel(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)

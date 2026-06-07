@@ -953,10 +953,18 @@
 <div x-show="tab==='papers'" x-cloak>
   {% if overview.papers %}
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ themeFilter: 0 }">
+  <section class="rounded-xl border border-slate-200 bg-white p-5"
+           x-data="{ themeFilter: 0, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
+      {# multi-select removal: tick papers → Remove (→ Graveyard, restorable; syncs to Zotero) #}
+      <form x-show="sel.length" x-cloak hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
+            hx-confirm="Remove the selected paper(s) from this collection? They go to the Graveyard (restorable) and are removed from Zotero on the next Sync.">
+        <template x-for="id in sel" :key="id"><input type="hidden" name="paper_ids" :value="id"></template>
+        <button class="rounded bg-rose-600 text-white px-2.5 py-1 text-xs hover:bg-rose-700">Remove selected (<span x-text="sel.length"></span>)</button>
+      </form>
+      <button x-show="sel.length" x-cloak type="button" @click="sel = []" class="text-xs text-slate-400 hover:text-slate-700">clear</button>
       <div class="ml-auto relative">
         <input x-model="q" type="search" placeholder="Search papers…"
                class="w-56 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="Filter by title or author">
@@ -984,6 +992,8 @@
            data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}"
            x-show="(themeFilter === 0 || (themeFilter === -1 && {{ pthemes|length }} === 0) || {{ pthemes|tojson }}.includes(themeFilter)) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
         <div class="flex items-center gap-1 mb-2">
+          <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
+                 class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
           <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
           {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
           {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
