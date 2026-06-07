@@ -191,6 +191,22 @@
         <!-- Zotero -->
         <div x-show="cat === 'zotero'" x-cloak>
           <div class="{{ sect }} space-y-3">
+            {# Setup guide — Prinny reads Zotero two ways; this is how to enable each. #}
+            <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
+              <p class="font-medium text-slate-800">Connecting Zotero</p>
+              <p class="text-slate-600">Prinny only <b>reads</b> your library — it tries Zotero's local API first, then falls back to the SQLite file. Set up either one:</p>
+              <ol class="list-decimal pl-5 space-y-1.5 text-slate-600">
+                <li><b>Recommended — local API (keep Zotero open):</b> in Zotero open
+                  <b>Settings → Advanced → Miscellaneous</b> and tick
+                  <b>“Allow other applications on this computer to communicate with Zotero.”</b>
+                  It exposes <code class="rounded bg-slate-200 px-1">http://localhost:23119/api/</code> (the “HTTP API base” below).
+                  Restart Zotero if it was already running.</li>
+                <li><b>Fallback — SQLite (Zotero must be closed):</b> point the path below at
+                  <code class="rounded bg-slate-200 px-1">~/Zotero/zotero.sqlite</code>. Zotero <b>locks</b> this file while it's open,
+                  so quit Zotero to use this mode — an open Zotero is the usual cause of
+                  <i>“unable to open database file.”</i></li>
+              </ol>
+            </div>
             <div>
               <label class="block text-sm font-medium mb-1">Zotero SQLite path</label>
               <input type="text" name="zotero_sqlite_path" value="{{ config.zotero_sqlite_path }}"
