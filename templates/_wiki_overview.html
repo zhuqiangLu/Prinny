@@ -979,7 +979,6 @@
         {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button>{% endif %}
         <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
         <span x-show="selKeys.length" x-cloak class="text-slate-400">· filtering by <span x-text="selKeys.length"></span></span>
-        <button type="button" x-show="selKeys.length" x-cloak @click="selKeys=[]" class="text-slate-400 hover:text-slate-700">clear</button>
       </div>
       {# chips for the active dimension — click to toggle (multi-select, across/within dims) #}
       <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
@@ -1001,7 +1000,7 @@
       {% for p in overview.papers %}
       <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
            data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}"
-           x-show="(selKeys.length === 0 || selKeys.some(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
+           x-show="(selKeys.length === 0 || selKeys.every(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
         <div class="flex items-center gap-1 mb-2">
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
                  class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
