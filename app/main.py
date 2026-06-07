@@ -2623,10 +2623,20 @@ def wiki_theme_detail(request: Request, slug: str, sig: str = "") -> HTMLRespons
 @app.get("/c/{slug}/wiki/entity", response_class=HTMLResponse)
 def wiki_entity_detail(request: Request, slug: str, key: str = "") -> HTMLResponse:
     """Detail popup for a Map entity (concept/method/problem): description, top papers,
-    related entities. Concepts are editable here; problems/methods are read-only."""
+    related entities, per-entity literature review. Concepts editable; methods/problems read-only."""
     _require_collection(slug)
+    e = wiki.entity_detail(slug, key)
+    review_html = render_md(e["review"], slug) if (e and e.get("review")) else ""
     return templates.TemplateResponse(request, "_entity_detail.html",
-                                      {"slug": slug, "e": wiki.entity_detail(slug, key)})
+                                      {"slug": slug, "e": e, "review_html": review_html})
+
+
+@app.post("/c/{slug}/wiki/entity-reviews/generate", response_class=HTMLResponse)
+def wiki_entity_reviews_generate(request: Request, slug: str) -> HTMLResponse:
+    """Kick off per-entity literature reviews on a background thread; re-render the panel."""
+    _require_collection(slug)
+    wiki.start_entity_reviews_async(slug)
+    return _wiki_panel(request, slug)
 
 
 @app.post("/c/{slug}/wiki/regen/prepare", response_class=HTMLResponse)

@@ -61,6 +61,11 @@
     <p class="text-[11px] text-slate-400 italic mb-4">Read-only — {{ e.kind }}s are redrawn by the agent on ↻ Regenerate.</p>
   {% endif %}
 
+  {% if review_html %}
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Literature review</div>
+  <div class="prose prose-sm max-w-none text-slate-700 mb-4 prose-p:my-1 prose-p:leading-relaxed">{{ review_html|safe }}</div>
+  {% endif %}
+
   {% if e.related %}
   <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Related</div>
   <div class="flex flex-wrap gap-1.5 mb-4">

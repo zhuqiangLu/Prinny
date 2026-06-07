@@ -1997,6 +1997,12 @@ def start_draft_async(slug: str, force: bool = True) -> bool:
     def runner():
         try:
             ok = generate_overview(slug, force=force, stage_cb=cb)
+            if ok:
+                # Refresh per-entity reviews against the regenerated entity set.
+                try:
+                    generate_entity_reviews(slug)
+                except Exception:  # noqa: BLE001 - reviews are best-effort, never block the draft
+                    pass
             _set_job(slug, status="done" if ok else "failed",
                      stage="done" if ok else "failed",
                      finished_at=_now(),
@@ -2994,7 +3000,8 @@ def entity_detail(slug: str, key: str) -> dict | None:
     related = [{"label": lbl(r), "kind": nodes[r]["kind"], "key": r}
                for r, _w in _graph.related(g, key, k=8) if nodes.get(r, {}).get("kind") != "paper"]
     out = {"key": key, "kind": k, "label": n["label"], "papers": papers,
-           "related": related, "blurb": "", "score": 0, "concept_slug": ""}
+           "related": related, "blurb": "", "score": 0, "concept_slug": "",
+           "review": load_entity_reviews(slug).get(key, "")}
     if k == "concept":
         cslug = key.split(":", 1)[1]
         out["concept_slug"] = cslug
@@ -3011,3 +3018,135 @@ def entity_detail(slug: str, key: str) -> dict | None:
         except (ValueError, OSError):
             pass
     return out
+
+
+# ===========================================================================
+# Per-entity literature reviews — a short paper-grounded write-up for each
+# concept/method/problem, surfaced inside the Map detail popups. One LLM pass
+# over all entities (entities-as-sections, bounded cost); unnoted entities are
+# summarized from abstracts and marked. Generated from the ⋯ menu and folded
+# into a Field-Model regenerate. Augments (does not replace) the Review tab.
+# ===========================================================================
+def _entity_reviews_path(slug: str) -> Path:
+    return _wikidir(slug) / "entity_reviews.json"
+
+
+def load_entity_reviews(slug: str) -> dict:
+    """{entity_key: review_markdown}."""
+    p = _entity_reviews_path(slug)
+    if not p.is_file():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("reviews", {}) or {}
+    except (ValueError, OSError):
+        return {}
+
+
+def generate_entity_reviews(slug: str) -> dict:
+    """One LLM pass → a 2-4 sentence literature review per concept/method/problem,
+    grounded in the user's notes where present and paper abstracts otherwise (marked
+    '(not yet reviewed by you)'). Writes wiki/entity_reviews.json. Returns {ok, generated}."""
+    from . import library, agent_skills
+    try:
+        g = build_collection_graph(slug)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
+    nodes = g.get("nodes", {})
+    ents = [(k, n) for k, n in nodes.items() if n["kind"] in ("concept", "method", "problem")]
+    if not ents:
+        return {"ok": False, "error": "No entities to review yet."}
+    # per-paper notes (the user's own writing — the spine)
+    notes_by_paper: dict = {}
+    con = connect()
+    try:
+        for r in con.execute(
+            "SELECT paper_id, COALESCE(summary,'') s, COALESCE(thoughts,'') t, "
+            "COALESCE(key_quotes,'') q FROM paper_notes WHERE collection_slug=? AND ("
+            "COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>'')",
+            (slug,)):
+            notes_by_paper[r["paper_id"]] = " ".join(filter(None, [r["s"], r["t"], r["q"]])).strip()
+    finally:
+        con.close()
+    # index keys (E0, E1…) keep the LLM from mangling colon-keys; mapped back after.
+    idx_to_key: dict = {}
+    blocks = []
+    for i, (k, n) in enumerate(ents):
+        eid = f"E{i}"
+        idx_to_key[eid] = k
+        plines = []
+        for pid in sorted(n["papers"])[:8]:
+            gp = library.get_paper(pid) or {}
+            note = notes_by_paper.get(pid, "")
+            line = f"- {gp.get('title','')}: {_safe_text(gp.get('abstract','') or '')[:300]}"
+            if note:
+                line += f"  [MY NOTE: {note[:200]}]"
+            plines.append(line)
+        blocks.append(f"### {eid} | {n['kind']} | {n['label']}\n" + ("\n".join(plines) or "(no papers)"))
+    user = ("Write a 2-4 sentence literature review for EACH entity below, keyed by its id "
+            "(E0, E1, …). Synthesize what the papers collectively say about that entity; lead "
+            "with MY NOTE where present. If an entity has no note, summarize from the abstracts "
+            "and append '(not yet reviewed by you)'. Do not invent findings.\n\n"
+            + "\n\n".join(blocks))
+    system = (agent_skills.skill_body("entity-review")
+              or 'Output STRICT JSON only: {"reviews": {"E0": "markdown…", "E1": "…"}}. '
+                 "Each value is a 2-4 sentence markdown literature review of that entity.")
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": user}])
+        data = _extract_json(out)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"The LLM call failed: {exc}"}
+    reviews: dict = {}
+    for eid, md in (data.get("reviews") or {}).items():
+        key = idx_to_key.get(eid)
+        if key and isinstance(md, str) and md.strip():
+            reviews[key] = _safe_text(md.strip())
+    if not reviews:
+        return {"ok": False, "error": "The agent produced no usable reviews."}
+    p = _entity_reviews_path(slug)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"reviews": reviews,
+                             "_meta": {"generated_by": "agent", "generator": "entity-review",
+                                       "generated_at": _now()}}, indent=2), encoding="utf-8")
+    return {"ok": True, "generated": len(reviews)}
+
+
+_ENTREV_JOBS: dict[str, dict] = {}
+
+
+def get_entity_reviews_job(slug: str) -> dict | None:
+    with _DRAFT_LOCK:
+        j = _ENTREV_JOBS.get(slug)
+        return dict(j) if j else None
+
+
+def clear_entity_reviews_job(slug: str) -> None:
+    with _DRAFT_LOCK:
+        _ENTREV_JOBS.pop(slug, None)
+
+
+def start_entity_reviews_async(slug: str) -> bool:
+    """Generate per-entity reviews on a daemon thread (one LLM pass). False if running."""
+    existing = get_entity_reviews_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    with _DRAFT_LOCK:
+        _ENTREV_JOBS[slug] = {"status": "running", "started_at": _now(), "error": None}
+
+    def runner():
+        from . import notify
+        try:
+            res = generate_entity_reviews(slug)
+            ok = bool(res.get("ok"))
+            with _DRAFT_LOCK:
+                _ENTREV_JOBS[slug] = {"status": "done" if ok else "failed",
+                                      "error": None if ok else res.get("error")}
+            notify.add(f"Entity reviews {'ready' if ok else 'failed'} ({slug})",
+                       f"/c/{slug}?tab=connections", slug, ok=ok)
+        except Exception as exc:  # noqa: BLE001
+            with _DRAFT_LOCK:
+                _ENTREV_JOBS[slug] = {"status": "failed", "error": str(exc)}
+            notify.add(f"Entity reviews failed ({slug})", f"/c/{slug}?tab=connections", slug, ok=False)
+
+    threading.Thread(target=runner, daemon=True, name=f"entrev-{slug}").start()
+    return True
