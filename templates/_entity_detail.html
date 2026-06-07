@@ -1,83 +1,97 @@
-{# Map entity detail (HTMX-loaded into #entity-modal-body). Concept = editable
-   (name/blurb/remove, reusing the concept routes); problem/method = read-only
-   (they change only on a Field-Model regenerate). Related chips re-load the
-   popup for that entity. Lives in the collectionView() scope (entityOpen). #}
+{# Entity detail (concept/method/problem) — HTMX-loaded into #entity-modal-body. New popup
+   design sharing the theme shell: header · description · Related (uniform colored chips) ·
+   Papers (show-one + show-all) · footer CTAs. Concepts editable; methods/problems read-only.
+   Lives in the collectionView() scope (entityOpen / tab). #}
 {% if not e %}
 <p class="text-sm text-slate-400 py-6 text-center">Couldn't load this entity.</p>
 {% else %}
-{% set style = {'concept': ('◈','text-violet-700','border-violet-200','bg-violet-50'),
-                'method':  ('🔧','text-sky-700','border-sky-200','bg-sky-50'),
-                'problem': ('🚩','text-rose-700','border-rose-200','bg-rose-50')}[e.kind]
-                or ('•','text-slate-700','border-slate-200','bg-slate-50') %}
+{% set HK = {'concept': ('◈','Concept','bg-violet-100 text-violet-700','text-violet-500','hover:text-violet-600','bg-violet-600 hover:bg-violet-700'),
+             'method':  ('🔧','Method','bg-sky-100 text-sky-700','text-sky-500','hover:text-sky-600','bg-sky-600 hover:bg-sky-700'),
+             'problem': ('🚩','Problem','bg-rose-100 text-rose-700','text-rose-500','hover:text-rose-600','bg-rose-600 hover:bg-rose-700'),
+             'belief':  ('✦','Belief','bg-amber-100 text-amber-800','text-amber-600','hover:text-amber-700','bg-amber-600 hover:bg-amber-700')}[e.kind]
+             or ('•','Item','bg-slate-100 text-slate-700','text-slate-500','hover:text-slate-700','bg-slate-700 hover:bg-slate-800') %}
 {% set KS = {'problem': ('#f43f5e','bg-rose-50 text-rose-700 border-rose-200'),
              'method':  ('#0ea5e9','bg-sky-50 text-sky-700 border-sky-200'),
              'concept': ('#7c3aed','bg-violet-50 text-violet-700 border-violet-200'),
              'belief':  ('#f59e0b','bg-amber-50 text-amber-800 border-amber-200')} %}
 <div x-data="{ editing: false }">
-  <div class="flex items-start gap-2 mb-1">
-    <span class="text-lg">{{ style[0] }}</span>
-    <div class="flex-1 min-w-0">
-      <h3 x-show="!editing" class="text-base font-semibold {{ style[1] }} leading-snug">{{ e.label }}</h3>
-      <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-        <span class="uppercase tracking-wide">{{ e.kind }}</span>
-        {% if e.kind == 'concept' and e.score %}<span class="rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-700" title="{{ e.score }} attention points">🔥 {{ e.score }}</span>{% endif %}
-        <span>· {{ e.papers|length }} paper{{ 's' if e.papers|length != 1 }}</span>
+  <div class="flex items-start gap-3 mb-3">
+    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl {{ HK[2] }}">{{ HK[0] }}</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-semibold uppercase tracking-wide {{ HK[3] }}">{{ HK[1] }}</div>
+      <h2 x-show="!editing" class="text-xl font-bold text-slate-900 leading-tight">{{ e.label }}</h2>
+      <div class="flex items-center gap-2 mt-1.5 flex-wrap text-[11px] text-slate-400">
+        {% if e.kind == 'concept' and e.score %}<span class="rounded-full px-2 py-0.5 bg-violet-100 text-violet-700" title="{{ e.score }} attention points">🔥 {{ e.score }}</span>{% endif %}
+        <span>{{ e.papers|length }} paper{{ 's' if e.papers|length != 1 }}</span>
+        {% if e.kind == 'concept' %}<button type="button" x-show="!editing" @click="editing = true" class="text-slate-400 {{ HK[4] }}">✎ Edit</button>{% endif %}
       </div>
     </div>
-    {% if e.kind == 'concept' %}
-    <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600" title="Edit concept">✎ edit</button>
-    {% endif %}
   </div>
 
-  {# description / blurb #}
+  {# description #}
   {% if e.kind == 'concept' %}
     <div x-show="!editing">
-      {% if e.blurb %}<p class="text-sm text-slate-700 leading-snug mb-3">{{ e.blurb }}</p>
-      {% else %}<p class="text-xs text-slate-400 italic mb-3">No description yet — ✎ edit to add one.</p>{% endif %}
+      {% if e.blurb %}
+      <blockquote class="relative rounded-xl bg-slate-50 border border-slate-100 px-5 py-4 mb-4">
+        <span class="absolute left-2 top-0 text-3xl text-slate-200 leading-none">“</span>
+        <p class="text-[15px] text-slate-800 leading-relaxed pl-3">{{ e.blurb }}</p>
+      </blockquote>
+      {% else %}<p class="text-xs text-slate-400 italic mb-4">No description yet — ✎ Edit to add one.</p>{% endif %}
     </div>
-    {# inline edit (name + blurb), reusing the concept routes; closes the popup + refreshes panel #}
     <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/concepts/edit" hx-target="#left-panel" hx-swap="innerHTML"
-          @submit="entityOpen = false" class="space-y-2 mb-3">
+          @submit="entityOpen = false" class="space-y-2 mb-4">
       <input type="hidden" name="target" value="{{ e.label }}">
       <input name="name" value="{{ e.label }}" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
       <textarea name="blurb" rows="2" placeholder="One-line description" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">{{ e.blurb }}</textarea>
       <div class="flex items-center gap-2">
-        <button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
+        <button class="rounded {{ HK[5] }} text-white px-3 py-1 text-xs">Save</button>
         <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
         <form hx-post="/c/{{ slug }}/wiki/concepts/remove" hx-target="#left-panel" hx-swap="innerHTML" @submit="entityOpen = false"
               onsubmit="return confirm('Remove the concept “{{ e.label }}”?')" class="ml-auto inline">
           <input type="hidden" name="target" value="{{ e.label }}">
-          <button class="text-xs text-rose-500 hover:text-rose-700">Remove concept</button>
+          <button class="text-xs text-rose-500 hover:text-rose-700">Remove</button>
         </form>
       </div>
     </form>
   {% else %}
-    <p class="text-sm text-slate-700 leading-snug mb-1">{{ e.label }}</p>
-    <p class="text-[11px] text-slate-400 italic mb-3">Read-only — {{ e.kind }}s are redrafted by the agent on ↻ Regenerate.</p>
+    <blockquote class="relative rounded-xl bg-slate-50 border border-slate-100 px-5 py-4 mb-2">
+      <span class="absolute left-2 top-0 text-3xl text-slate-200 leading-none">“</span>
+      <p class="text-[15px] text-slate-800 leading-relaxed pl-3">{{ e.label }}</p>
+    </blockquote>
+    <p class="text-[11px] text-slate-400 italic mb-4">Read-only — {{ e.kind }}s are redrawn by the agent on ↻ Regenerate.</p>
   {% endif %}
 
-  {# top related papers #}
+  {% if e.related %}
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Related</div>
+  <div class="flex flex-wrap gap-1.5 mb-4">
+    {% for r in e.related %}
+    {% set ks = KS.get(r.kind, ('#94a3b8','bg-slate-50 text-slate-600 border-slate-200')) %}
+    <button type="button" class="inline-flex items-start gap-1 text-[12px] rounded-lg px-2 py-1 border text-left hover:opacity-80 {{ ks[1] }}"
+            hx-get="/c/{{ slug }}/wiki/entity?key={{ r.key|urlencode }}" hx-target="#entity-modal-body" hx-swap="innerHTML">
+      <span class="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style="background:{{ ks[0] }}"></span><span>{{ r.label }}</span></button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if e.papers %}
-  <p class="text-xs font-medium text-slate-500 mb-1.5">Papers ({{ e.papers|length }})</p>
-  <div class="space-y-1 mb-3" x-data="{ all: false }">
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Papers ({{ e.papers|length }})</div>
+  <div class="space-y-1.5 mb-4" x-data="{ all: false }">
     {% for p in e.papers %}
-    <a href="/c/{{ slug }}/p/{{ p.id }}" {% if not loop.first %}x-show="all" x-cloak{% endif %} class="block text-[13px] text-violet-700 hover:underline truncate">{{ p.title }}</a>
+    <a href="/c/{{ slug }}/p/{{ p.id }}" target="_blank" {% if not loop.first %}x-show="all" x-cloak{% endif %}
+       class="flex items-center gap-2 rounded-lg border border-slate-100 hover:bg-slate-50 px-2.5 py-2">
+      <span class="text-slate-300 shrink-0">▤</span>
+      <span class="flex-1 min-w-0 text-[13px] text-slate-800 truncate">{{ p.title }}</span>
+    </a>
     {% endfor %}
     {% if e.papers|length > 1 %}<button type="button" x-show="!all" @click="all = true" class="text-[11px] text-slate-400 hover:text-slate-700">Show all {{ e.papers|length }} ↓</button>{% endif %}
   </div>
   {% endif %}
 
-  {# related entities (click to pivot the popup) #}
-  {% if e.related %}
-  <p class="text-xs font-medium text-slate-500 mb-1.5">Related</p>
-  <div class="flex flex-wrap gap-1.5">
-    {% for r in e.related %}
-    {% set ks = KS.get(r.kind, ('#94a3b8','bg-slate-50 text-slate-600 border-slate-200')) %}
-    <button type="button" class="inline-flex items-start gap-1 text-[11px] rounded px-1.5 py-0.5 border text-left hover:opacity-80 {{ ks[1] }}"
-            hx-get="/c/{{ slug }}/wiki/entity?key={{ r.key|urlencode }}" hx-target="#entity-modal-body" hx-swap="innerHTML">
-      <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1" style="background:{{ ks[0] }}"></span><span>{{ r.label }}</span></button>
-    {% endfor %}
+  <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+    <button type="button" @click="entityOpen = false; window.wikiJump && window.wikiJump('{{ e.key }}')"
+            class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">View in Connections</button>
+    <button type="button" @click="entityOpen = false; tab = 'papers'; $dispatch('pa-filter-papers', { key: '{{ e.key }}', dim: '{{ e.kind }}' })"
+            class="rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">Explore this {{ e.kind }} →</button>
   </div>
-  {% endif %}
 </div>
 {% endif %}

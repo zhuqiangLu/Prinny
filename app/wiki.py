@@ -2802,8 +2802,11 @@ def connection_view(slug: str) -> dict | None:
         # Clusters are entity-only now; a theme's papers = those its ideas touch.
         n_papers = len(paper_count)
         shared_pids = [pid for pid, c in paper_count.most_common() if c >= 2]
-        key_papers = [{"id": pid, "title": label(f"paper:{pid}")}
-                      for pid in shared_pids if f"paper:{pid}" in nodes][:3]
+        # key_papers carry `binds` = how many of the theme's entities each anchors
+        # ("shared by N" in the popup), sorted by binding strength.
+        key_papers = [{"id": pid, "title": label(f"paper:{pid}"), "binds": paper_count[pid]}
+                      for pid, c in paper_count.most_common()
+                      if c >= 2 and f"paper:{pid}" in nodes][:6]
         seen_pairs: set = set()
         n_links = 0
         for m in ent_keys:

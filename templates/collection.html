@@ -109,14 +109,12 @@
     </div>
   </div>
 
-  <!-- Map entity detail: concept/method/problem popup (concepts editable). Opened from a card. -->
+  <!-- Map detail popup: theme / concept / method / problem (concepts editable). Opened from a card. -->
   <div x-show="entityOpen" x-cloak @keydown.escape.window="entityOpen = false" @click.self="entityOpen = false"
-       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
-    <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] max-h-[82vh] flex flex-col p-5">
-      <div class="flex items-center justify-end mb-1 shrink-0">
-        <button type="button" @click="entityOpen = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
-      </div>
-      <div id="entity-modal-body" class="overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12 overflow-auto">
+    <div class="relative bg-white rounded-2xl shadow-2xl w-[min(720px,95vw)] max-h-[88vh] overflow-auto p-6">
+      <button type="button" @click="entityOpen = false" class="absolute right-4 top-4 grid place-items-center w-8 h-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50">✕</button>
+      <div id="entity-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
     </div>
   </div>
 

@@ -42,6 +42,8 @@
       <button type="button" @click="toggleStar()" :class="starred ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'"
               class="text-xl leading-none" title="Star this collection (local)"><span x-text="starred ? '★' : '☆'"></span></button>
       <div class="ml-auto flex items-center gap-2">
+        <button type="button" @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })"
+                class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Review your beliefs, then re-draft the Field Model">↻ Regenerate</button>
         <button type="button" @click="$dispatch('open-add')"
                 class="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add paper</button>
         <button type="button" @click="$dispatch('open-create-topic')" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">✦ Create topic</button>
@@ -49,8 +51,6 @@
           <button type="button" @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More">⋯</button>
           <div x-show="open" x-cloak class="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
             {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
-            <button type="button" class="{{ mi }}" title="Review your beliefs, then re-draft the Field Model"
-                    @click="open = false; regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate Field Model</button>
             <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 Thoughts</button>
             <button type="button" @click="open = false; tab = 'understanding'" class="{{ mi }}">◆ Understanding</button>
             <button type="button" @click="open = false; tab = 'benchmarks'" class="{{ mi }}">▦ Benchmarks</button>

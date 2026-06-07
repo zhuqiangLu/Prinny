@@ -1,6 +1,6 @@
-{# Theme detail (HTMX-loaded into #entity-modal-body). Full cluster view: entities by
-   kind, binding papers, agent explanation, cohesion + inline rename. Lives in the
-   collectionView() scope (entityOpen). #}
+{# Theme detail (HTMX-loaded into #entity-modal-body). New popup design: header · quote ·
+   explanation · Core ideas (uniform chips) · Binding papers (shared-by-N) · footer CTA.
+   Lives in the collectionView() scope (entityOpen / tab). #}
 {% if not t %}
 <p class="text-sm text-slate-400 py-6 text-center">Couldn't load this theme.</p>
 {% else %}
@@ -13,42 +13,64 @@
              'loose': ('·','Loose','bg-slate-50 text-slate-500 border-slate-200')}[t.strength]
              or ('·','','bg-slate-50 text-slate-500 border-slate-200') %}
 <div x-data="{ editing: false }">
-  <div class="flex items-center gap-2 mb-1 flex-wrap">
-    <span class="text-lg text-indigo-600">◆</span>
-    <h3 x-show="!editing" class="text-base font-semibold text-slate-900 leading-snug">{{ t.name or ('Theme ' ~ t.index) }}</h3>
-    <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ ST[2] }}">{{ ST[0] }} {{ ST[1] }}</span>
-    <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600" title="Rename theme">✎ rename</button>
+  <div class="flex items-start gap-3 mb-3">
+    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-emerald-100 text-emerald-700">◆</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Theme</div>
+      <h2 x-show="!editing" class="text-xl font-bold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h2>
+      <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+        <span class="inline-flex items-center gap-0.5 text-[11px] rounded-full px-2 py-0.5 border {{ ST[2] }}">{{ ST[0] }} {{ ST[1] }}</span>
+        <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-emerald-600">✎ Rename</button>
+      </div>
+      <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename" hx-target="#left-panel" hx-swap="innerHTML"
+            @submit="entityOpen = false" class="flex items-center gap-1 mt-1.5">
+        <input name="name" value="{{ t.name or '' }}" placeholder="Theme name" maxlength="48"
+               class="text-sm border border-slate-300 rounded px-1.5 py-0.5 flex-1" x-init="$nextTick(() => $el.focus())">
+        <button class="text-xs rounded px-2 py-0.5 bg-emerald-600 text-white hover:bg-emerald-700">Save</button>
+        <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+      </form>
+    </div>
   </div>
-  {# inline rename — reuses the theme rename route; closes the popup + refreshes panel #}
-  <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename" hx-target="#left-panel" hx-swap="innerHTML"
-        @submit="entityOpen = false" class="flex items-center gap-1 mb-2">
-    <input name="name" value="{{ t.name or '' }}" placeholder="Theme name" maxlength="48"
-           class="text-sm border border-slate-300 rounded px-1.5 py-0.5 flex-1" x-init="$nextTick(() => $el.focus())">
-    <button class="text-xs rounded px-2 py-0.5 bg-violet-600 text-white hover:bg-violet-700">Save</button>
-    <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
-  </form>
 
-  {% if t.description %}<p class="text-sm text-slate-700 leading-snug mb-2">{{ t.description }}</p>{% endif %}
-  {% if t.explanation %}<p class="text-[13px] text-slate-600 leading-relaxed mb-3">{{ t.explanation }}</p>
-  {% else %}<p class="text-[11px] text-slate-400 italic mb-3">No agent explanation yet — written on the next ↻ Regenerate.</p>{% endif %}
+  {% if t.description %}
+  <blockquote class="relative rounded-xl bg-slate-50 border border-slate-100 px-5 py-4 mb-3">
+    <span class="absolute left-2 top-0 text-3xl text-slate-200 leading-none">“</span>
+    <p class="text-[15px] text-slate-800 leading-relaxed pl-3">{{ t.description }}</p>
+  </blockquote>
+  {% endif %}
+  {% if t.explanation %}<p class="text-sm text-slate-600 leading-relaxed mb-4">{{ t.explanation }}</p>{% endif %}
 
-  <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">All ideas ({{ t.n_ideas }})</div>
-  <div class="flex flex-wrap gap-1.5 mb-3">
-    {% for kind in ['problem', 'method', 'concept', 'belief'] %}
-      {% for e in t.entities if e.kind == kind %}
-      <span class="inline-flex items-center gap-1 text-[11px] rounded px-1.5 py-0.5 border max-w-full {{ KS[kind][1] }}">
-        <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0" style="background:{{ KS[kind][0] }}"></span><span class="min-w-0">{{ e.label }}</span>
-      </span>
-      {% endfor %}
-    {% endfor %}
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Core ideas</span>
+    <span class="text-[10px] rounded-full bg-slate-100 text-slate-500 px-1.5 py-0.5">{{ t.n_ideas }}</span>
+  </div>
+  <div class="flex flex-wrap gap-1.5 mb-4">
+    {% for kind in ['problem','method','concept','belief'] %}{% for e in t.entities if e.kind == kind %}
+    <span class="inline-flex items-start gap-1 text-[12px] rounded-lg px-2 py-1 border {{ KS[kind][1] }}">
+      <span class="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style="background:{{ KS[kind][0] }}"></span><span>{{ e.label }}</span>
+    </span>
+    {% endfor %}{% endfor %}
   </div>
 
   {% if t.key_papers %}
-  <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Binding papers</div>
-  <ul class="space-y-1 mb-2">
-    {% for k in t.key_papers %}<li><a href="/c/{{ slug }}/p/{{ k.id }}" class="text-[13px] text-violet-700 hover:underline">{{ k.title|truncate(64) }}</a></li>{% endfor %}
-  </ul>
+  <div class="flex items-baseline justify-between mb-1.5">
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Binding papers</span>
+    <span class="text-[11px] text-slate-400">{{ t.n_papers }} papers · {{ t.cohesion.shared_papers }} shared</span>
+  </div>
+  <div class="space-y-1.5 mb-4">
+    {% for k in t.key_papers %}
+    <a href="/c/{{ slug }}/p/{{ k.id }}" target="_blank" class="flex items-center gap-2 rounded-lg border border-slate-100 hover:bg-slate-50 px-2.5 py-2">
+      <span class="text-slate-300 shrink-0">▤</span>
+      <span class="flex-1 min-w-0 text-[13px] text-slate-800 truncate">{{ k.title }}</span>
+      <span class="text-[11px] text-slate-400 shrink-0">shared by {{ k.binds }}</span>
+    </a>
+    {% endfor %}
+  </div>
   {% endif %}
-  <p class="text-[10px] text-slate-400">{{ t.n_papers }} papers · connected through {{ t.cohesion.shared_papers }} shared paper{{ 's' if t.cohesion.shared_papers != 1 }}{% if t.cohesion.links %} + {{ t.cohesion.links }} concept link{{ 's' if t.cohesion.links != 1 }}{% endif %}.</p>
+
+  <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+    <button type="button" @click="entityOpen = false; tab = 'papers'; $dispatch('pa-filter-papers', { key: 'theme:{{ t.index }}', dim: 'theme' })"
+            class="rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">Explore this theme →</button>
+  </div>
 </div>
 {% endif %}

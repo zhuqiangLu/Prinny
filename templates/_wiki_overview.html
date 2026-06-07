@@ -611,7 +611,7 @@
     {# View switcher — pick what the card area shows: Theme clusters, the three entity
        types, or the Graph. (Replaces the old Card/Graph toggle + Papers/Connections stats.) #}
     <div class="kg-stats mb-4">
-      {% for v in [('theme','Theme', ov.themes, 'text-indigo-600'),
+      {% for v in [('theme','Theme', ov.themes, 'text-emerald-700'),
                    ('concept','Concept', ov.concepts, 'text-violet-700'),
                    ('method','Method', ov.methods, 'text-sky-700'),
                    ('problem','Problem', ov.problems, 'text-rose-700')] %}
@@ -637,7 +637,6 @@
     <div x-show="['concept','method','problem'].includes(mapView)" x-cloak class="mb-4">
       <div class="flex items-center gap-2 mb-2">
         <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — the recurring ideas in this collection; your highlights/notes on them drive Focus.' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
-        <button type="button" @click="mapView = 'theme'" class="ml-auto text-[11px] text-slate-400 hover:text-slate-700">← back to themes</button>
       </div>
       {% set ENT = {'concept': ('◈','border-violet-200','bg-violet-50/40','text-violet-800'),
                     'method':  ('🔧','border-sky-200','bg-sky-50/40','text-sky-800'),
@@ -685,7 +684,7 @@
              @contextmenu.prevent="window.paAskEl($el)">
           <div class="p-4 cursor-pointer" @click="entityOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/theme?sig={{ t.sig }}', { target: '#entity-modal-body', swap: 'innerHTML' })">
             <div class="flex items-start gap-3">
-              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm bg-indigo-100 text-indigo-700">◆</span>
+              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm bg-emerald-100 text-emerald-700">◆</span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
@@ -948,7 +947,8 @@
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
   {% set cxe = (overview.connections.entities if overview.connections else {}) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5"
-           x-data="{ filterKey: '', filterDim: 'all', sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }">
+           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys.includes(k) ? (this.selKeys = this.selKeys.filter(x => x !== k)) : this.selKeys.push(k) }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }"
+           @pa-filter-papers.window="selKeys = [$event.detail.key]; filterDim = $event.detail.dim">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
@@ -972,26 +972,27 @@
     <div class="mb-3 text-[11px]">
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-slate-400 mr-0.5">Filter:</span>
-        <button type="button" @click="filterKey=''; filterDim='all'" :class="filterDim==='all' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
+        <button type="button" @click="selKeys=[]; filterDim='all'" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
+        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
         {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
         {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>{% endif %}
         {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button>{% endif %}
-        <button type="button" @click="filterKey='unmapped'; filterDim='unmapped'" :class="filterDim==='unmapped' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
-        <span x-show="filterKey && filterKey !== 'unmapped'" x-cloak class="text-slate-400">· filtering by 1</span>
+        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
+        <span x-show="selKeys.length" x-cloak class="text-slate-400">· filtering by <span x-text="selKeys.length"></span></span>
+        <button type="button" x-show="selKeys.length" x-cloak @click="selKeys=[]" class="text-slate-400 hover:text-slate-700">clear</button>
       </div>
-      {# chips for the active dimension — click one to filter the papers below #}
+      {# chips for the active dimension — click to toggle (multi-select, across/within dims) #}
       <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for t in themelist %}<button type="button" @click="filterKey='theme:{{ t.index }}'" :class="filterKey==='theme:{{ t.index }}' ? 'ring-2 ring-indigo-400 bg-indigo-100' : 'bg-indigo-50 hover:bg-indigo-100'" class="rounded px-2 py-0.5 text-indigo-700">{{ (t.name or ('Theme ' ~ t.index))|truncate(30) }}</button>{% endfor %}
+        {% for t in themelist %}<button type="button" @click="toggleKey('theme:{{ t.index }}')" :class="selKeys.includes('theme:{{ t.index }}') ? 'ring-2 ring-emerald-400 bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'" class="rounded px-2 py-0.5 text-emerald-700">{{ (t.name or ('Theme ' ~ t.index))|truncate(30) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='concept'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.concept %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.concept %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700">{{ e.label|truncate(30) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.method %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.method %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700">{{ e.label|truncate(30) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='problem'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.problem %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.problem %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700">{{ e.label|truncate(30) }}</button>{% endfor %}
       </div>
     </div>
     {% endif %}
@@ -1000,7 +1001,7 @@
       {% for p in overview.papers %}
       <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
            data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}"
-           x-show="(filterKey === '' || (filterKey === 'unmapped' && $el.dataset.ents.trim() === '') || $el.dataset.ents.split(' ').includes(filterKey)) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
+           x-show="(selKeys.length === 0 || selKeys.some(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
         <div class="flex items-center gap-1 mb-2">
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
                  class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
