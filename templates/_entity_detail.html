@@ -54,10 +54,12 @@
       </div>
     </form>
   {% else %}
+    {% if e.gist and e.gist != e.label %}
     <blockquote class="relative rounded-xl bg-slate-50 border border-slate-100 px-5 py-4 mb-2">
       <span class="absolute left-2 top-0 text-3xl text-slate-200 leading-none">“</span>
-      <p class="text-[15px] text-slate-800 leading-relaxed pl-3">{{ e.label }}</p>
+      <p class="text-[15px] text-slate-800 leading-relaxed pl-3">{{ e.gist }}</p>
     </blockquote>
+    {% endif %}
     <p class="text-[11px] text-slate-400 italic mb-4">Read-only — {{ e.kind }}s are redrawn by the agent on ↻ Regenerate.</p>
   {% endif %}
 

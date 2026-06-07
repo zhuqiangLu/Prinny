@@ -34,8 +34,8 @@ You see every paper in the collection (abstracts + cached PDF excerpts). Your jo
     "central_question": "ONE sentence, phrased as a question (e.g. 'Can we keep what matters and drop what doesn't?')."
   },
   "landscape": {
-    "problems":       [{"text": "3-6 short problem statements", "papers": ["refs of papers that hit this problem"]}],
-    "methods":        [{"text": "3-6 method-family names", "papers": ["refs of papers that use this method"]}],
+    "problems":       [{"name": "short label, <=6 words (e.g. 'Ungrounded video reasoning')", "text": "one-line problem statement", "papers": ["refs of papers that hit this problem"]}],
+    "methods":        [{"name": "short method-family name, <=6 words (e.g. 'RL with verifiable rewards')", "text": "one-line gist of the method family", "papers": ["refs of papers that use this method"]}],
     "debates":        ["3-6 visible disagreements, written as questions"],
     "open_questions": ["3-6 field-level questions the literature hasn't answered yet"]
   },

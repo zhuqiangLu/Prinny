@@ -59,6 +59,7 @@ def build_graph(papers: list[dict], entities: list[dict]) -> dict:
     for e in entities:
         nodes[e["key"]] = {
             "id": e["key"], "kind": e["kind"], "label": e.get("label", ""),
+            "gist": e.get("gist", ""),
             "papers": {pid for pid in (e.get("paper_ids") or [])},
             "links": {ln for ln in (e.get("links") or [])},
         }

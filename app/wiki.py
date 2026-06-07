@@ -348,8 +348,10 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
             return []
         out, seen = [], set()
         for x in raw:
+            nm = ""
             if isinstance(x, dict):
                 s = text(x.get("text") or x.get("name"))
+                nm = text(x.get("name") or "")
                 papers = [r for r in (x.get("papers") or []) if r in valid_refs]
             else:
                 s, papers = text(x), []
@@ -361,7 +363,11 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
             for r in papers:
                 if r not in seen_p:
                     seen_p.add(r); pp.append(r)
-            out.append({"text": s, "papers": pp})
+            # `name` = short label (≤ ~6 words); `text` = the one-line gist. If the agent
+            # gave no distinct name, derive a short one from the gist so the title isn't a
+            # full sentence repeated as the quote.
+            name = nm if (nm and nm.lower() != s.lower()) else " ".join(s.split()[:6]).rstrip(".,;:")
+            out.append({"name": name, "text": s, "papers": pp})
             if len(out) >= _LANDSCAPE_MAX_ITEMS:
                 break
         return out
@@ -2593,7 +2599,11 @@ def build_collection_graph(slug: str) -> dict:
             if not pids:
                 continue   # an unanchored problem/method is not a graph node
             key = f"{kind}:" + (_SLUG_RE.sub('-', item['text'].lower()).strip('-')[:60] or kind)
-            entities.append({"key": key, "kind": kind, "label": item["text"], "paper_ids": pids})
+            # label = short name (falls back to text for pre-name collections); gist = the
+            # one-line text, shown as the popup quote so title ≠ quote.
+            entities.append({"key": key, "kind": kind,
+                             "label": item.get("name") or item["text"],
+                             "gist": item["text"], "paper_ids": pids})
 
     # Accepted beliefs → papers (supporting) + concept links (related). Belief
     # dicts from list_accepted_beliefs key on "id" (not "slug").
@@ -2999,8 +3009,8 @@ def entity_detail(slug: str, key: str) -> dict | None:
               for pid in sorted(n["papers"]) if f"paper:{pid}" in nodes]
     related = [{"label": lbl(r), "kind": nodes[r]["kind"], "key": r}
                for r, _w in _graph.related(g, key, k=8) if nodes.get(r, {}).get("kind") != "paper"]
-    out = {"key": key, "kind": k, "label": n["label"], "papers": papers,
-           "related": related, "blurb": "", "score": 0, "concept_slug": "",
+    out = {"key": key, "kind": k, "label": n["label"], "gist": n.get("gist", ""),
+           "papers": papers, "related": related, "blurb": "", "score": 0, "concept_slug": "",
            "review": load_entity_reviews(slug).get(key, "")}
     if k == "concept":
         cslug = key.split(":", 1)[1]
