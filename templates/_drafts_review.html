@@ -1,0 +1,36 @@
+{# Drafts review modal body (HTMX-loaded into #drafts-modal-body). Each staged auto-draft
+   is editable; Accept saves it as that paper's note, Discard drops it. Approve all clicks
+   every Accept. Cards remove themselves on accept/discard (hx-swap outerHTML → ""). #}
+<div id="drafts-review" x-data="{ count: {{ drafts|length }} }">
+  {% if not drafts %}
+  <p class="text-sm text-slate-400 px-1 py-6 text-center">No drafts to review.</p>
+  {% else %}
+  <div class="flex items-center gap-2 mb-3">
+    <span class="text-xs text-slate-500"><span x-text="count"></span> draft<span x-show="count !== 1">s</span> — review &amp; edit before saving</span>
+    <button type="button" class="ml-auto rounded bg-emerald-600 text-white px-3 py-1 text-xs hover:bg-emerald-700"
+            @click="$root.querySelectorAll('.draft-accept').forEach(b => b.click())">✓ Approve all</button>
+  </div>
+  <div class="space-y-3">
+    {% for d in drafts %}
+    <div class="draft-card rounded-lg border border-slate-200 p-3"
+         hx-on::after-request="if(event.detail.successful){ this.remove(); var r=document.querySelector('#drafts-review'); if(r){ var x=window.Alpine.$data(r); if(x) x.count = document.querySelectorAll('.draft-card').length; } }">
+      <div class="flex items-baseline gap-2 mb-1.5">
+        <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ d.title }}</p>
+        <a href="/c/{{ d.slug }}/p/{{ d.paper_id }}" class="shrink-0 text-[11px] text-violet-600 hover:underline">open paper ↗</a>
+      </div>
+      <form hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/accept"
+            hx-target="closest .draft-card" hx-swap="outerHTML">
+        <textarea name="text" rows="8"
+                  class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ d.draft_md }}</textarea>
+        <div class="mt-1.5 flex items-center gap-2">
+          <button type="submit" class="draft-accept rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700">Accept as note</button>
+          <button type="button" class="text-xs text-slate-500 hover:text-rose-600"
+                  hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/discard"
+                  hx-target="closest .draft-card" hx-swap="outerHTML">Discard</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>

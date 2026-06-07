@@ -76,7 +76,7 @@ def list_all() -> list[dict]:
     con = connect()
     try:
         rows = con.execute(
-            "SELECT paper_id, collection_slug, created_at FROM note_drafts "
+            "SELECT paper_id, collection_slug, draft_md, created_at FROM note_drafts "
             "ORDER BY created_at DESC").fetchall()
         return [dict(r) for r in rows]
     finally:

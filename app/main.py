@@ -1971,11 +1971,36 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
     return Response(status_code=204)
 
 
-@app.post("/c/{slug}/p/{paper_id}/autodraft/discard")
-def paper_autodraft_discard(slug: str, paper_id: int) -> Response:
+@app.post("/c/{slug}/p/{paper_id}/autodraft/discard", response_class=HTMLResponse)
+def paper_autodraft_discard(slug: str, paper_id: int) -> HTMLResponse:
     """Discard a staged auto-draft (the user rejected it)."""
     note_drafts.delete(slug, paper_id)
-    return Response(status_code=204)
+    return HTMLResponse("")          # hx-swap removes the card
+
+
+@app.post("/c/{slug}/p/{paper_id}/autodraft/accept", response_class=HTMLResponse)
+def paper_autodraft_accept(slug: str, paper_id: int, text: str = Form("")) -> HTMLResponse:
+    """Accept a staged auto-draft (possibly edited) as the paper's note, then drop the
+    draft. The user reviewed/edited it here, so it's saved as their note."""
+    _require_collection(slug)
+    fields = notes_mod._parse_body(text or "")
+    notes_mod.save_note(slug, paper_id, fields.get("summary", ""), fields.get("thoughts", ""),
+                        fields.get("key_quotes", ""), "noted", author_origin="human")
+    note_drafts.delete(slug, paper_id)
+    return HTMLResponse("")          # hx-swap removes the card
+
+
+@app.get("/drafts/review", response_class=HTMLResponse)
+def drafts_review(request: Request) -> HTMLResponse:
+    """Modal body: all staged auto-drafts (across collections), each editable with
+    Accept / Discard, plus Approve all."""
+    items = []
+    for d in note_drafts.list_all():
+        p = library.get_paper(d["paper_id"])
+        items.append({"slug": d["collection_slug"], "paper_id": d["paper_id"],
+                      "title": ((p or {}).get("title") or f"paper {d['paper_id']}"),
+                      "draft_md": d["draft_md"]})
+    return templates.TemplateResponse(request, "_drafts_review.html", {"drafts": items})
 
 
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)

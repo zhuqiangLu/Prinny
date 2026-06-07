@@ -238,11 +238,27 @@
         <div x-show="open" x-cloak @click.outside="open = false"
              class="absolute left-0 bottom-full mb-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
           <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">To review</div>
+          {# Note drafts review in a popup (verify/edit/approve); other kinds link to their place #}
+          <template x-if="items.some(it => it.kind === 'Note draft')">
+            <button type="button" class="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-slate-100 text-violet-700 font-medium"
+                    @click="open = false; $dispatch('pa-review-drafts')">✨ Review note drafts in popup →</button>
+          </template>
           <template x-for="(it, i) in items" :key="i">
-            <a :href="it.link" class="flex items-baseline gap-1.5 px-3 py-2 hover:bg-violet-50 border-b border-slate-50 leading-snug">
-              <span class="shrink-0 text-[10px] rounded bg-violet-100 text-violet-700 px-1" x-text="it.kind"></span>
-              <span class="text-slate-700 truncate" x-text="it.label"></span>
-            </a>
+            <template x-if="it.kind === 'Note draft'">
+              <button type="button" @click="open = false; $dispatch('pa-review-drafts')"
+                      class="w-full text-left flex items-baseline gap-1.5 px-3 py-2 hover:bg-violet-50 border-b border-slate-50 leading-snug">
+                <span class="shrink-0 text-[10px] rounded bg-violet-100 text-violet-700 px-1" x-text="it.kind"></span>
+                <span class="text-slate-700 truncate" x-text="it.label"></span>
+              </button>
+            </template>
+          </template>
+          <template x-for="(it, i) in items" :key="'l'+i">
+            <template x-if="it.kind !== 'Note draft'">
+              <a :href="it.link" class="flex items-baseline gap-1.5 px-3 py-2 hover:bg-violet-50 border-b border-slate-50 leading-snug">
+                <span class="shrink-0 text-[10px] rounded bg-violet-100 text-violet-700 px-1" x-text="it.kind"></span>
+                <span class="text-slate-700 truncate" x-text="it.label"></span>
+              </a>
+            </template>
           </template>
         </div>
       </div>
@@ -302,6 +318,20 @@
         <button type="button" @click="settingsOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
       <div id="settings-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Drafts review modal: verify/edit/accept staged auto-drafts (opened via 'pa-review-drafts') -->
+  <div x-data="{ open: false }"
+       @pa-review-drafts.window="open = true; if (window.htmx) htmx.ajax('GET', '/drafts/review', { target: '#drafts-modal-body', swap: 'innerHTML' })"
+       x-show="open" x-cloak @keydown.escape.window="open = false" @click.self="open = false"
+       class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(720px,95vw)] max-h-[90vh] overflow-auto p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-slate-900">Review note drafts</h2>
+        <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+      </div>
+      <div id="drafts-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
     </div>
   </div>
 
