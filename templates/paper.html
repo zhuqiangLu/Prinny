@@ -80,13 +80,14 @@
         <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
         <button @click="tab='notes'" :class="tabCls('notes')">Notes</button>
         {% if paper.has_pdf %}<button @click="tab='highlights'" :class="tabCls('highlights')">Highlights</button>{% endif %}
-        {# Find similar → seeds the discovery agent with this paper; results → Suggested reading #}
-        <span id="find-sim-status" class="ml-auto text-[11px] text-emerald-700 truncate max-w-[40%]"></span>
-        <button type="button"
-                hx-post="/c/{{ slug }}/p/{{ paper.id }}/find-similar"
-                hx-target="#find-sim-status" hx-swap="innerHTML" hx-disabled-elt="this"
-                class="shrink-0 px-2.5 py-1 text-xs text-violet-700 hover:bg-violet-50 rounded"
-                title="Find papers similar to this one → the collection's Suggested reading">🔎 Find similar</button>
+        {# Find similar → seeds the discovery agent with this paper; results → Suggested reading.
+           Stays disabled + "Finding…" while the (background) search runs. #}
+        <span class="ml-auto text-[11px] text-emerald-700 truncate max-w-[40%]" x-text="findStatus" x-init="checkFindSimilar()"></span>
+        <button type="button" @click="runFindSimilar()" :disabled="findBusy"
+                class="shrink-0 px-2.5 py-1 text-xs text-violet-700 hover:bg-violet-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Find papers similar to this one → the collection's Suggested reading">
+          <span x-text="findBusy ? '⏳ Finding…' : '🔎 Find similar'"></span>
+        </button>
       </div>
 
       <div class="flex-1 min-h-0">
@@ -188,6 +189,28 @@
       jumpOpen: false, jumpLoaded: false,
       pdfDarkSetting: {{ pdf_dark|default(true)|tojson }},
       pdfDark: false,                       // current effective state (reactive, for the toolbar icon)
+
+      // "Find similar" busy state — stays disabled + "Finding…" while the search runs
+      // (it's a background job, so we poll the reading status, not just the POST).
+      findBusy: false, findStatus: "",
+      runFindSimilar() {
+        if (this.findBusy) return;
+        this.findBusy = true; this.findStatus = "";
+        fetch("/c/{{ slug }}/p/{{ paper.id }}/find-similar", { method: "POST", headers: { "HX-Request": "true" } })
+          .catch(() => {}).finally(() => this._findPoll());
+      },
+      _findPoll() {
+        this.findBusy = true;
+        const tick = () => fetch("/c/{{ slug }}/wiki/reading/status").then(r => r.json()).then(d => {
+          if (d.status === "running") { setTimeout(tick, 3000); }
+          else { this.findBusy = false; this.findStatus = d.status === "done" ? "✓ in Suggested reading" : ""; }
+        }).catch(() => { this.findBusy = false; });
+        setTimeout(tick, 1500);
+      },
+      checkFindSimilar() {                   // on load: reflect a search already running
+        fetch("/c/{{ slug }}/wiki/reading/status").then(r => r.json())
+          .then(d => { if (d.status === "running") this._findPoll(); }).catch(() => {});
+      },
 
       _computePdfDark() {
         const pref = localStorage.getItem("pp.pdfdark.{{ paper.id }}");   // 'on' | 'off' | null
