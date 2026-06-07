@@ -69,3 +69,15 @@ def count_all() -> int:
         return con.execute("SELECT COUNT(*) FROM note_drafts").fetchone()[0]
     finally:
         con.close()
+
+
+def list_all() -> list[dict]:
+    """Every staged draft (all collections), newest first — for the 'To review' card."""
+    con = connect()
+    try:
+        rows = con.execute(
+            "SELECT paper_id, collection_slug, created_at FROM note_drafts "
+            "ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()

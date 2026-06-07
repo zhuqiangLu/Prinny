@@ -222,6 +222,30 @@
       </div>
     </nav>
     <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">
+      {# To review: items awaiting your accept/dismiss (auto-draft notes, belief
+         candidates, chat-proposed wiki edits). Hidden when there's nothing. #}
+      <div class="relative" x-data="{ open: false, count: 0, items: [],
+             feed() { fetch('/notifications').then(r => r.json()).then(d => { this.count = d.to_review || 0; this.items = d.to_review_items || []; }).catch(() => {}); } }"
+           x-init="feed(); setInterval(() => feed(), 8000)" x-show="count > 0" x-cloak>
+        <button type="button" @click="open = !open"
+                class="w-full flex items-center gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left hover:bg-violet-100">
+          <span class="shrink-0 w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+          <span class="min-w-0">
+            <span class="block font-medium text-slate-800 leading-tight">To review</span>
+            <span class="block text-[11px] text-violet-600 leading-tight" x-text="count + ' awaiting accept'"></span>
+          </span>
+        </button>
+        <div x-show="open" x-cloak @click.outside="open = false"
+             class="absolute left-0 bottom-full mb-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
+          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">To review</div>
+          <template x-for="(it, i) in items" :key="i">
+            <a :href="it.link" class="flex items-baseline gap-1.5 px-3 py-2 hover:bg-violet-50 border-b border-slate-50 leading-snug">
+              <span class="shrink-0 text-[10px] rounded bg-violet-100 text-violet-700 px-1" x-text="it.kind"></span>
+              <span class="text-slate-700 truncate" x-text="it.label"></span>
+            </a>
+          </template>
+        </div>
+      </div>
       {# Background Jobs: global feed of running/finished background work. Green dot when
          anything is active or unseen; opening the list marks completions seen. #}
       <div class="relative" x-data="{ open: false, unseen: 0, running: 0, items: [], jobs: [],

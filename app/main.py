@@ -139,11 +139,44 @@ def _active_job_count() -> int:
     return len(_active_jobs())
 
 
+def _to_review_items() -> list[dict]:
+    """Everything awaiting the user's accept/dismiss across collections — staged note
+    drafts + belief candidates + chat-proposed wiki edits — for the 'To review' card."""
+    from . import wiki_propose
+    items: list[dict] = []
+    for d in note_drafts.list_all():
+        p = library.get_paper(d["paper_id"])
+        title = ((p or {}).get("title") or f"paper {d['paper_id']}").strip()
+        items.append({"kind": "Note draft", "label": title[:60],
+                      "link": f"/c/{d['collection_slug']}/p/{d['paper_id']}"})
+    try:
+        cols = library.list_collections()
+    except Exception:  # noqa: BLE001
+        cols = []
+    for c in cols:
+        slug = c["slug"]
+        try:
+            for b in wiki.list_belief_candidates(slug):
+                items.append({"kind": "Belief", "label": (b.get("title") or "")[:60],
+                              "link": f"/c/{slug}?tab=understanding"})
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            for pr in wiki_propose.list_pending(slug):
+                items.append({"kind": "Wiki edit", "label": (pr.get("summary") or pr.get("section") or "")[:60],
+                              "link": f"/c/{slug}"})
+        except Exception:  # noqa: BLE001
+            pass
+    return items
+
+
 @app.get("/notifications", response_class=JSONResponse)
 def notifications_feed() -> JSONResponse:
-    """Global background-job feed + running jobs (listed, not just counted)."""
+    """Global background-job feed + running jobs + items awaiting review."""
     jobs = _active_jobs()
-    return JSONResponse({**notify.feed(), "running": len(jobs), "running_jobs": jobs})
+    review = _to_review_items()
+    return JSONResponse({**notify.feed(), "running": len(jobs), "running_jobs": jobs,
+                         "to_review": len(review), "to_review_items": review})
 
 
 @app.post("/notifications/seen", response_class=JSONResponse)
