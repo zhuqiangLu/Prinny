@@ -666,7 +666,6 @@
           {% if kind == 'concept' and ent.blurb %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.blurb }}</p>{% endif %}
           <div class="flex items-center gap-2 text-[11px] text-slate-400">
             <span>{{ ent.paper_count }} paper{{ 's' if ent.paper_count != 1 }}</span>
-            {% if ent.theme %}<span class="rounded px-1.5 py-0.5 {{ theme_color(ent.theme.index)|trim }}">◆ {{ ent.theme.name|truncate(18) }}</span>{% endif %}
           </div>
         </button>
         {% endfor %}
