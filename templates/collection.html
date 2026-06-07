@@ -109,8 +109,9 @@
     </div>
   </div>
 
-  <!-- Map detail popup: theme / concept / method / problem (concepts editable). Opened from a card. -->
+  <!-- Map detail popup: theme / concept / method / problem (concepts editable). Opened from a card or a graph node. -->
   <div x-show="entityOpen" x-cloak @keydown.escape.window="entityOpen = false" @click.self="entityOpen = false"
+       @pa-open-entity.window="entityOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/entity?key=' + encodeURIComponent($event.detail.key), { target: '#entity-modal-body', swap: 'innerHTML' })"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12 overflow-auto">
     <div class="relative bg-white rounded-2xl shadow-2xl w-[min(720px,95vw)] max-h-[88vh] overflow-auto p-6">
       <button type="button" @click="entityOpen = false" class="absolute right-4 top-4 grid place-items-center w-8 h-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50">✕</button>

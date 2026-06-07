@@ -122,6 +122,7 @@ def _active_jobs() -> list[dict]:
     """Currently-running background jobs across all registries, as labeled items for the
     Background Jobs dropdown (so in-progress work is listed, not just counted)."""
     regs = [(wiki._DRAFT_JOBS, "Drafting Field Model"),
+            (wiki._ENTREV_JOBS, "Writing entity reviews"),
             (wiki._BENCH_JOBS, "Extracting benchmarks"),
             (wiki._READING_JOBS, "Searching papers"),
             (topic_view._GEN_JOBS, "Investigating topic"),
@@ -2530,6 +2531,7 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "dup_count": len(library.find_duplicate_groups(slug)),
          "graveyard_count": library.graveyard_count(slug),
          "thesis_undo": wiki.has_thesis_undo(slug),
+         "update_available": wiki.update_available(slug),
          "draft_job": job,                       # active running job, or None
          "draft_initial_action": wiki._stage_message(job)["action"] if job else "",
          "draft_initial_subline": wiki._stage_message(job)["subline"] if job else "",

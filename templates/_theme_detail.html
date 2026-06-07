@@ -6,7 +6,7 @@
 {% else %}
 {% set KS = {'problem': ('#f43f5e','bg-rose-50 text-rose-700 border-rose-200'),
              'method':  ('#0ea5e9','bg-sky-50 text-sky-700 border-sky-200'),
-             'concept': ('#7c3aed','bg-violet-50 text-violet-700 border-violet-200'),
+             'concept': ('#64748b','bg-slate-100 text-slate-600 border-slate-300'),
              'belief':  ('#f59e0b','bg-amber-50 text-amber-800 border-amber-200')} %}
 {% set ST = {'strong': ('↗','Strong','bg-emerald-50 text-emerald-700 border-emerald-200'),
              'moderate': ('→','Moderate','bg-amber-50 text-amber-700 border-amber-200'),
@@ -14,13 +14,13 @@
              or ('·','','bg-slate-50 text-slate-500 border-slate-200') %}
 <div x-data="{ editing: false }">
   <div class="flex items-start gap-3 mb-3">
-    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-emerald-100 text-emerald-700">◆</span>
+    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-violet-100 text-violet-700">◆</span>
     <div class="min-w-0 flex-1">
-      <div class="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Theme</div>
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">Theme</div>
       <h2 x-show="!editing" class="text-xl font-bold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h2>
       <div class="flex items-center gap-2 mt-1.5 flex-wrap">
         <span class="inline-flex items-center gap-0.5 text-[11px] rounded-full px-2 py-0.5 border {{ ST[2] }}">{{ ST[0] }} {{ ST[1] }}</span>
-        <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-emerald-600">✎ Rename</button>
+        <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600">✎ Rename</button>
       </div>
       <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename" hx-target="#left-panel" hx-swap="innerHTML"
             @submit="entityOpen = false" class="flex items-center gap-1 mt-1.5">

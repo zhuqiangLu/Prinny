@@ -2895,12 +2895,14 @@ def connection_view(slug: str) -> dict | None:
                                      "name": c.get("name", c["slug"])}
     except (ValueError, OSError):
         pass
+    _pattn = attention_scores(slug)   # per-paper attention, to roll up onto method/problem cards
 
     def _entity_card(nid):
         k = kind(nid)
         rel = [{"label": label(r), "kind": kind(r)}
                for r, _w in _graph.related(g, nid, k=5) if kind(r) != "paper"]
         card = {"key": nid, "label": label(nid), "kind": k,
+                "gist": nodes[nid].get("gist", ""),
                 "paper_count": len(nodes[nid]["papers"]),
                 "papers": _papers_of(nid)[:6], "related": rel,
                 "theme": entity_themes.get(nid)}
@@ -2909,6 +2911,9 @@ def connection_view(slug: str) -> dict | None:
             m = _cmeta.get(cslug, {})
             card.update(blurb=m.get("blurb", ""), score=m.get("score", 0),
                         concept_slug=cslug, name=m.get("name", card["label"]))
+        else:
+            # method/problem attention = sum of their papers' attention (highlights/notes/thoughts)
+            card["score"] = sum(_pattn.get(pid, 0) for pid in nodes[nid]["papers"])
         return card
 
     entities = {"concept": [], "method": [], "problem": []}
@@ -3039,6 +3044,30 @@ def entity_detail(slug: str, key: str) -> dict | None:
 # ===========================================================================
 def _entity_reviews_path(slug: str) -> Path:
     return _wikidir(slug) / "entity_reviews.json"
+
+
+def update_available(slug: str) -> bool:
+    """True if there's attention signal (a highlight or note) newer than the field model —
+    so the Regenerate button can read 'Update wiki' (you have new signal to fold in)."""
+    if not _thesis_path(slug).is_file():
+        return False
+    try:
+        meta, _ = frontmatter.parse(_thesis_path(slug).read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    gen = str(meta.get("generated_at") or "").replace("T", " ")[:19]
+    if not gen:
+        return False
+    con = connect()
+    try:
+        a = con.execute("SELECT MAX(created_at) FROM annotations WHERE collection_slug=?",
+                        (slug,)).fetchone()[0]
+        n = con.execute("SELECT MAX(updated_at) FROM paper_notes WHERE collection_slug=?",
+                        (slug,)).fetchone()[0]
+    finally:
+        con.close()
+    latest = max([str(x)[:19] for x in (a, n) if x] or [""])
+    return bool(latest) and latest > gen
 
 
 def load_entity_reviews(slug: str) -> dict:

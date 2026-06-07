@@ -43,7 +43,8 @@
               class="text-xl leading-none" title="Star this collection (local)"><span x-text="starred ? '★' : '☆'"></span></button>
       <div class="ml-auto flex items-center gap-2">
         <button type="button" @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })"
-                class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Review your beliefs, then re-draft the Field Model">↻ Regenerate</button>
+                class="rounded-lg border px-3 py-1.5 text-sm font-medium {% if update_available %}border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100{% else %}border-slate-200 bg-white text-slate-700 hover:bg-slate-50{% endif %}"
+                title="{% if update_available %}You have new highlights/notes — fold them into the wiki{% else %}Review your beliefs, then re-draft the Field Model{% endif %}">↻ {% if update_available %}Update wiki{% else %}Regenerate{% endif %}</button>
         <button type="button" @click="$dispatch('open-add')"
                 class="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add paper</button>
         <button type="button" @click="$dispatch('open-create-topic')" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">✦ Create topic</button>
@@ -139,19 +140,6 @@
           <circle cx="50" cy="50" r="45" stroke="#7c3aed" stroke-width="6" fill="none"
                   stroke-dasharray="85 283" stroke-linecap="round" />
         </svg>
-        {# Determinate ring — fills with real stage progress (not time guess) #}
-        <svg class="wiki-draft-cover-progarc" viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r="45" stroke="#e2e8f0" stroke-width="3"
-                  fill="none" stroke-linecap="round" />
-          <circle id="wiki-draft-cover-progress" cx="50" cy="50" r="45"
-                  stroke="#0f172a" stroke-width="3" fill="none"
-                  stroke-dasharray="282.74"
-                  stroke-dashoffset="{{ (282.74 * (1 - (draft_initial_progress or 0) / 100))|round(2) }}"
-                  stroke-linecap="round" />
-        </svg>
-        <div class="wiki-draft-cover-percentwrap">
-          <span id="wiki-draft-cover-percent">{{ draft_initial_progress or 0 }}%</span>
-        </div>
       </div>
       <div id="wiki-draft-cover-action" class="wiki-draft-cover-action">{{ draft_initial_action }}</div>
       {# Subline div kept in DOM (empty) so the polling JS can write into it
@@ -159,7 +147,7 @@
          stable. Hidden via CSS unless populated. #}
       <div id="wiki-draft-cover-subline" class="wiki-draft-cover-subline">{{ draft_initial_subline }}</div>
       <div class="wiki-draft-cover-foot">
-        Working in the background — you can browse other tabs and come back.
+        This may take a couple of minutes.
       </div>
     </div>
   </div>

@@ -39,7 +39,7 @@
 {% set KIND_STYLE = {
   'problem': {'dot': '#f43f5e', 'cls': 'bg-rose-50 text-rose-700 border-rose-200'},
   'method':  {'dot': '#0ea5e9', 'cls': 'bg-sky-50 text-sky-700 border-sky-200'},
-  'concept': {'dot': '#7c3aed', 'cls': 'bg-violet-50 text-violet-700 border-violet-200'},
+  'concept': {'dot': '#64748b', 'cls': 'bg-slate-100 text-slate-600 border-slate-300'},
   'belief':  {'dot': '#f59e0b', 'cls': 'bg-amber-50 text-amber-800 border-amber-200'}
 } %}
 
@@ -62,9 +62,6 @@
         <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
       </form>
       {% endif %}
-      <button type="button" class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
-              title="Review your beliefs, then re-draft the Field Model from the current papers + accepted beliefs"
-              @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate</button>
     </div>
   </div>
 
@@ -611,12 +608,12 @@
     {# View switcher — pick what the card area shows: Theme clusters, the three entity
        types, or the Graph. (Replaces the old Card/Graph toggle + Papers/Connections stats.) #}
     <div class="kg-stats mb-4">
-      {% for v in [('theme','Theme', ov.themes, 'text-emerald-700'),
-                   ('concept','Concept', ov.concepts, 'text-violet-700'),
-                   ('method','Method', ov.methods, 'text-sky-700'),
-                   ('problem','Problem', ov.problems, 'text-rose-700')] %}
+      {% for v in [('theme','Theme', ov.themes, 'text-violet-700', 'ring-violet-400'),
+                   ('concept','Concept', ov.concepts, 'text-slate-600', 'ring-slate-400'),
+                   ('method','Method', ov.methods, 'text-sky-700', 'ring-sky-400'),
+                   ('problem','Problem', ov.problems, 'text-rose-700', 'ring-rose-400')] %}
       <button type="button" @click="mapView = '{{ v[0] }}'"
-              :class="mapView === '{{ v[0] }}' ? 'ring-2 ring-violet-400 bg-white' : 'bg-slate-50/50 hover:bg-white'"
+              :class="mapView === '{{ v[0] }}' ? 'ring-2 {{ v[4] }} bg-white' : 'bg-slate-50/50 hover:bg-white'"
               class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ v[1] }}s">
         <div class="text-xl font-semibold tabular-nums {{ v[3] }}">{{ v[2] }}</div>
         <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ v[1] }}</div>
@@ -638,19 +635,19 @@
       <div class="flex items-center gap-2 mb-2">
         <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — the recurring ideas in this collection; your highlights/notes on them drive Focus.' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
       </div>
-      {% set ENT = {'concept': ('◈','border-violet-200','bg-violet-50/40','text-violet-800'),
-                    'method':  ('🔧','border-sky-200','bg-sky-50/40','text-sky-800'),
-                    'problem': ('🚩','border-rose-200','bg-rose-50/40','text-rose-800')} %}
+      {% set ENT = {'concept': ('◈','border-slate-300','bg-slate-100','text-slate-700'),
+                    'method':  ('🔧','border-sky-200','bg-sky-50','text-sky-800'),
+                    'problem': ('🚩','border-rose-200','bg-rose-50','text-rose-800')} %}
       {% for kind, lists in cx.entities.items() %}
       <div x-show="mapView === '{{ kind }}'" x-cloak class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {% if kind == 'concept' %}
         <form hx-post="/c/{{ slug }}/wiki/concepts/add" hx-target="#left-panel" hx-swap="innerHTML"
-              x-data="{ a:false }" class="rounded-lg border border-dashed border-violet-200 p-3">
-          <button type="button" x-show="!a" @click="a=true" class="text-xs text-violet-600 hover:underline">+ Add concept</button>
+              x-data="{ a:false }" class="rounded-lg border border-dashed border-slate-300 p-3">
+          <button type="button" x-show="!a" @click="a=true" class="text-xs text-slate-600 hover:underline">+ Add concept</button>
           <div x-show="a" x-cloak class="space-y-1.5">
             <input name="name" required placeholder="Concept name" class="w-full rounded border border-slate-300 px-2 py-1 text-xs">
             <textarea name="blurb" rows="2" placeholder="One-line description (optional)" class="w-full rounded border border-slate-300 px-2 py-1 text-xs"></textarea>
-            <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs">Add</button><button type="button" @click="a=false" class="text-xs text-slate-400">Cancel</button></div>
+            <div class="flex gap-2"><button class="rounded bg-slate-700 text-white px-2.5 py-1 text-xs">Add</button><button type="button" @click="a=false" class="text-xs text-slate-400">Cancel</button></div>
           </div>
         </form>
         {% endif %}
@@ -660,9 +657,10 @@
           <div class="flex items-center gap-1.5 mb-1">
             <span class="text-xs">{{ ENT[kind][0] }}</span>
             <span class="text-sm font-medium {{ ENT[kind][3] }} flex-1 min-w-0 truncate">{{ ent.label }}</span>
-            {% if kind == 'concept' and ent.score %}<span class="text-[10px] rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-700" title="{{ ent.score }} attention points">🔥 {{ ent.score }}</span>{% endif %}
+            {% if ent.score %}<span class="text-[10px] rounded-full px-1.5 py-0.5 bg-orange-100 text-orange-700" title="{{ ent.score }} attention points">🔥 {{ ent.score }}</span>{% endif %}
           </div>
-          {% if kind == 'concept' and ent.blurb %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.blurb }}</p>{% endif %}
+          {% if kind == 'concept' and ent.blurb %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.blurb }}</p>
+          {% elif kind != 'concept' and ent.gist %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.gist }}</p>{% endif %}
           <div class="flex items-center gap-2 text-[11px] text-slate-400">
             <span>{{ ent.paper_count }} paper{{ 's' if ent.paper_count != 1 }}</span>
           </div>
@@ -684,7 +682,7 @@
              @contextmenu.prevent="window.paAskEl($el)">
           <div class="p-4 cursor-pointer" @click="entityOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/theme?sig={{ t.sig }}', { target: '#entity-modal-body', swap: 'innerHTML' })">
             <div class="flex items-start gap-3">
-              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm bg-emerald-100 text-emerald-700">◆</span>
+              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm bg-violet-100 text-violet-700">◆</span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
@@ -757,16 +755,16 @@
         <div class="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
           <div class="flex items-center gap-2 mb-2">
             <span class="text-xs font-semibold text-slate-600">Collection map</span>
+            <button type="button" @click="window.kgReset && window.kgReset()" class="text-[10px] rounded border border-slate-200 px-1.5 py-0.5 text-slate-500 hover:bg-slate-50" title="Re-run the layout (undo dragging)">⟲ Reset</button>
             <span class="ml-auto flex items-center gap-1.5 text-[9px] text-slate-500">
               <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
               <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
-              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#7c3aed"></span>concept</span>
-              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>belief</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#64748b"></span>concept</span>
             </span>
           </div>
           <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-white" style="height: 460px;"
                data-graph='{{ cx.graph | tojson }}' data-slug="{{ slug }}"></div>
-          <p class="mt-1.5 text-[10px] text-slate-400">Drag to pan · scroll to zoom · hover a node to focus its neighbors. Edges = ideas that share papers.</p>
+          <p class="mt-1.5 text-[10px] text-slate-400">Click a node to open it · drag to pan · scroll to zoom · hover to focus neighbors · ⟲ Reset re-runs the layout.</p>
         </div>
       </div>
       <script>
@@ -785,7 +783,7 @@
           var data;
           try { data = JSON.parse(el.getAttribute("data-graph")); } catch (e) { return; }
           el.dataset.kgInit = "1";
-          var COLOR = {concept:"#7c3aed", method:"#0ea5e9", problem:"#f43f5e", belief:"#f59e0b"};
+          var COLOR = {concept:"#64748b", method:"#0ea5e9", problem:"#f43f5e", belief:"#f59e0b"};
           var els = [];
           data.nodes.forEach(function (n) { els.push({data: {id: n.id, label: n.label, kind: n.kind}}); });
           data.edges.forEach(function (e) { els.push({data: {id: "e_" + e.source + "__" + e.target, source: e.source, target: e.target, weight: e.weight || 1}}); });
@@ -806,9 +804,20 @@
             layout: {name: "cose", animate: false, padding: 12, nodeRepulsion: 8000, idealEdgeLength: 60},
           });
           window.__kgCy = cy;
+          window.__kgLayout = {name: "cose", animate: true, padding: 12, nodeRepulsion: 8000, idealEdgeLength: 60};
           cy.on("mouseover", "node", function (evt) { cy.elements().not(evt.target.closedNeighborhood()).addClass("kg-dim"); });
           cy.on("mouseout", "node", function () { cy.elements().removeClass("kg-dim"); });
+          // Click a node → open its entity detail popup (collectionView listens for pa-open-entity).
+          cy.on("tap", "node", function (evt) {
+            window.dispatchEvent(new CustomEvent("pa-open-entity", { detail: { key: evt.target.id() } }));
+          });
           cy.resize(); cy.fit(undefined, 20);
+        };
+        // Re-run the layout (undo manual dragging) and re-fit.
+        window.kgReset = function () {
+          var cy = window.__kgCy; if (!cy) return;
+          cy.layout(window.__kgLayout || {name: "cose", animate: true}).run();
+          cy.fit(undefined, 20);
         };
         window.kgFocus = function (id) {
           var cy = window.__kgCy; if (!cy) return false;
@@ -913,8 +922,8 @@
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-slate-400 mr-0.5">Filter:</span>
         <button type="button" @click="selKeys=[]; filterDim='all'" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
-        {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
+        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
+        {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
         {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>{% endif %}
         {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button>{% endif %}
         <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
@@ -925,7 +934,7 @@
         {% for t in themelist %}<button type="button" @click="toggleKey('theme:{{ t.index }}')" :class="selKeys.includes('theme:{{ t.index }}') ? 'ring-2 ring-emerald-400 bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'" class="rounded px-2 py-0.5 text-emerald-700">{{ (t.name or ('Theme ' ~ t.index))|truncate(30) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='concept'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.concept %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.concept %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-slate-400 bg-slate-200' : 'bg-slate-100 hover:bg-slate-200'" class="rounded px-2 py-0.5 text-slate-600">{{ e.label|truncate(30) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
         {% for e in cxe.method %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700">{{ e.label|truncate(30) }}</button>{% endfor %}
