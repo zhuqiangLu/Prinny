@@ -253,22 +253,30 @@
   {% else %}
   <div class="flex items-center justify-between">
     <span class="text-xs text-slate-500">{{ overview.add_candidates|length }} pending</span>
-    {# Clear all: empties the list WITHOUT judging (not added, not rejected) — distinct from Dismiss #}
+    {# Clear all: empties the list WITHOUT judging (not added, not rejected; may resurface) #}
     <form hx-post="/c/{{ slug }}/wiki/reading/clear" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
-          hx-confirm="Clear all {{ overview.add_candidates|length }} suggestions? They're removed from this list — NOT added to the collection and NOT rejected, so a later search may surface them again. (Use Dismiss to reject one.)">
+          hx-confirm="Clear all {{ overview.add_candidates|length }} suggestions? They're removed from this list — NOT added to the collection and NOT rejected, so a later search may surface them again.">
       <button class="text-xs text-slate-500 hover:text-rose-600">Clear all</button>
     </form>
   </div>
-  {# grouped by how each batch was found (similar / custom / related / …); old ones in 'Earlier'.
-     Fall back to one flat group if add_groups isn't supplied (e.g. an older server build). #}
+  {# One CARD per source (how the batch was found); its papers live inside. Clear a whole
+     card or all — no per-paper dismiss. Fall back to one card if add_groups isn't supplied. #}
   {% set _groups = overview.add_groups if (overview.add_groups is defined and overview.add_groups)
                    else [{"label": "", "cands": overview.add_candidates}] %}
   {% for g in _groups %}
-  <div class="space-y-2">
+  <div class="rounded-xl border border-slate-200 bg-white p-3 space-y-2">
     {% if g.label %}
-    <div class="flex items-center gap-1.5 text-xs font-medium text-slate-600 border-b border-slate-100 pb-1">
-      <span class="truncate">{{ g.label }}</span>
-      <span class="shrink-0 text-slate-400">({{ g.cands|length }})</span>
+    <div class="flex items-center gap-2 border-b border-slate-100 pb-1.5">
+      <span class="text-sm font-medium text-slate-700 truncate min-w-0">{{ g.label }}</span>
+      <span class="shrink-0 text-xs text-slate-400">({{ g.cands|length }})</span>
+      {% if g.source %}
+      <form hx-post="/c/{{ slug }}/wiki/reading/clear-source" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto shrink-0"
+            hx-confirm="Clear these {{ g.cands|length }} suggestions from “{{ g.label }}”? Removed without rejecting (may resurface later).">
+        <input type="hidden" name="source" value="{{ g.source }}">
+        <input type="hidden" name="source_detail" value="{{ g.detail|default('') }}">
+        <button class="text-xs text-slate-400 hover:text-rose-600">Clear</button>
+      </form>
+      {% endif %}
     </div>
     {% endif %}
     <ul class="space-y-2">
@@ -281,12 +289,9 @@
         {% if c.llm_relevance_note %}
         <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}</p>
         {% endif %}
-        <div class="mt-2 flex items-center gap-1.5">
+        <div class="mt-2">
           <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
             <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add to collection</button>
-          </form>
-          <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-            <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
           </form>
         </div>
       </li>

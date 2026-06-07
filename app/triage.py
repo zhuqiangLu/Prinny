@@ -313,6 +313,21 @@ def add_candidate(slug: str, cand: dict, note: str,
         con.close()
 
 
+def clear_source(slug: str, source: str, source_detail: str) -> int:
+    """Clear the pending suggestions from ONE source group (no judgment — deleted, not
+    rejected; may resurface). Returns the count cleared."""
+    con = connect()
+    try:
+        cur = con.execute(
+            "DELETE FROM triage_items WHERE collection_slug=? AND status='pending' "
+            "AND COALESCE(source,'')=? AND COALESCE(source_detail,'')=?",
+            (slug, source or "", source_detail or ""))
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
 def clear_pending(slug: str) -> int:
     """Empty the pending suggested-reading list WITHOUT judging it — rows are deleted,
     not rejected (no graveyard tombstone), so they aren't suppressed on a later find/Pull.

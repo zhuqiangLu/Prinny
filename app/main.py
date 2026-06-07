@@ -2691,9 +2691,18 @@ def wiki_add_dismiss(request: Request, slug: str, tid: int) -> HTMLResponse:
 @app.post("/c/{slug}/wiki/reading/clear", response_class=HTMLResponse)
 def wiki_reading_clear(request: Request, slug: str) -> HTMLResponse:
     """Clear ALL pending suggestions — removed from the list without judging (not added,
-    not rejected; may resurface later). Distinct from Dismiss (which rejects one)."""
+    not rejected; may resurface later)."""
     _require_collection(slug)
     triage_mod.clear_pending(slug)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/reading/clear-source", response_class=HTMLResponse)
+def wiki_reading_clear_source(request: Request, slug: str, source: str = Form(""),
+                              source_detail: str = Form("")) -> HTMLResponse:
+    """Clear one source group's pending suggestions (no judgment)."""
+    _require_collection(slug)
+    triage_mod.clear_source(slug, source, source_detail)
     return _wiki_panel(request, slug)
 
 
