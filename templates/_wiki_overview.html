@@ -48,7 +48,7 @@
    =================================================================== #}
 <div x-show="tab==='overview'" class="space-y-6">
 
-  {# Provenance line (info only; Regenerate now lives in the ⋯ header menu). #}
+  {# Provenance line + Regenerate (also available in the ⋯ header menu). #}
   <div class="flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
     <span>✦</span>
     <span>AI-drafted Field Model — the orientation layer of your wiki.
@@ -56,11 +56,17 @@
       <span class="text-violet-500">(from {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts.)</span>
       {% endif %}
     </span>
-    {% if thesis_undo %}
-    <form hx-post="/c/{{ slug }}/wiki/thesis/undo" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
-      <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
-    </form>
-    {% endif %}
+    <div class="ml-auto flex items-center gap-2">
+      {% if thesis_undo %}
+      <form hx-post="/c/{{ slug }}/wiki/thesis/undo" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
+      </form>
+      {% endif %}
+      <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
+                title="Re-draft the Field Model from the current papers + your accepted beliefs (runs in the background)">↻ Regenerate <span class="htmx-indicator">…</span></button>
+      </form>
+    </div>
   </div>
 
   {# --- Section 1: Collection Thesis (+ Focus sidebar, threshold-gated) --- #}
