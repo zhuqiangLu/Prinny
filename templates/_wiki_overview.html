@@ -259,13 +259,18 @@
       <button class="text-xs text-slate-500 hover:text-rose-600">Clear all</button>
     </form>
   </div>
-  {# grouped by how each batch was found (similar / custom / related / …); old ones in 'Earlier' #}
-  {% for g in overview.add_groups %}
+  {# grouped by how each batch was found (similar / custom / related / …); old ones in 'Earlier'.
+     Fall back to one flat group if add_groups isn't supplied (e.g. an older server build). #}
+  {% set _groups = overview.add_groups if (overview.add_groups is defined and overview.add_groups)
+                   else [{"label": "", "cands": overview.add_candidates}] %}
+  {% for g in _groups %}
   <div class="space-y-2">
+    {% if g.label %}
     <div class="flex items-center gap-1.5 text-xs font-medium text-slate-600 border-b border-slate-100 pb-1">
       <span class="truncate">{{ g.label }}</span>
       <span class="shrink-0 text-slate-400">({{ g.cands|length }})</span>
     </div>
+    {% endif %}
     <ul class="space-y-2">
       {% for c in g.cands %}
       <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
