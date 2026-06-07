@@ -948,6 +948,66 @@
 </div>{# /connections pane #}
 
 {# ===================================================================
+   PANE: REVIEW — agent-drafted literature review (you edit + accept)
+   =================================================================== #}
+<div x-show="tab==='review'" x-cloak class="space-y-3">
+  <section class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="flex items-center gap-2 mb-1 flex-wrap">
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>❡</span> Literature review</h2>
+      <span class="text-xs text-slate-500">(Problems · Methods · Gaps)</span>
+      {% if (review.has_accepted or review.has_draft) and not review_running %}
+      <form hx-post="/c/{{ slug }}/wiki/review/suggest" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
+        <button class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Re-draft from your latest notes & thoughts">↻ Re-draft</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="text-xs text-slate-500 mb-3">Drafted from <b>your notes &amp; reasoning thoughts</b> (the spine), with papers you haven't noted summarized from abstracts and marked <i>(not yet reviewed by you)</i>. The agent drafts; <b>you edit &amp; accept</b> — it becomes yours.</p>
+
+    {% if review_error %}
+    <div class="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800"><b>The last review draft failed.</b> {{ review_error }} — try again.</div>
+    {% endif %}
+
+    {% if review_running %}
+    <div class="flex items-center gap-2 text-sm text-slate-600 py-6 justify-center">
+      <span class="inline-block animate-spin text-violet-500 text-lg">⟳</span> Drafting your literature review… <span class="text-slate-400">you can browse other tabs and come back.</span>
+    </div>
+
+    {% elif review.has_draft %}
+    {# Agent draft pending review — editable; Accept makes it yours, Dismiss drops it. #}
+    <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+      <p class="text-xs text-amber-800 mb-2">✦ Draft ready — edit anything, then <b>Accept</b> to save it as your review.</p>
+      <form hx-post="/c/{{ slug }}/wiki/review/accept" hx-target="#left-panel" hx-swap="innerHTML">
+        <textarea name="text" rows="22" class="w-full rounded border border-slate-300 px-3 py-2 text-sm font-mono leading-relaxed">{{ review.draft_md }}</textarea>
+        <div class="mt-2 flex items-center gap-2">
+          <button class="rounded bg-emerald-600 text-white px-3 py-1.5 text-sm hover:bg-emerald-700">✓ Accept as my review</button>
+          <button type="button" class="text-sm text-slate-500 hover:text-rose-600"
+                  hx-post="/c/{{ slug }}/wiki/review/dismiss" hx-target="#left-panel" hx-swap="innerHTML"
+                  hx-confirm="Discard this draft review?">Dismiss</button>
+        </div>
+      </form>
+    </div>
+
+    {% elif review.has_accepted %}
+    <div class="flex items-center gap-2 text-[11px] text-slate-400 mb-2">
+      <span class="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5">✓ your accepted review</span>
+      {% if review.accepted_at %}<span>accepted {{ review.accepted_at }}</span>{% endif %}
+    </div>
+    <article class="prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900">{{ review_html|safe }}</article>
+
+    {% else %}
+    <div class="rounded-lg border border-dashed border-slate-300 p-5 text-center">
+      <p class="text-sm text-slate-600 mb-1">No review yet.</p>
+      <p class="text-xs text-slate-400 mb-3">One LLM pass over your notes, reasoning thoughts, the landscape, and paper abstracts → an editable Problems · Methods · Gaps review you review and accept.</p>
+      <form hx-post="/c/{{ slug }}/wiki/review/suggest" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">✦ Draft literature review</button>
+        <span class="ml-1 text-xs text-slate-400">a minute or so; runs in the background</span>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{# ===================================================================
    PANE: PAPERS — the evidence list (attention chips, theme filter, search)
    =================================================================== #}
 <div x-show="tab==='papers'" x-cloak>

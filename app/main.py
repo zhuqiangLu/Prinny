@@ -2483,6 +2483,16 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
         if bjob["status"] == "failed":
             benchmark_error = bjob.get("error")
         wiki.clear_benchmark_job(slug)
+    # Literature-review async job (spinner on the Review tab).
+    review = wiki.load_review(slug)
+    revjob = wiki.get_review_job(slug)
+    review_running = bool(revjob and revjob.get("status") == "running")
+    review_error = None
+    if revjob and revjob.get("status") in ("done", "failed"):
+        if revjob["status"] == "failed":
+            review_error = revjob.get("error")
+        wiki.clear_review_job(slug)
+    review_html = render_md(review["accepted_md"], slug) if review["has_accepted"] else ""
 
     # Header stat strip (Papers · Highlights · Notes · Connections). Cheap counts;
     # 'Connections' reuses the structural graph's edge count from connection_view.
@@ -2511,6 +2521,10 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "reading_error": reading_error,
          "benchmark_running": benchmark_running,
          "benchmark_error": benchmark_error,
+         "review": review,
+         "review_html": review_html,
+         "review_running": review_running,
+         "review_error": review_error,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "dup_count": len(library.find_duplicate_groups(slug)),
@@ -2584,6 +2598,39 @@ def wiki_beliefs_suggest(request: Request, slug: str) -> HTMLResponse:
     no new candidates."""
     _require_collection(slug)
     wiki.suggest_beliefs(slug)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/review/suggest", response_class=HTMLResponse)
+def wiki_review_suggest(request: Request, slug: str) -> HTMLResponse:
+    """Kick off the literature-review draft on a background thread; re-render the
+    panel (which shows the Review tab spinner + polls to completion)."""
+    _require_collection(slug)
+    wiki.start_review_async(slug)
+    return _wiki_panel(request, slug)
+
+
+@app.get("/c/{slug}/wiki/review/status", response_class=JSONResponse)
+def wiki_review_status(slug: str) -> JSONResponse:
+    job = wiki.get_review_job(slug)
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"), "error": job.get("error")})
+
+
+@app.post("/c/{slug}/wiki/review/accept", response_class=HTMLResponse)
+def wiki_review_accept(request: Request, slug: str, text: str = Form("")) -> HTMLResponse:
+    """Accept the (edited) review draft → wiki/review.md. The user owns it now."""
+    _require_collection(slug)
+    wiki.accept_review(slug, text)
+    return _wiki_panel(request, slug)
+
+
+@app.post("/c/{slug}/wiki/review/dismiss", response_class=HTMLResponse)
+def wiki_review_dismiss(request: Request, slug: str) -> HTMLResponse:
+    """Drop the pending review draft without saving."""
+    _require_collection(slug)
+    wiki.dismiss_review(slug)
     return _wiki_panel(request, slug)
 
 

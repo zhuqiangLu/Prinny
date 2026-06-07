@@ -1642,6 +1642,240 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     return True
 
 
+# ===========================================================================
+# Literature review (agent-drafted from YOUR notes/thoughts; you edit + accept).
+#
+# A full Problems · Methods · Gaps review. The spine is the user's own writing
+# (per-paper notes + reasoning thoughts); papers they haven't noted are filled
+# from abstracts but explicitly marked "(not yet reviewed by you)" so the doc is
+# honest about coverage. It's staged at wiki/review/_draft.md and only becomes
+# wiki/review.md when the user accepts (after editing) — never auto-final.
+# Lives OUTSIDE wiki/sections/ so a Field-Model regenerate can't touch it.
+# ===========================================================================
+def _safe_text(s: str) -> str:
+    """Drop lone UTF-16 surrogates (split PDF glyphs) so writes never crash."""
+    return (s or "").encode("utf-8", "ignore").decode("utf-8")
+
+
+def _review_path(slug: str) -> Path:
+    return _wikidir(slug) / "review.md"
+
+
+def _review_draft_path(slug: str) -> Path:
+    return _wikidir(slug) / "review" / "_draft.md"
+
+
+def _gather_review_inputs(slug: str) -> dict:
+    """Assemble review context: the user's notes + reasoning thoughts (the spine),
+    the landscape (problems/methods/open-questions), the concept space, and every
+    paper's title+abstract tagged with whether the user has noted it."""
+    from . import library
+    from . import thoughts as _th
+    rmap = _ref_map(slug)
+    id_to_ref: dict = {}
+    for ref, info in rmap.items():
+        pid = info.get("id")
+        if pid is not None and pid not in id_to_ref:
+            id_to_ref[pid] = ref
+    notes_by_paper: dict = {}
+    con = connect()
+    try:
+        for r in con.execute(
+            "SELECT paper_id, COALESCE(summary,'') s, COALESCE(thoughts,'') t, "
+            "COALESCE(key_quotes,'') q FROM paper_notes WHERE collection_slug=? AND ("
+            "COALESCE(summary,'')<>'' OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>'')",
+            (slug,)):
+            notes_by_paper[r["paper_id"]] = " ".join(filter(None, [r["s"], r["t"], r["q"]])).strip()
+    finally:
+        con.close()
+    papers = []
+    for p in library.list_papers(slug):
+        gp = library.get_paper(p["id"]) or {}
+        papers.append({
+            "ref": id_to_ref.get(p["id"]) or str(p["id"]),
+            "title": p.get("title") or "", "year": p.get("year") or "",
+            "abstract": _safe_text((gp.get("abstract") or "").strip()),
+            "note": notes_by_paper.get(p["id"], ""),
+        })
+    rthoughts = []
+    for t in _th.list_thoughts(slug):
+        if t.get("synth_kind") == "reasoning" and (t.get("body") or "").strip():
+            pk = (t.get("paper_key") or "")
+            ref = id_to_ref.get(int(pk), "") if pk.isdigit() else ""
+            rthoughts.append({"body": t["body"].strip(), "ref": ref})
+    concepts = []
+    if _concepts_path(slug).is_file():
+        try:
+            concepts = json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or []
+        except (ValueError, OSError):
+            concepts = []
+    return {"papers": papers, "reasoning_thoughts": rthoughts,
+            "concepts": concepts, "landscape": _load_landscape(slug)}
+
+
+def _build_review_prompt(slug: str, ctx: dict) -> str:
+    def _bullets(items) -> str:
+        out = [(it["text"] if isinstance(it, dict) else str(it)) for it in (items or [])]
+        return "\n".join(f"- {x}" for x in out) or "(none)"
+    ls = ctx["landscape"] or {}
+    noted = [p for p in ctx["papers"] if p["note"]]
+    unnoted = [p for p in ctx["papers"] if not p["note"]]
+    parts = [
+        f"COLLECTION: {slug}",
+        f"PAPERS: {len(ctx['papers'])} total — {len(noted)} you have noted, {len(unnoted)} not yet.\n",
+        "CONCEPTS:\n" + ("\n".join(f"- {c.get('name','')}: {c.get('blurb','')}"
+                                   for c in ctx["concepts"]) or "(none)"),
+        "\nLANDSCAPE — PROBLEMS:\n" + _bullets(ls.get("problems")),
+        "LANDSCAPE — METHODS:\n" + _bullets(ls.get("methods")),
+        "LANDSCAPE — OPEN QUESTIONS / GAPS:\n" + _bullets(ls.get("open_questions")),
+        "\nYOUR REASONING THOUGHTS — lead the review with these; they are the spine "
+        "and carry the most weight:",
+    ]
+    for t in ctx["reasoning_thoughts"][:20]:
+        parts.append(f"- {t['body']}" + (f" [[{t['ref']}]]" if t["ref"] else ""))
+    if not ctx["reasoning_thoughts"]:
+        parts.append("- (none yet)")
+    parts.append("\nPAPERS YOU HAVE NOTED — use YOUR take as the voice; cite as [[ref]]:")
+    for p in noted[:40]:
+        parts.append(f"### [[{p['ref']}]] {p['title']} ({p['year']})\n"
+                     f"YOUR NOTE: {p['note'][:800]}\nABSTRACT: {p['abstract'][:400]}")
+    parts.append("\nPAPERS YOU HAVE NOT NOTED — summarize from the abstract, and you MUST "
+                 "mark each as '(not yet reviewed by you)':")
+    for p in unnoted[:40]:
+        parts.append(f"### [[{p['ref']}]] {p['title']} ({p['year']})\nABSTRACT: {p['abstract'][:400]}")
+    return "\n".join(parts)
+
+
+def suggest_review(slug: str) -> dict:
+    """One LLM call → a full literature review (Problems · Methods · Gaps) drafted
+    from the user's notes + reasoning thoughts, unnoted papers filled from abstracts
+    (marked). Writes wiki/review/_draft.md (status=draft). Returns {ok, error}."""
+    ctx = _gather_review_inputs(slug)
+    if not ctx["papers"]:
+        return {"ok": False, "error": "No papers in this collection yet."}
+    from . import agent_skills
+    system = (agent_skills.skill_body("literature-review")
+              or ("Write a literature review in markdown with `## Problems`, `## Methods`, "
+                  "and `## Gaps`. Lead with the user's own takes (their notes/thoughts) as the "
+                  "voice; cite papers as [[ref]]. Clearly mark anything summarized only from an "
+                  "abstract with '(not yet reviewed by you)'. Do not invent findings."))
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": _build_review_prompt(slug, ctx)}])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"The LLM call failed: {exc}"}
+    out = _safe_text(out or "").strip()
+    if not out:
+        return {"ok": False, "error": "The agent produced no usable output."}
+    p = _review_draft_path(slug)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    meta = {"type": "review", "status": "draft", "generated_by": "agent",
+            "generator": "literature-review", "generated_at": _now()}
+    p.write_text(frontmatter.dump(meta, out), encoding="utf-8")
+    return {"ok": True}
+
+
+def accept_review(slug: str, text: str) -> bool:
+    """Promote the (possibly edited) draft to wiki/review.md and drop the draft.
+    The user owns the result — it's their accepted review now."""
+    body = _safe_text(text or "").strip()
+    if not body:
+        return False
+    meta = {"type": "review", "status": "accepted", "generated_by": "agent",
+            "generator": "literature-review", "accepted_at": _now()}
+    dp = _review_draft_path(slug)
+    if dp.is_file():
+        try:
+            m, _ = frontmatter.parse(dp.read_text(encoding="utf-8"))
+            if m.get("generated_at"):
+                meta["generated_at"] = m["generated_at"]
+        except OSError:
+            pass
+    ap = _review_path(slug)
+    ap.parent.mkdir(parents=True, exist_ok=True)
+    ap.write_text(frontmatter.dump(meta, body), encoding="utf-8")
+    if dp.is_file():
+        dp.unlink()
+    return True
+
+
+def dismiss_review(slug: str) -> bool:
+    dp = _review_draft_path(slug)
+    if dp.is_file():
+        dp.unlink()
+        return True
+    return False
+
+
+def load_review(slug: str) -> dict:
+    """{accepted_md, draft_md, has_accepted, has_draft, generated_at, accepted_at}."""
+    out = {"accepted_md": "", "draft_md": "", "has_accepted": False,
+           "has_draft": False, "generated_at": "", "accepted_at": ""}
+    ap = _review_path(slug)
+    if ap.is_file():
+        try:
+            m, b = frontmatter.parse(ap.read_text(encoding="utf-8"))
+            out["accepted_md"] = b.strip()
+            out["has_accepted"] = bool(b.strip())
+            out["generated_at"] = m.get("generated_at", "") or ""
+            out["accepted_at"] = m.get("accepted_at", "") or ""
+        except OSError:
+            pass
+    dp = _review_draft_path(slug)
+    if dp.is_file():
+        try:
+            m, b = frontmatter.parse(dp.read_text(encoding="utf-8"))
+            out["draft_md"] = b.strip()
+            out["has_draft"] = bool(b.strip())
+            if not out["generated_at"]:
+                out["generated_at"] = m.get("generated_at", "") or ""
+        except OSError:
+            pass
+    return out
+
+
+_REVIEW_JOBS: dict[str, dict] = {}
+
+
+def get_review_job(slug: str) -> dict | None:
+    with _DRAFT_LOCK:
+        j = _REVIEW_JOBS.get(slug)
+        return dict(j) if j else None
+
+
+def clear_review_job(slug: str) -> None:
+    with _DRAFT_LOCK:
+        _REVIEW_JOBS.pop(slug, None)
+
+
+def start_review_async(slug: str) -> bool:
+    """Draft the literature review on a daemon thread (one big LLM call). Returns
+    False if a review job is already running for this slug."""
+    existing = get_review_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    with _DRAFT_LOCK:
+        _REVIEW_JOBS[slug] = {"status": "running", "started_at": _now(), "error": None}
+
+    def runner():
+        from . import notify
+        try:
+            res = suggest_review(slug)
+            ok = bool(res.get("ok"))
+            with _DRAFT_LOCK:
+                _REVIEW_JOBS[slug] = {"status": "done" if ok else "failed",
+                                      "error": None if ok else res.get("error")}
+            notify.add(f"Literature review {'drafted' if ok else 'failed'} ({slug})",
+                       f"/c/{slug}?tab=review", slug, ok=ok)
+        except Exception as exc:  # noqa: BLE001
+            with _DRAFT_LOCK:
+                _REVIEW_JOBS[slug] = {"status": "failed", "error": str(exc)}
+            notify.add(f"Literature review failed ({slug})", f"/c/{slug}?tab=review", slug, ok=False)
+
+    threading.Thread(target=runner, daemon=True, name=f"review-{slug}").start()
+    return True
+
+
 # --- async draft job ('the agent works in the background') ---------------------------
 # In-memory only on purpose: a uvicorn restart wipes any in-flight job, which is the
 # honest behavior (the background thread is gone too). The UI's polling endpoint will
