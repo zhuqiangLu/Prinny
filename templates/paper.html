@@ -113,6 +113,16 @@
                     class="ml-auto rounded bg-slate-900 px-4 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50">Save</button>
           </div>
           <p x-show="err" x-text="err" class="mt-2 text-sm text-rose-700"></p>
+          {# Per-paper notes/thoughts (anchored thoughts) — many dated atoms, distinct from
+             the single consolidated note above. Chat captures + /thought land here too. #}
+          <div class="mt-4 shrink-0 border-t border-slate-200 pt-3">
+            <div class="text-xs font-medium text-slate-600 mb-1.5">Notes &amp; thoughts on this paper</div>
+            <div class="max-h-64 overflow-auto"
+                 hx-get="/c/{{ slug }}/thoughts/panel?paper_key={{ paper.id }}"
+                 hx-trigger="load" hx-swap="innerHTML">
+              <span class="text-sm text-slate-400">Loading…</span>
+            </div>
+          </div>
         </div>
 
         <!-- Highlights tab (annotate.js renders into #hl-list) -->

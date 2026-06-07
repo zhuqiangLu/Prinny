@@ -1435,7 +1435,8 @@ def chat_post(
     if prefix == "help":            # static command reference, no LLM call
         return _chat_help_turn(request, slug, message)
     if prefix in ("thought", "find", "gaps"):    # quick commands (capture / discover)
-        return _chat_command_turn(request, slug, prefix, remainder, message)
+        return _chat_command_turn(request, slug, prefix, remainder, message,
+                                  paper_key=(str(pid) if pid else ""))
     if prefix == "belief":          # propose ONE belief, grounded by the agent
         instr = ("Propose exactly ONE belief capturing this claim, and cite supporting papers "
                  f"from the collection to ground it: {remainder}" if (remainder or "").strip()
@@ -1747,15 +1748,17 @@ def _ref_display(ref: dict, user_msg: str) -> str:
     return f"**{chip}** — {user_msg.strip()}" if (user_msg or "").strip() else f"**{chip}**"
 
 
-def _chat_command_turn(request, slug, prefix, remainder, original):
+def _chat_command_turn(request, slug, prefix, remainder, original, paper_key: str = ""):
     """Handle the quick (non-agentic) slash commands: /thought, /find, /gaps."""
     text = (remainder or "").strip()
     if prefix == "thought":
         if not text:
             return _chat_static_turn(request, slug, original,
                                      "Usage: `/thought <text>` — saves a note to your thought stream.")
-        thoughts_mod.create_thought(slug, text, synth_kind="reasoning", author_origin="human")
-        return _chat_static_turn(request, slug, original, "✓ Saved to your **thought stream**.")
+        thoughts_mod.create_thought(slug, text, synth_kind="reasoning", author_origin="human",
+                                    paper_key=paper_key or None)
+        where = "this paper's notes" if paper_key else "your **thought stream**"
+        return _chat_static_turn(request, slug, original, f"✓ Saved to {where}.")
     if prefix == "find":
         if text:
             wiki.start_reading_async(slug, purpose="custom", custom=text)
@@ -1845,19 +1848,23 @@ def wiki_set_proactive(slug: str, on: str = Form("")) -> HTMLResponse:
 
 
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)
-def thoughts_capture(slug: str, agent_text: str = Form(""), your_take: str = Form("")) -> HTMLResponse:
+def thoughts_capture(slug: str, agent_text: str = Form(""), your_take: str = Form(""),
+                     paper_key: str = Form("")) -> HTMLResponse:
     """Attribution-safe capture from agentic chat: the agent's reply becomes a
     (seed, agent) thought (can't ground an assertion); an optional 'your take' becomes
-    a (reasoning, human) thought linked to it via prompted_by."""
+    a (reasoning, human) thought linked to it via prompted_by. Anchors to a paper when
+    captured from a paper chat (paper_key set)."""
     _require_collection(slug)
     agent_text = agent_text.strip()
     if not agent_text:
         raise HTTPException(status_code=400, detail="nothing to capture")
-    seed_id = thoughts_mod.create_thought(slug, agent_text, synth_kind="seed", author_origin="agent")
+    pk = paper_key or None
+    seed_id = thoughts_mod.create_thought(slug, agent_text, synth_kind="seed",
+                                          author_origin="agent", paper_key=pk)
     take = your_take.strip()
     if take:
         thoughts_mod.create_thought(slug, take, synth_kind="reasoning",
-                                    author_origin="human", prompted_by=seed_id)
+                                    author_origin="human", prompted_by=seed_id, paper_key=pk)
     msg = "Captured as a seed" + (" + your reasoning" if take else "") + "."
     return HTMLResponse(f'<span class="text-emerald-700">✓ {msg}</span>')
 
@@ -2152,48 +2159,52 @@ def thoughts_create(slug: str, text: str = Form(...), synth_kind: str = Form("se
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
-def _thoughts_panel_response(request: Request, slug: str) -> HTMLResponse:
-    """Render the Thoughts tab fragment with each body pre-rendered to markdown HTML."""
-    items = thoughts_mod.list_thoughts(slug)
+def _thoughts_panel_response(request: Request, slug: str, paper_key: str = "") -> HTMLResponse:
+    """Render the Thoughts tab fragment (bodies pre-rendered to markdown). When
+    ``paper_key`` is set, the panel is scoped to that paper (per-paper notes)."""
+    items = thoughts_mod.list_thoughts(slug, paper_key=paper_key or None)
     for t in items:
         t["body_html"] = render_md(t["body"], slug)
     return templates.TemplateResponse(
-        request, "_thoughts_panel.html", {"slug": slug, "thoughts": items})
+        request, "_thoughts_panel.html",
+        {"slug": slug, "thoughts": items, "paper_key": paper_key})
 
 
 @app.get("/c/{slug}/thoughts/panel", response_class=HTMLResponse)
-def thoughts_panel(request: Request, slug: str) -> HTMLResponse:
-    """Thoughts tab body for the collection chat panel (HTMX-loaded)."""
+def thoughts_panel(request: Request, slug: str, paper_key: str = "") -> HTMLResponse:
+    """Thoughts tab body (HTMX-loaded). ?paper_key=<id> scopes it to one paper."""
     _require_collection(slug)
-    return _thoughts_panel_response(request, slug)
+    return _thoughts_panel_response(request, slug, paper_key)
 
 
 @app.post("/c/{slug}/thoughts/add", response_class=HTMLResponse)
 def thoughts_add(
-    request: Request, slug: str, text: str = Form(""), synth_kind: str = Form("seed")
+    request: Request, slug: str, text: str = Form(""), synth_kind: str = Form("seed"),
+    paper_key: str = Form(""),
 ) -> HTMLResponse:
-    """Quick-add from the Thoughts tab; returns the refreshed panel fragment."""
+    """Quick-add from the Thoughts tab; anchors to a paper when paper_key is set."""
     _require_collection(slug)
     if text.strip():
-        thoughts_mod.create_thought(slug, text.strip(), synth_kind=synth_kind, author_origin="human")
-    return _thoughts_panel_response(request, slug)
+        thoughts_mod.create_thought(slug, text.strip(), synth_kind=synth_kind,
+                                    author_origin="human", paper_key=paper_key or None)
+    return _thoughts_panel_response(request, slug, paper_key)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/update")
-def thoughts_update(request: Request, slug: str, tid: str, text: str = Form(...)):
-    """Edit a thought. From the Thoughts-tab panel (HTMX) → return the refreshed panel;
-    from the full /thoughts page (plain form) → redirect back to it."""
+def thoughts_update(request: Request, slug: str, tid: str, text: str = Form(...),
+                    paper_key: str = Form("")):
+    """Edit a thought. HTMX → refreshed (paper-scoped) panel; plain form → redirect."""
     thoughts_mod.update_thought(slug, tid, text.strip())
     if request.headers.get("HX-Request"):
-        return _thoughts_panel_response(request, slug)
+        return _thoughts_panel_response(request, slug, paper_key)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/delete")
-def thoughts_delete(request: Request, slug: str, tid: str):
+def thoughts_delete(request: Request, slug: str, tid: str, paper_key: str = Form("")):
     thoughts_mod.delete_thought(slug, tid)
     if request.headers.get("HX-Request"):
-        return _thoughts_panel_response(request, slug)
+        return _thoughts_panel_response(request, slug, paper_key)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 

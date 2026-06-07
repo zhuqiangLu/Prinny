@@ -4,7 +4,8 @@
 <div id="thoughts-panel" class="space-y-3">
   <form hx-post="/c/{{ slug }}/thoughts/add" hx-target="#thoughts-panel" hx-swap="outerHTML"
         hx-on::after-request="if(event.detail.successful) this.reset()">
-    <textarea name="text" rows="3" required placeholder="A new thought… (markdown supported)"
+    <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
+    <textarea name="text" rows="3" required placeholder="{% if paper_key %}A note on this paper… (markdown){% else %}A new thought… (markdown supported){% endif %}"
               class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
     <div class="mt-1 flex items-center gap-2">
       <button class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add thought</button>
@@ -43,12 +44,14 @@
         <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ Edit</button>
         <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#thoughts-panel" hx-swap="outerHTML"
               hx-confirm="Delete this thought? This cannot be undone.">
+          <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
           <button class="text-rose-600 hover:text-rose-700">Delete</button>
         </form>
       </div>
       {# inline editor #}
       <div x-show="editing" x-cloak class="p-2.5">
         <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/update" hx-target="#thoughts-panel" hx-swap="outerHTML">
+          <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
           <textarea name="text" rows="6"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ t.body }}</textarea>
           <div class="mt-1 flex items-center gap-2">

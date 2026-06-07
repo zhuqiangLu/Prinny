@@ -440,6 +440,7 @@
             + '<form x-show="open" x-cloak class="mt-1 space-y-1 rounded border border-slate-200 bg-slate-50 p-2 w-80" '
             +   'hx-post="/c/' + slug + '/thoughts/capture" hx-target="find .cap-status" hx-swap="innerHTML">'
             +   '<input type="hidden" name="agent_text">'
+            +   '<input type="hidden" name="paper_key" value="' + (this.paperKey || '') + '">'
             +   '<p class="text-slate-500">Saves the reply as a <em>seed (agent)</em> — it can’t ground a wiki assertion. Add your own reasoning to make it count.</p>'
             +   '<textarea name="your_take" rows="2" placeholder="your take (optional → reasoning)…" class="w-full rounded border border-slate-300 px-2 py-1"></textarea>'
             +   '<div class="flex items-center gap-2"><button type="submit" class="rounded bg-slate-900 px-2 py-0.5 text-white">Capture</button><span class="cap-status text-emerald-700"></span></div>'

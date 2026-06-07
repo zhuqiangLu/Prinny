@@ -44,13 +44,18 @@ def _path(slug: str, tid: str) -> Path:
     return _dir(slug) / f"{tid}.md"
 
 
-def list_thoughts(slug: str) -> list[dict]:
+def list_thoughts(slug: str, paper_key: str | None = None) -> list[dict]:
+    """All thoughts (newest first). If ``paper_key`` is given, return only the thoughts
+    anchored to that paper — the per-paper view; None returns the whole stream."""
     d = _dir(slug)
     if not d.is_dir():
         return []
     out = []
     for f in sorted(d.glob("*.md"), reverse=True):
         meta, body = frontmatter.parse(f.read_text(encoding="utf-8"))
+        pk = str(meta.get("paper_key") or "")
+        if paper_key is not None and pk != str(paper_key):
+            continue
         out.append(
             {
                 "id": f.stem,
@@ -59,6 +64,7 @@ def list_thoughts(slug: str) -> list[dict]:
                 "synth_kind": _norm_kind(meta.get("synth_kind")),
                 "author_origin": _norm_origin(meta.get("author_origin")),
                 "prompted_by": meta.get("prompted_by", ""),
+                "paper_key": pk,
                 "body": body.strip(),
             }
         )
@@ -88,12 +94,15 @@ def create_thought(
     synth_kind: str = "seed",
     author_origin: str = "human",
     prompted_by: str | None = None,
+    paper_key: str | None = None,
 ) -> str:
     """Create a thought, stamping (synth_kind, author_origin) by the creating door.
 
     ``author_origin`` is the door's identity — callers pass a constant, never user
     input. The agentic-chat capture door (Phase 6) is the only one that stamps 'agent'.
     ``prompted_by`` links a human 'your take' to the agent seed that prompted it.
+    ``paper_key`` anchors the thought to a paper (it still rolls up into the collection
+    stream); None/empty = a collection-level thought.
     """
     d = _dir(slug)
     d.mkdir(parents=True, exist_ok=True)
@@ -107,6 +116,8 @@ def create_thought(
             "author_origin": _norm_origin(author_origin)}
     if prompted_by:
         meta["prompted_by"] = prompted_by
+    if paper_key:
+        meta["paper_key"] = str(paper_key)
     _path(slug, tid).write_text(frontmatter.dump(meta, text), encoding="utf-8")
     return tid
 
