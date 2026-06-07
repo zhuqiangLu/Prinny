@@ -224,8 +224,8 @@
     <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">
       {# Background Jobs: global feed of running/finished background work. Green dot when
          anything is active or unseen; opening the list marks completions seen. #}
-      <div class="relative" x-data="{ open: false, unseen: 0, running: 0, items: [],
-             feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.running = d.running || 0; this.items = d.items; }).catch(() => {}); },
+      <div class="relative" x-data="{ open: false, unseen: 0, running: 0, items: [], jobs: [],
+             feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.running = d.running || 0; this.items = d.items; this.jobs = d.running_jobs || []; }).catch(() => {}); },
              toggle() { this.open = !this.open; if (this.open && this.unseen) { fetch('/notifications/seen', { method: 'POST' }).then(() => this.unseen = 0); } } }"
            x-init="feed(); setInterval(() => feed(), 8000)">
         <button type="button" @click="toggle()"
@@ -239,6 +239,18 @@
         </button>
         <div x-show="open" x-cloak @click.outside="open = false"
              class="absolute left-0 bottom-full mb-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
+          {# currently-running jobs, listed (not just counted) #}
+          <template x-if="jobs.length">
+            <div>
+              <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-400 border-b border-slate-100">Running now</div>
+              <template x-for="(j, i) in jobs" :key="i">
+                <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-50 leading-snug">
+                  <span class="shrink-0 inline-block w-3 h-3 rounded-full border-2 border-violet-300 border-t-violet-600 animate-spin"></span>
+                  <span class="text-slate-700"><span x-text="j.label"></span> <span class="text-slate-400" x-text="'· ' + j.slug"></span></span>
+                </div>
+              </template>
+            </div>
+          </template>
           <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Activity</div>
           <template x-for="n in items" :key="n.id">
             <a :href="n.link || '#'" class="block px-3 py-2 hover:bg-slate-50 border-b border-slate-50 leading-snug">

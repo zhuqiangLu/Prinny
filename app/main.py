@@ -116,19 +116,32 @@ def _shutdown() -> None:
     live_session.shutdown_all()   # don't orphan persistent chat processes
 
 
+def _active_jobs() -> list[dict]:
+    """Currently-running background jobs across all registries, as labeled items for the
+    Background Jobs dropdown (so in-progress work is listed, not just counted)."""
+    regs = [(wiki._DRAFT_JOBS, "Drafting Field Model"),
+            (wiki._BENCH_JOBS, "Extracting benchmarks"),
+            (wiki._READING_JOBS, "Searching papers"),
+            (topic_view._GEN_JOBS, "Investigating topic"),
+            (topic_view._READING_JOBS, "Searching papers")]
+    out = []
+    for reg, label in regs:
+        for slug, job in list(reg.items()):
+            if (job or {}).get("status") == "running":
+                out.append({"label": label, "slug": slug})
+    return out
+
+
 def _active_job_count() -> int:
-    """Background jobs currently running across all in-memory registries
-    (wiki: draft / benchmark / reading; topic: generate / reading)."""
-    regs = [wiki._DRAFT_JOBS, wiki._BENCH_JOBS, wiki._READING_JOBS,
-            topic_view._GEN_JOBS, topic_view._READING_JOBS]
-    return sum(1 for reg in regs for job in list(reg.values())
-               if (job or {}).get("status") == "running")
+    """Count of running background jobs (see _active_jobs)."""
+    return len(_active_jobs())
 
 
 @app.get("/notifications", response_class=JSONResponse)
 def notifications_feed() -> JSONResponse:
-    """Global background-job feed + running count for the sidebar Background Jobs item."""
-    return JSONResponse({**notify.feed(), "running": _active_job_count()})
+    """Global background-job feed + running jobs (listed, not just counted)."""
+    jobs = _active_jobs()
+    return JSONResponse({**notify.feed(), "running": len(jobs), "running_jobs": jobs})
 
 
 @app.post("/notifications/seen", response_class=JSONResponse)
