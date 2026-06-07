@@ -1,0 +1,51 @@
+{# Regenerate gate body (HTMX-loaded into #regen-gate-body inside the regenOpen modal).
+   Candidates accept/dismiss re-render THIS fragment; "Regenerate now" posts the real
+   re-draft into #left-panel and closes the modal. Lives in the collectionView() Alpine
+   scope, so regenOpen is in scope. #}
+<div id="regen-gate">
+  {% if candidates %}
+  <p class="text-xs font-medium text-slate-600 mb-2">Belief candidates — Accept the ones you actually hold:</p>
+  <div class="space-y-2 mb-4">
+    {% for c in candidates %}
+    <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+      <p class="text-sm text-slate-900 leading-snug">{{ c.title }}</p>
+      <div class="mt-1 flex items-center gap-1.5 flex-wrap text-[11px]">
+        <span class="rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">{{ c.confidence }}</span>
+        {% for r in c.supporting_papers %}<span class="rounded bg-slate-100 text-slate-600 px-1.5 py-0.5">[[{{ r }}]]</span>{% endfor %}
+        {% for cs in c.related_concepts %}<span class="rounded bg-violet-100 text-violet-700 px-1.5 py-0.5">{{ cs }}</span>{% endfor %}
+      </div>
+      <div class="mt-1.5 flex items-center gap-2">
+        <button class="rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700"
+                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/accept" hx-target="#regen-gate-body" hx-swap="innerHTML">Accept</button>
+        <button class="text-xs text-slate-500 hover:text-rose-600"
+                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/dismiss" hx-target="#regen-gate-body" hx-swap="innerHTML">Dismiss</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-xs text-slate-500 mb-4">
+    {% if can_suggest %}No new belief candidates this round.{% else %}Not enough signal to suggest beliefs yet — regenerate will use only your existing accepted beliefs.{% endif %}
+  </p>
+  {% endif %}
+
+  {% if accepted %}
+  <p class="text-xs font-medium text-slate-600 mb-1.5">✓ These accepted beliefs will shape the regenerated Field Model:</p>
+  <ul class="space-y-1 mb-4">
+    {% for b in accepted %}
+    <li class="text-[13px] text-slate-700 flex items-start gap-1.5"><span class="text-emerald-500 mt-0.5">✓</span><span>{{ b.title }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-slate-400 mb-4 italic">No accepted beliefs yet — the regen will draft from your notes, thoughts, and papers as usual.</p>
+  {% endif %}
+
+  <div class="flex items-center gap-2 border-t border-slate-100 pt-3">
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" @submit="regenOpen = false">
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">↻ Regenerate now</button>
+    </form>
+    <button type="button" @click="regenOpen = false" class="text-sm text-slate-500 hover:text-slate-800">Cancel</button>
+    <span class="ml-auto text-[11px] text-slate-400">Regen runs in the background</span>
+  </div>
+</div>

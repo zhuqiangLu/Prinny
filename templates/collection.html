@@ -95,6 +95,20 @@
     </div>
   </div>
 
+  <!-- Regenerate gate: draft belief candidates → review (Accept/Dismiss) → Regenerate now,
+       so newly-accepted beliefs feed the re-drafted Field Model. Opened from any ↻ Regenerate. -->
+  <div x-show="regenOpen" x-cloak @keydown.escape.window="regenOpen = false" @click.self="regenOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(620px,94vw)] max-h-[82vh] flex flex-col p-5">
+      <div class="flex items-center justify-between mb-1 shrink-0">
+        <h2 class="font-semibold">↻ Regenerate — review beliefs first</h2>
+        <button type="button" @click="regenOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3 shrink-0">Accept the beliefs you hold; they shape the re-drafted Thesis &amp; Landscape. Then regenerate.</p>
+      <div id="regen-gate-body" class="overflow-auto"><span class="text-sm text-slate-400">Drafting belief candidates for you to review…</span></div>
+    </div>
+  </div>
+
   <!-- Export / sync destination chooser -->
   <div x-show="syncOpen" x-cloak @keydown.escape.window="syncOpen = false" @click.self="syncOpen = false"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
@@ -305,6 +319,7 @@
       graveOpen: false,
       dupOpen: false,
       thoughtsOpen: false,   // 💭 Thoughts manager (moved off the tab bar into ⋯)
+      regenOpen: false,      // ↻ Regenerate gate: review beliefs before re-drafting
       init() {
         // A notification link (/c/<slug>?tab=benchmarks) jumps straight to that tab.
         const qt = new URLSearchParams(location.search).get("tab");

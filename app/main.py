@@ -2601,6 +2601,44 @@ def wiki_beliefs_suggest(request: Request, slug: str) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+def _regen_gate(request: Request, slug: str) -> HTMLResponse:
+    """Render the Regenerate gate: belief candidates (to review) + accepted beliefs
+    (which will feed the regen) + the Regenerate-now CTA."""
+    return templates.TemplateResponse(request, "_regen_gate.html", {
+        "slug": slug,
+        "candidates": wiki.list_belief_candidates(slug),
+        "accepted": wiki.list_accepted_beliefs(slug),
+        "can_suggest": wiki.can_suggest_beliefs(slug),
+    })
+
+
+@app.post("/c/{slug}/wiki/regen/prepare", response_class=HTMLResponse)
+def wiki_regen_prepare(request: Request, slug: str) -> HTMLResponse:
+    """Step 1 of the gated regenerate: draft fresh belief candidates (only if the
+    signal floor passes) into the tray, then show the review gate. Regen itself
+    does not run until the user clicks 'Regenerate now'."""
+    _require_collection(slug)
+    if wiki.can_suggest_beliefs(slug):
+        wiki.suggest_beliefs(slug)
+    return _regen_gate(request, slug)
+
+
+@app.post("/c/{slug}/wiki/regen/belief/{cid}/accept", response_class=HTMLResponse)
+def wiki_regen_belief_accept(request: Request, slug: str, cid: str) -> HTMLResponse:
+    """Accept a candidate from within the gate; re-render the gate (not the panel)."""
+    _require_collection(slug)
+    wiki.accept_belief(slug, cid)
+    return _regen_gate(request, slug)
+
+
+@app.post("/c/{slug}/wiki/regen/belief/{cid}/dismiss", response_class=HTMLResponse)
+def wiki_regen_belief_dismiss(request: Request, slug: str, cid: str) -> HTMLResponse:
+    """Dismiss a candidate from within the gate; re-render the gate."""
+    _require_collection(slug)
+    wiki.dismiss_belief(slug, cid)
+    return _regen_gate(request, slug)
+
+
 @app.post("/c/{slug}/wiki/review/suggest", response_class=HTMLResponse)
 def wiki_review_suggest(request: Request, slug: str) -> HTMLResponse:
     """Kick off the literature-review draft on a background thread; re-render the

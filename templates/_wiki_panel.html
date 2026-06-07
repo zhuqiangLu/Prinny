@@ -49,9 +49,8 @@
           <button type="button" @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More">⋯</button>
           <div x-show="open" x-cloak class="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
             {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
-            <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="open = false">
-              <button class="{{ mi }}" title="Re-draft the Field Model from the current collection (runs in the background).">↻ Regenerate Field Model</button>
-            </form>
+            <button type="button" class="{{ mi }}" title="Review your beliefs, then re-draft the Field Model"
+                    @click="open = false; regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate Field Model</button>
             <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 Thoughts</button>
             <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
             {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}

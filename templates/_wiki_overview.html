@@ -62,10 +62,9 @@
         <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
       </form>
       {% endif %}
-      <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
-                title="Re-draft the Field Model from the current papers + your accepted beliefs (runs in the background)">↻ Regenerate <span class="htmx-indicator">…</span></button>
-      </form>
+      <button type="button" class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100"
+              title="Review your beliefs, then re-draft the Field Model from the current papers + accepted beliefs"
+              @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate</button>
     </div>
   </div>
 
@@ -156,11 +155,10 @@
       </li>
       {% endfor %}
     </ul>
-    {# discoverable Regenerate that folds these beliefs into the thesis/landscape #}
-    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="mt-2.5">
-      <button class="text-[11px] text-violet-700 hover:underline"
-              title="Re-draft the Field Model so the Thesis & Landscape foreground these beliefs">↻ Regenerate to fold these into the thesis</button>
-    </form>
+    {# discoverable Regenerate that folds these beliefs into the thesis/landscape (via the gate) #}
+    <button type="button" class="mt-2.5 text-[11px] text-violet-700 hover:underline"
+            title="Review beliefs, then re-draft the Field Model so the Thesis & Landscape foreground them"
+            @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate to fold these into the thesis</button>
   </section>
   {% endif %}
 
