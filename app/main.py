@@ -2321,8 +2321,17 @@ def _thoughts_panel_response(request: Request, slug: str, paper_key: str = "",
     """Render the Thoughts tab fragment (bodies pre-rendered to markdown). ``paper_key``
     scopes it to one paper; ``panel_id`` lets the 'manage all' modal copy coexist."""
     items = thoughts_mod.list_thoughts(slug, paper_key=paper_key or None)
+    _titles: dict[str, str] = {}
     for t in items:
         t["body_html"] = render_md(t["body"], slug)
+        pk = (t.get("paper_key") or "").strip()
+        if pk and pk.isdigit():                       # resolve the anchored paper's title (cached)
+            if pk not in _titles:
+                p = library.get_paper(int(pk))
+                _titles[pk] = (p or {}).get("title", "") if p else ""
+            if _titles[pk]:
+                t["paper_title"] = _titles[pk]
+                t["paper_link"] = f"/c/{slug}/p/{pk}"
     return templates.TemplateResponse(
         request, "_thoughts_panel.html",
         {"slug": slug, "thoughts": items, "paper_key": paper_key, "panel_id": panel_id})
