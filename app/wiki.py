@@ -582,7 +582,13 @@ def _attention_excerpts(slug: str, n_high: int = 20, n_notes: int = 10) -> str:
             "ORDER BY updated_at DESC LIMIT ?", (slug, n_notes))]
     finally:
         con.close()
-    lines = [f"- {h[:240]}" for h in hs if h] + [f"- (note) {x[:300]}" for x in ns if x]
+    # Your reasoning thoughts (your externalized understanding) also shape the regen.
+    from . import thoughts as _th
+    rt = [t["body"].strip() for t in _th.list_thoughts(slug)
+          if t.get("synth_kind") == "reasoning" and (t.get("body") or "").strip()][:n_notes]
+    lines = ([f"- {h[:240]}" for h in hs if h]
+             + [f"- (note) {x[:300]}" for x in ns if x]
+             + [f"- (your reasoning) {x[:300]}" for x in rt])
     return "\n".join(lines)
 
 
@@ -769,6 +775,10 @@ def can_suggest_beliefs(slug: str) -> bool:
     scores = attention_per_concept(slug, concepts)
     if any(s >= _BELIEF_SUGGEST_FLOOR for s in scores.values()):
         return True
+    # A reasoning thought (your argument) is also honest signal to suggest from.
+    from . import thoughts as _th
+    if any(t.get("synth_kind") == "reasoning" for t in _th.list_thoughts(slug)):
+        return True
     con = connect()
     try:
         row = con.execute(
@@ -822,6 +832,10 @@ def suggest_beliefs(slug: str) -> dict:
         notes = [" ".join(filter(None, [r["s"], r["t"], r["q"]])) for r in rows]
     finally:
         con.close()
+    # Your reasoning thoughts (arguments/connections you made) are prime belief material.
+    from . import thoughts as _th
+    reasoning_thoughts = [t["body"] for t in _th.list_thoughts(slug)
+                          if t.get("synth_kind") == "reasoning" and (t.get("body") or "").strip()][:15]
 
     # --- Existing beliefs (so the agent doesn't propose dupes) --------------
     existing = list_accepted_beliefs(slug) + list_belief_candidates(slug)
@@ -846,6 +860,8 @@ def suggest_beliefs(slug: str) -> dict:
         + ("\n".join(f"- {h}" for h in highlights[:25]) or "(none)") + "\n\n"
         "USER'S NOTES (most recent, joined):\n"
         + ("\n\n---\n\n".join(notes[:15]) or "(none)") + "\n\n"
+        "USER'S REASONING THOUGHTS (their own arguments — strong belief material):\n"
+        + ("\n\n---\n\n".join(reasoning_thoughts) or "(none)") + "\n\n"
         f"EXISTING BELIEFS (don't repeat these):\n{existing_titles}\n\n"
         "VALID PAPER REFS (only cite these exactly):\n"
         f"{valid_refs_blurb}\n"
@@ -1784,6 +1800,14 @@ def _ref_map(slug: str) -> dict:
 # looks, without ever rewriting agent-drafted content.
 _ATTENTION_NOTE_WEIGHT = 5    # a non-empty note is worth ~5 highlights of attention
 _ATTENTION_HOT_FLOOR = 2      # ignore tiny scores when picking the 🔥 threshold
+# Thoughts as attention: a 'reasoning' thought is YOUR argument (count like a note);
+# a 'seed' is agent text you chose to keep (lighter — count like a highlight).
+_THOUGHT_REASONING_WEIGHT = 5
+_THOUGHT_SEED_WEIGHT = 1
+
+
+def _thought_weight(t: dict) -> int:
+    return _THOUGHT_REASONING_WEIGHT if t.get("synth_kind") == "reasoning" else _THOUGHT_SEED_WEIGHT
 
 
 def attention_scores(slug: str) -> dict[int, int]:
@@ -1807,6 +1831,12 @@ def attention_scores(slug: str) -> dict[int, int]:
             scores[r["paper_id"]] += _ATTENTION_NOTE_WEIGHT
     finally:
         con.close()
+    # Anchored thoughts contribute to their paper (reasoning ~ a note, seed ~ a highlight).
+    from . import thoughts as _th
+    for t in _th.list_thoughts(slug):
+        pk = (t.get("paper_key") or "")
+        if pk.isdigit():
+            scores[int(pk)] += _thought_weight(t)
     return dict(scores)
 
 
@@ -1864,6 +1894,16 @@ def attention_per_concept(slug: str, concepts: list[dict]) -> dict[str, int]:
                     scores[slug_] += _ATTENTION_NOTE_WEIGHT
     finally:
         con.close()
+    # Thoughts: a thought mentioning a concept counts toward it (reasoning ×5, seed ×1).
+    from . import thoughts as _th
+    for t in _th.list_thoughts(slug):
+        body = t.get("body") or ""
+        if not body:
+            continue
+        w = _thought_weight(t)
+        for slug_, pat in patterns.items():
+            if pat.search(body):
+                scores[slug_] += w
     return dict(scores)
 
 
