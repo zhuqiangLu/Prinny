@@ -109,9 +109,21 @@
   </div>
 
   <form x-data="chatComposer({{ 'true' if chat_streaming else 'false' }}, '{{ slug }}', '{{ paper_key }}', '{{ cbase }}')"
-        class="border-t border-slate-200 p-3"
+        class="relative border-t border-slate-200 p-3"
         @pa-ask.window="onAsk($event.detail)"
         {% if chat_streaming %}@submit.prevent="stream()"{% else %}@submit.prevent="send()"{% endif %}>
+    {# Slash-command autocomplete — opens while typing "/word"; ↑/↓ + Enter/Tab to pick. #}
+    <div x-show="cmdOpen" x-cloak @click.outside="cmdOpen = false"
+         class="absolute bottom-full left-3 right-3 mb-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1 text-sm">
+      <template x-for="(it, i) in cmdItems" :key="it.c">
+        <button type="button" @click="cmdIdx = i; acceptCmd()" @mouseenter="cmdIdx = i"
+                :class="i === cmdIdx ? 'bg-violet-50' : ''"
+                class="w-full text-left px-3 py-1.5 flex items-baseline gap-2 hover:bg-violet-50">
+          <span class="font-mono text-violet-700 shrink-0" x-text="it.c"></span>
+          <span class="text-xs text-slate-500 truncate" x-text="it.d"></span>
+        </button>
+      </template>
+    </div>
     <input type="hidden" name="paper_key" value="{{ paper_key }}">
     <input type="hidden" name="images_json" :value="JSON.stringify(images)">
     <input type="hidden" name="ref_json" :value="ref ? JSON.stringify(ref) : ''">
@@ -143,11 +155,15 @@
     </div>
 
     <div class="flex gap-2 items-stretch">
-      <textarea name="message" :style="`height:${h}px`" :disabled="compacting"
-                @paste="onPaste($event)" @keydown.escape="if(sending) interrupt()"
-                placeholder="{% if paper_key %}Message about this paper… (/collection adds the wiki · paste an image){% else %}Message… (use /help for commands){% endif %}"
-                class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
-                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault(); if(this.value.trim()||window.Alpine.$data(this.form).images.length) this.form.requestSubmit();}"></textarea>
+      <textarea name="message" x-ref="msg" :style="`height:${h}px`" :disabled="compacting"
+                @paste="onPaste($event)" @input="onSlashInput()"
+                @keydown.arrow-down="if(cmdOpen){ $event.preventDefault(); moveCmd(1) }"
+                @keydown.arrow-up="if(cmdOpen){ $event.preventDefault(); moveCmd(-1) }"
+                @keydown.tab="if(cmdOpen){ $event.preventDefault(); acceptCmd() }"
+                @keydown.escape="if(cmdOpen){ cmdOpen = false } else if(sending){ interrupt() }"
+                @keydown.enter="if(!$event.shiftKey){ $event.preventDefault(); if(cmdOpen){ acceptCmd() } else if($el.value.trim() || images.length){ $el.form.requestSubmit() } }"
+                placeholder="{% if paper_key %}Message about this paper… (type / for commands · paste an image){% else %}Message… (type / for commands){% endif %}"
+                class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"></textarea>
       {# Send → becomes a Stop button while a turn is in flight (click or Esc interrupts) #}
       <button x-show="!sending" type="submit" aria-label="Send" title="Send (Enter)" :disabled="compacting"
               class="shrink-0 grid place-items-center w-11 rounded bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -170,6 +186,38 @@
         sending: false,            // a turn is in flight — Send becomes Stop (interrupt)
         controller: null,          // AbortController for the in-flight turn (Esc/Stop)
         interrupt() { if (this.controller) { try { this.controller.abort(); } catch (e) {} } },
+        // --- slash-command autocomplete ---
+        cmdOpen: false, cmdItems: [], cmdIdx: 0,
+        allCmds() {
+          const base = [
+            { c: "/help", d: "Show available commands", noArg: true },
+            { c: "/thought", d: "Save a note to your thought stream" },
+            { c: "/find", d: "Find external papers → Suggested reading" },
+            { c: "/gaps", d: "Find papers that fill your wiki's gaps", noArg: true },
+            { c: "/belief", d: "Propose a belief (Accept/Dismiss card)" },
+            { c: "/updatewiki", d: "Propose wiki edits now" },
+          ];
+          if (this.paperKey) base.unshift({ c: "/collection", d: "Add the collection wiki to this turn", noArg: true });
+          return base;
+        },
+        onSlashInput() {
+          const ta = this.$refs.msg;
+          const m = /^\/(\w*)$/.exec(ta.value);   // only while typing the command word (no space yet)
+          if (!m) { this.cmdOpen = false; return; }
+          const q = m[1].toLowerCase();
+          this.cmdItems = this.allCmds().filter((x) => x.c.slice(1).startsWith(q));
+          this.cmdIdx = 0;
+          this.cmdOpen = this.cmdItems.length > 0;
+        },
+        moveCmd(d) { if (this.cmdOpen) { const n = this.cmdItems.length; this.cmdIdx = (this.cmdIdx + d + n) % n; } },
+        acceptCmd() {
+          if (!this.cmdOpen || !this.cmdItems.length) return;
+          const ta = this.$refs.msg;
+          const sel = this.cmdItems[this.cmdIdx];
+          ta.value = sel.c + (sel.noArg ? "" : " ");   // arg-taking commands get a trailing space
+          this.cmdOpen = false;
+          ta.focus();
+        },
         streaming: !!streaming,
         slug: slug,
         paperKey: paperKey,
