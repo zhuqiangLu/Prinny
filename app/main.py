@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -31,6 +32,7 @@ from . import (
     library,
     live_session,
     llm,
+    note_drafts,
     notes as notes_mod,
     paper_chat,
     pdf_store,
@@ -1408,6 +1410,8 @@ def paper_page(request: Request, slug: str, paper_id: int, nav: str = "") -> HTM
             "active_thread": get_or_create_thread(slug, paper_id),
             "note": note,
             "note_md": note_md,
+            # A staged auto-draft awaiting review (only meaningful when there's no note yet).
+            "staged_draft": (note_drafts.get(slug, paper_id) if not note_md.strip() else None),
             "highlight_scheme": config_highlight_scheme(),
             "show_highlight_legend": load_config().get("show_highlight_legend", "true") != "false",
             "statuses": notes_mod.STATUSES,
@@ -1892,6 +1896,55 @@ def paper_find_similar(slug: str, paper_id: int) -> HTMLResponse:
     return HTMLResponse(f'<span class="text-emerald-700">{msg}</span>')
 
 
+@app.post("/c/{slug}/p/{paper_id}/autodraft")
+def paper_autodraft(slug: str, paper_id: int) -> Response:
+    """Fire-and-forget (sendBeacon on leaving a paper): if the paper has chat or
+    highlights, NO note yet, and no staged draft, background-draft a note from
+    highlights+chat and stage it (inert) for review. Returns 204 immediately.
+
+    Staged — NOT saved as a note (attribution: agent words become yours only on accept)."""
+    try:
+        col = library.get_collection(slug)
+    except Exception:  # noqa: BLE001
+        col = None
+    paper = library.get_paper(paper_id)
+    if not col or paper is None:
+        return Response(status_code=204)
+
+    def runner():
+        try:
+            if note_drafts.has(slug, paper_id):
+                return
+            note = notes_mod.get_note(slug, paper_id)
+            if any((note.get(k) or "").strip() for k in ("summary", "thoughts", "key_quotes")):
+                return                       # a real note already exists — don't draft over it
+            has_chat = thread_message_count(get_or_create_thread(slug, paper_id)) > 0
+            has_high = bool(context._highlights_block(slug, paper_id))
+            if not (has_chat or has_high):
+                return                       # no signal → no speculative LLM call
+            fields, error = _draft_note_fields(slug, paper_id, paper["title"])
+            if error or not fields:
+                return
+            md = notes_mod._serialize_body(fields.get("summary", ""), fields.get("thoughts", ""),
+                                           fields.get("key_quotes", ""))
+            if md.strip():
+                note_drafts.stage(slug, paper_id, md)
+                notify.add(f"Draft ready to review: {(paper['title'] or '')[:60]}",
+                           link=f"/c/{slug}/p/{paper_id}", collection=slug)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("paper_agent.autodraft").exception("autodraft failed")
+
+    threading.Thread(target=runner, daemon=True).start()
+    return Response(status_code=204)
+
+
+@app.post("/c/{slug}/p/{paper_id}/autodraft/discard")
+def paper_autodraft_discard(slug: str, paper_id: int) -> Response:
+    """Discard a staged auto-draft (the user rejected it)."""
+    note_drafts.delete(slug, paper_id)
+    return Response(status_code=204)
+
+
 @app.post("/c/{slug}/thoughts/capture", response_class=HTMLResponse)
 def thoughts_capture(slug: str, agent_text: str = Form(""), your_take: str = Form(""),
                      paper_key: str = Form("")) -> HTMLResponse:
@@ -2123,6 +2176,7 @@ def notes_post(
     # author_origin is stamped by this human-capture door, never from the form.
     notes_mod.save_note(slug, paper_id, summary, thoughts, key_quotes, status,
                         synth_kind=synth_kind, author_origin="human")
+    note_drafts.delete(slug, paper_id)     # saving a note consumes any staged auto-draft
     return RedirectResponse(f"/c/{slug}/p/{paper_id}/notes", status_code=303)
 
 

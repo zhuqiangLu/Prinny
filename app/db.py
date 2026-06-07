@@ -138,6 +138,15 @@ CREATE TABLE IF NOT EXISTS paper_notes (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Staged auto-drafts: a "Draft from highlights + chat" computed when you leave a paper,
+-- held INERT here (not a note) until you review/accept it. One per paper.
+CREATE TABLE IF NOT EXISTS note_drafts (
+  paper_id INTEGER PRIMARY KEY REFERENCES papers(id),
+  collection_slug TEXT NOT NULL,
+  draft_md TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS triage_items (
   id INTEGER PRIMARY KEY,
   collection_slug TEXT NOT NULL,

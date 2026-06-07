@@ -9,7 +9,10 @@
   <!-- top toolbar: Return · title · highlight legend (center) · actions -->
   <div class="flex items-center gap-3 flex-wrap border-b border-slate-200 pb-2 mb-2 shrink-0">
     <div class="flex-1 flex items-center gap-3 min-w-0">
-      <a href="/c/{{ slug }}?tab=papers" class="text-sm text-slate-600 hover:text-slate-900 shrink-0">← Return</a>
+      {# On leaving, fire a background "draft from highlights+chat" (server gates on
+         chat/highlights + no note + no existing draft); sendBeacon survives navigation. #}
+      <a href="/c/{{ slug }}?tab=papers" class="text-sm text-slate-600 hover:text-slate-900 shrink-0"
+         @click="try { navigator.sendBeacon('/c/{{ slug }}/p/{{ paper.id }}/autodraft') } catch(e){}">← Return</a>
       <a href="/c/{{ slug }}" class="text-sm font-medium text-slate-800 hover:text-slate-600 truncate max-w-[28ch]" title="Collection: {{ name }}">{{ name }}</a>
     </div>
 
@@ -98,6 +101,18 @@
 
         <!-- Notes tab: free markdown editor with preview -->
         <div x-show="tab==='notes'" x-cloak class="h-full flex flex-col p-4">
+          {# staged auto-draft (from leaving the paper with chat/highlights) — review before it's a note #}
+          <div x-show="stagedDraft" x-cloak class="mb-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-sm shrink-0">
+            <p class="font-medium text-violet-800">✨ Draft ready from your reading</p>
+            <p class="text-xs text-slate-600 mt-0.5">Auto-drafted from your highlights + chat. Review &amp; edit — it only becomes your note when you Save.</p>
+            <div class="mt-1.5 flex items-center gap-2">
+              <button type="button" @click="noteMd = stagedDraft; stagedDraft = null; showPreview = false"
+                      class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Use this draft</button>
+              <form hx-post="/c/{{ slug }}/p/{{ paper.id }}/autodraft/discard" hx-swap="none" @submit="stagedDraft = null">
+                <button class="text-xs text-slate-500 hover:text-rose-600">Discard</button>
+              </form>
+            </div>
+          </div>
           <div class="flex items-center gap-2 mb-2 text-sm">
             <button @click="showPreview=false"
                     :class="!showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
@@ -183,6 +198,7 @@
       paneOpen: localStorage.getItem("pp.open") !== "0",
       paneW: parseInt(localStorage.getItem("pp.w") || "440", 10),
       noteMd: {{ note_md|tojson }},
+      stagedDraft: {{ staged_draft|tojson }},   // auto-draft awaiting review (null if none)
       status: {{ note.status|tojson }},
       showPreview: false, previewHtml: "",
       busy: false, err: "", saved: false,
