@@ -2601,31 +2601,6 @@ def build_collection_graph(slug: str) -> dict:
     return _graph.build_graph(papers_min, entities)
 
 
-def concept_method_links(slug: str, top: int = 4) -> dict:
-    """Structural concept↔method links for the Field map: for each method (keyed by
-    its label) the concepts it shares the most papers with. {method_label: [{name, shared}]}.
-    Pure shared-paper overlap — no LLM, no embeddings."""
-    try:
-        g = build_collection_graph(slug)
-    except Exception:  # noqa: BLE001 - a missing wiki shouldn't break the panel
-        return {}
-    nodes = g.get("nodes", {})
-    concepts = [(v["label"], set(v.get("papers") or []))
-                for v in nodes.values() if v.get("kind") == "concept"]
-    out: dict = {}
-    for v in nodes.values():
-        if v.get("kind") != "method":
-            continue
-        mp = set(v.get("papers") or [])
-        if not mp:
-            continue
-        row = [{"name": cn, "shared": len(mp & cp)} for cn, cp in concepts if (mp & cp)]
-        row.sort(key=lambda x: -x["shared"])
-        if row:
-            out[v["label"]] = row[:top]
-    return out
-
-
 # --- Theme naming (cached LLM labels over deterministic clusters) -------------
 # Section 5's structure is computed live with no LLM. The only LLM-touched part
 # is the human-readable NAME of each cluster, which is cached by the cluster's

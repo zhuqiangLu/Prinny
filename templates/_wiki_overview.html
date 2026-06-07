@@ -130,7 +130,7 @@
           {% endif %}
         {% endfor %}
       </div>
-      <button type="button" @click="go('fieldmap')" class="mt-3 text-[11px] text-violet-600 hover:underline">Open the Field map →</button>
+      <button type="button" @click="go('concepts')" class="mt-3 text-[11px] text-violet-600 hover:underline">View all concepts →</button>
     </aside>
     {% endif %}
   </section>
@@ -368,19 +368,12 @@
 {# ===================================================================
    PANE: CONCEPTS — the concept space (attention score + member papers)
    =================================================================== #}
-<div x-show="tab==='fieldmap'" x-cloak class="space-y-6" x-data="{ adding: false }">
-  <div>
-    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⊞</span> Field map</h2>
-    <p class="text-xs text-slate-500 mt-0.5">The three idea-types of this collection — <b>concepts</b> (topics you attend to) · <b>problems</b> (the pains) · <b>methods</b> (the fixes). Each method lists the concepts it shares papers with.</p>
+<div x-show="tab==='concepts'" x-cloak class="space-y-3" x-data="{ adding: false }">
+  <div class="flex items-center gap-2">
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◈</span> Concepts</h2>
+    <button type="button" @click="adding = !adding" class="ml-auto text-xs rounded border border-violet-200 bg-violet-50 text-violet-700 px-2 py-0.5 hover:bg-violet-100">+ Add concept</button>
   </div>
-
-  {# --- Concepts: the attention axis (synonyms drive Focus); add/edit/remove --- #}
-  <section class="space-y-3">
-    <div class="flex items-center gap-2">
-      <h3 class="text-base font-semibold text-violet-900 flex items-center gap-2"><span>◈</span> Concepts <span class="text-[11px] font-normal text-slate-400">ideas · your attention axis</span></h3>
-      <button type="button" @click="adding = !adding" class="ml-auto text-xs rounded border border-violet-200 bg-violet-50 text-violet-700 px-2 py-0.5 hover:bg-violet-100">+ Add concept</button>
-    </div>
-    <p class="text-xs text-slate-500">The score is your attention — highlights (×1) and notes (×5) whose text matches the concept. No LLM in this count. Add / edit / remove survives a regenerate.</p>
+  <p class="text-xs text-slate-500">The collection's concept space. The score is your attention — highlights (×1) and notes (×5) whose text matches the concept. No LLM in this count. You can add, edit, or remove concepts — your edits survive a regenerate.</p>
   <form x-show="adding" x-cloak hx-post="/c/{{ slug }}/wiki/concepts/add" hx-target="#left-panel" hx-swap="innerHTML"
         @submit="adding = false" class="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-2">
     <input name="name" required placeholder="Concept name" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
@@ -439,58 +432,6 @@
   {% else %}
   <p class="text-sm text-slate-400">No concepts yet — draft the Field Model, or <button type="button" @click="adding = true" class="text-violet-600 hover:underline">add one</button>.</p>
   {% endif %}
-  </section>
-
-  {# --- Problems (the pains the field is solving) --- #}
-  <section class="space-y-2">
-    <h3 class="text-base font-semibold text-rose-900 flex items-center gap-2"><span>🚩</span> Problems <span class="text-[11px] font-normal text-slate-400">the pains the field is solving</span></h3>
-    {% if overview.landscape.problems %}
-    <div class="space-y-2">
-      {% for item in overview.landscape.problems %}
-      <div class="rounded-lg border border-rose-100 bg-rose-50/30 p-3">
-        <p class="text-sm text-slate-800 leading-snug">{{ item.text }}</p>
-        {% if item.papers_full %}
-        <div class="mt-1.5 flex flex-wrap gap-1.5">
-          {% for p in item.papers_full %}
-          <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-rose-200 text-slate-600 hover:bg-rose-100">{{ p.title|truncate(40) }}</a>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<p class="text-sm text-slate-400">No problems mapped yet.</p>{% endif %}
-  </section>
-
-  {# --- Methods (the fixes) + the concepts each one shares papers with --- #}
-  <section class="space-y-2">
-    <h3 class="text-base font-semibold text-sky-900 flex items-center gap-2"><span>🔧</span> Methods <span class="text-[11px] font-normal text-slate-400">the fixes · linked to the concepts they touch</span></h3>
-    {% if overview.landscape.methods %}
-    <div class="space-y-2">
-      {% for item in overview.landscape.methods %}
-      <div class="rounded-lg border border-sky-100 bg-sky-50/30 p-3">
-        <p class="text-sm text-slate-800 leading-snug">{{ item.text }}</p>
-        {% set links = cm_links.get(item.text) %}
-        {% if links %}
-        <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span class="text-[10px] text-slate-400">◈ concepts:</span>
-          {% for l in links %}
-          <span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200" title="{{ l.shared }} shared paper(s)">{{ l.name|truncate(28) }} <span class="text-violet-400">·{{ l.shared }}</span></span>
-          {% endfor %}
-        </div>
-        {% endif %}
-        {% if item.papers_full %}
-        <div class="mt-1.5 flex flex-wrap gap-1.5">
-          {% for p in item.papers_full %}
-          <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-sky-200 text-slate-600 hover:bg-sky-100">{{ p.title|truncate(40) }}</a>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<p class="text-sm text-slate-400">No methods mapped yet.</p>{% endif %}
-  </section>
 </div>
 
 {# ===================================================================

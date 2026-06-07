@@ -2493,9 +2493,6 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
             review_error = revjob.get("error")
         wiki.clear_review_job(slug)
     review_html = render_md(review["accepted_md"], slug) if review["has_accepted"] else ""
-    # Field map: structural concept↔method links (shared papers) for the method cards.
-    cm_links = (wiki.concept_method_links(slug)
-                if overview and not overview.get("needs_migration") else {})
 
     # Header stat strip (Papers · Highlights · Notes · Connections). Cheap counts;
     # 'Connections' reuses the structural graph's edge count from connection_view.
@@ -2528,7 +2525,6 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "review_html": review_html,
          "review_running": review_running,
          "review_error": review_error,
-         "cm_links": cm_links,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "dup_count": len(library.find_duplicate_groups(slug)),
