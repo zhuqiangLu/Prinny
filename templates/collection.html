@@ -81,6 +81,20 @@
     </div>
   </div>
 
+  <!-- Thoughts manager: the whole thought stream (add + cards + link/edit) in a popup,
+       opened from the ⋯ menu. Replaces the old Thoughts tab. -->
+  <div x-show="thoughtsOpen" x-cloak @keydown.escape.window="thoughtsOpen = false" @click.self="thoughtsOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(640px,94vw)] max-h-[82vh] flex flex-col p-5">
+      <div class="flex items-center justify-between mb-1 shrink-0">
+        <h2 class="font-semibold">💭 Thoughts — “{{ name }}”</h2>
+        <button type="button" @click="thoughtsOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3 shrink-0">Your notes + captured chat seeds &amp; reasoning. Add, edit, and link thoughts to papers.</p>
+      <div id="thoughts-modal-body" class="overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
   <!-- Export / sync destination chooser -->
   <div x-show="syncOpen" x-cloak @keydown.escape.window="syncOpen = false" @click.self="syncOpen = false"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
@@ -290,10 +304,11 @@
       syncWith: false,     // ⇅ Pull-from-Zotero sync-preview modal
       graveOpen: false,
       dupOpen: false,
+      thoughtsOpen: false,   // 💭 Thoughts manager (moved off the tab bar into ⋯)
       init() {
         // A notification link (/c/<slug>?tab=benchmarks) jumps straight to that tab.
         const qt = new URLSearchParams(location.search).get("tab");
-        if (qt && ["overview","concepts","benchmarks","understanding","connections","papers","reading"].includes(qt)) {
+        if (qt && ["overview","concepts","benchmarks","understanding","connections","review","papers","reading"].includes(qt)) {
           this.tab = qt;
         }
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));

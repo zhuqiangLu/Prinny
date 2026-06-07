@@ -304,16 +304,6 @@
 
 {# ===== Thoughts ===== your timestamped thought stream (incl. chat captures:
    agent "seeds" + your "reasoning"). Lazy-loaded fragment; full management on /thoughts. #}
-<div x-show="tab==='thoughts'" x-cloak class="space-y-3">
-  <div class="flex items-baseline gap-2">
-    <h2 class="text-lg font-semibold text-slate-900">Thoughts</h2>
-    <span class="text-xs text-slate-400">your notes + captured chat seeds &amp; reasoning</span>
-  </div>
-  <div hx-get="/c/{{ slug }}/thoughts/panel" hx-trigger="load" hx-swap="innerHTML">
-    <span class="text-sm text-slate-400">Loading thoughts…</span>
-  </div>
-</div>
-
 {# ===================================================================
    MODALS: Problems / Methods — opened from the Overview landscape "View all"
    buttons (lsModal on the collectionView scope). Each lists every clustered

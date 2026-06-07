@@ -52,6 +52,7 @@
             <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" @submit="open = false">
               <button class="{{ mi }}" title="Re-draft the Field Model from the current collection (runs in the background).">↻ Regenerate Field Model</button>
             </form>
+            <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 Thoughts</button>
             <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
             {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
             {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
@@ -72,7 +73,7 @@
     {% set TABS = [
       ('overview', '▢ Overview'), ('concepts', '◈ Concepts'), ('benchmarks', '▦ Benchmarks'),
       ('understanding', '◆ Understanding'), ('connections', '⚯ Connections'), ('review', '❡ Review'),
-      ('papers', '▤ Papers'), ('reading', '✦ Suggested reading'), ('thoughts', 'Thoughts')
+      ('papers', '▤ Papers'), ('reading', '✦ Suggested reading')
     ] %}
     <div class="flex items-center gap-1 overflow-x-auto -mb-px">
       {% for key, label in TABS %}
