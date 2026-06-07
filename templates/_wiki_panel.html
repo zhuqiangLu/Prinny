@@ -52,6 +52,8 @@
             <button type="button" class="{{ mi }}" title="Review your beliefs, then re-draft the Field Model"
                     @click="open = false; regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate Field Model</button>
             <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 Thoughts</button>
+            <button type="button" @click="open = false; tab = 'understanding'" class="{{ mi }}">◆ Understanding</button>
+            <button type="button" @click="open = false; tab = 'benchmarks'" class="{{ mi }}">▦ Benchmarks</button>
             <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
             {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
             {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
@@ -70,8 +72,7 @@
 
     {# tab bar #}
     {% set TABS = [
-      ('overview', '▢ Overview'), ('benchmarks', '▦ Benchmarks'),
-      ('understanding', '◆ Understanding'), ('connections', '⊞ Map'), ('review', '❡ Review'),
+      ('overview', '▢ Overview'), ('connections', '⊞ Map'), ('review', '❡ Review'),
       ('papers', '▤ Papers'), ('reading', '✦ Suggested reading')
     ] %}
     <div class="flex items-center gap-1 overflow-x-auto -mb-px">
