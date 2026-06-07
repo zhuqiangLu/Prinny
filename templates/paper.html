@@ -25,13 +25,6 @@
     {% endif %}
 
     <div class="flex-1 flex items-center justify-end gap-2">
-      {# Find papers similar to THIS one (seeds the discovery agent; → Suggested reading) #}
-      <span id="find-sim-status" class="text-xs text-emerald-700"></span>
-      <button type="button"
-              hx-post="/c/{{ slug }}/p/{{ paper.id }}/find-similar"
-              hx-target="#find-sim-status" hx-swap="innerHTML" hx-disabled-elt="this"
-              class="grid place-items-center h-9 px-2.5 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-sm shrink-0"
-              title="Find papers similar to this one → the collection's Suggested reading">🔎 Find similar</button>
       {% if paper.has_pdf %}
       <button type="button" @click="togglePdfDark()"
               class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
@@ -87,6 +80,13 @@
         <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
         <button @click="tab='notes'" :class="tabCls('notes')">Notes</button>
         {% if paper.has_pdf %}<button @click="tab='highlights'" :class="tabCls('highlights')">Highlights</button>{% endif %}
+        {# Find similar → seeds the discovery agent with this paper; results → Suggested reading #}
+        <span id="find-sim-status" class="ml-auto text-[11px] text-emerald-700 truncate max-w-[40%]"></span>
+        <button type="button"
+                hx-post="/c/{{ slug }}/p/{{ paper.id }}/find-similar"
+                hx-target="#find-sim-status" hx-swap="innerHTML" hx-disabled-elt="this"
+                class="shrink-0 px-2.5 py-1 text-xs text-violet-700 hover:bg-violet-50 rounded"
+                title="Find papers similar to this one → the collection's Suggested reading">🔎 Find similar</button>
       </div>
 
       <div class="flex-1 min-h-0">

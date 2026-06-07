@@ -1277,7 +1277,46 @@ def _add_seed(slug: str) -> str:
 
 
 # Collection "Suggested reading" purposes → (seed, intent) for the arXiv search.
-COLLECTION_PURPOSES = ("related", "gaps", "concept", "thesis", "adjacent", "custom")
+COLLECTION_PURPOSES = ("related", "gaps", "concept", "thesis", "adjacent", "custom", "similar")
+
+# Suggested-reading grouping: source → (display order, label template). "" = ungrouped (old).
+_READING_SOURCE_ORDER = ["similar", "custom", "concept", "related", "thesis", "adjacent", "gaps", ""]
+
+
+def _reading_group_label(source: str, detail: str) -> str:
+    detail = (detail or "").strip()
+    if source == "similar":
+        return f"Similar to: “{detail}”" if detail else "Similar to a paper"
+    if source == "custom":
+        return f"Custom search: “{detail}”" if detail else "Custom search"
+    if source == "concept":
+        return f"Concept: {detail}" if detail else "Concept"
+    if source == "related":
+        return "Related to this collection"
+    if source == "thesis":
+        return "Latest on the thesis"
+    if source == "adjacent":
+        return "Adjacent areas"
+    if source == "gaps":
+        return "Fills open questions / gaps"
+    return "Earlier (ungrouped)"
+
+
+def _group_reading(cands: list[dict]) -> list[dict]:
+    """Group pending suggested-reading candidates by (source, source_detail) for display.
+    Returns ordered ``[{source, label, items:[...]}, …]`` (similar/custom first, ungrouped last)."""
+    buckets: dict[tuple, dict] = {}
+    for c in cands:
+        src = (c.get("source") or "")
+        detail = (c.get("source_detail") or "")
+        key = (src, detail)
+        if key not in buckets:
+            buckets[key] = {"source": src, "detail": detail,
+                            "label": _reading_group_label(src, detail), "cands": []}
+        buckets[key]["cands"].append(c)
+    return sorted(buckets.values(),
+                  key=lambda g: (_READING_SOURCE_ORDER.index(g["source"])
+                                 if g["source"] in _READING_SOURCE_ORDER else 99, g["detail"]))
 
 
 def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -> tuple[str, str]:
@@ -1338,6 +1377,15 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     if purpose not in COLLECTION_PURPOSES:
         purpose = "gaps"
     seed, intent = _purpose_seed(slug, purpose, target, custom)
+    # how this batch was found → stored on each candidate for grouped display.
+    src_detail = ""
+    if purpose == "custom":
+        src_detail = custom.strip()
+    elif purpose == "concept":
+        src_detail = target.strip()
+    elif purpose == "similar" and target and str(target).isdigit():
+        _sp = library.get_paper(int(target))
+        src_detail = (_sp or {}).get("title", "") if _sp else ""
     if not seed.strip():
         return {"added": 0, "error": "Draft the Field Model first — there's no focus to search from."}
     try:
@@ -1387,7 +1435,7 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
             note = f"↩ seen before · {note}"
         if c.get("venue"):
             note = f"{note}  ·  {c['venue']}" + (f" · {c['citation_count']} cites" if c.get("citation_count") else "")
-        if triage.add_candidate(slug, c, note):
+        if triage.add_candidate(slug, c, note, source=purpose, source_detail=src_detail):
             seen_keys.add(key)
             added += 1
     _append_log(slug, f"suggested {added} paper(s) [{purpose}]", seed)
@@ -2112,6 +2160,7 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
         add_candidates = _triage.list_triage(slug, status="pending")
     except Exception:  # noqa: BLE001
         add_candidates = []
+    add_groups = _group_reading(add_candidates)
 
     # --- Phase C: beliefs (tray + accepted) --------------------------------
     # Resolve supporting_papers refs to live paper objects (with attention
@@ -2206,6 +2255,7 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
 
     return {"needs_migration": False, "thesis": thesis, "landscape": landscape,
             "papers": papers, "focus": focus, "add_candidates": add_candidates,
+            "add_groups": add_groups,
             "belief_candidates": belief_candidates, "beliefs": beliefs,
             "can_suggest_beliefs": can_suggest_beliefs(slug),
             "connections": connections, "concepts": concept_view,

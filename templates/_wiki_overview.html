@@ -251,27 +251,44 @@
   {% if not overview.add_candidates %}
   <p class="text-sm text-slate-400">No pending suggestions yet. Use the search above.</p>
   {% else %}
-  <ul class="space-y-2">
-    {% for c in overview.add_candidates %}
-    <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
-      <div class="flex items-baseline gap-2 flex-wrap">
-        <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title|default('(untitled)') }}</p>
-        {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }} ↗</a>{% endif %}
-      </div>
-      {% if c.llm_relevance_note %}
-      <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}</p>
-      {% endif %}
-      <div class="mt-2 flex items-center gap-1.5">
-        <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-          <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add to collection</button>
-        </form>
-        <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-          <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
-        </form>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
+  <div class="flex items-center justify-between">
+    <span class="text-xs text-slate-500">{{ overview.add_candidates|length }} pending</span>
+    {# Clear all: empties the list WITHOUT judging (not added, not rejected) — distinct from Dismiss #}
+    <form hx-post="/c/{{ slug }}/wiki/reading/clear" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
+          hx-confirm="Clear all {{ overview.add_candidates|length }} suggestions? They're removed from this list — NOT added to the collection and NOT rejected, so a later search may surface them again. (Use Dismiss to reject one.)">
+      <button class="text-xs text-slate-500 hover:text-rose-600">Clear all</button>
+    </form>
+  </div>
+  {# grouped by how each batch was found (similar / custom / related / …); old ones in 'Earlier' #}
+  {% for g in overview.add_groups %}
+  <div class="space-y-2">
+    <div class="flex items-center gap-1.5 text-xs font-medium text-slate-600 border-b border-slate-100 pb-1">
+      <span class="truncate">{{ g.label }}</span>
+      <span class="shrink-0 text-slate-400">({{ g.cands|length }})</span>
+    </div>
+    <ul class="space-y-2">
+      {% for c in g.cands %}
+      <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+        <div class="flex items-baseline gap-2 flex-wrap">
+          <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title|default('(untitled)') }}</p>
+          {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }} ↗</a>{% endif %}
+        </div>
+        {% if c.llm_relevance_note %}
+        <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}</p>
+        {% endif %}
+        <div class="mt-2 flex items-center gap-1.5">
+          <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add to collection</button>
+          </form>
+          <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
   {% endif %}
 </div>{# /reading pane #}
 

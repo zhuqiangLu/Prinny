@@ -432,6 +432,10 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE triage_items ADD COLUMN doi TEXT")
         if "pdf_url" not in tcols:
             con.execute("ALTER TABLE triage_items ADD COLUMN pdf_url TEXT")
+        if "source" not in tcols:           # how this suggestion was found (similar/custom/related/gaps…)
+            con.execute("ALTER TABLE triage_items ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+        if "source_detail" not in tcols:    # the query/paper-title/concept behind it
+            con.execute("ALTER TABLE triage_items ADD COLUMN source_detail TEXT NOT NULL DEFAULT ''")
     ccols = {r[1] for r in con.execute("PRAGMA table_info(collections)")}
     if "wiki_proactive" not in ccols:
         con.execute("ALTER TABLE collections ADD COLUMN wiki_proactive INTEGER NOT NULL DEFAULT 1")

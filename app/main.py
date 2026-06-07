@@ -2588,6 +2588,15 @@ def wiki_add_dismiss(request: Request, slug: str, tid: int) -> HTMLResponse:
     return _wiki_panel(request, slug)
 
 
+@app.post("/c/{slug}/wiki/reading/clear", response_class=HTMLResponse)
+def wiki_reading_clear(request: Request, slug: str) -> HTMLResponse:
+    """Clear ALL pending suggestions — removed from the list without judging (not added,
+    not rejected; may resurface later). Distinct from Dismiss (which rejects one)."""
+    _require_collection(slug)
+    triage_mod.clear_pending(slug)
+    return _wiki_panel(request, slug)
+
+
 @app.post("/c/{slug}/wiki/paper/{pid}/toggle-read", response_class=HTMLResponse)
 def wiki_paper_toggle_read(request: Request, slug: str, pid: int) -> HTMLResponse:
     """Flip a paper's read state from the wiki's Evidence section (papers live

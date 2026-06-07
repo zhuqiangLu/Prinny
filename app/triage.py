@@ -293,20 +293,35 @@ def add_from_arxiv(slug: str, arxiv_id: str, title: str, note: str) -> int:
     return add_candidate(slug, {"arxiv_id": arxiv_id, "title": title}, note)
 
 
-def add_candidate(slug: str, cand: dict, note: str) -> int:
+def add_candidate(slug: str, cand: dict, note: str,
+                  source: str = "", source_detail: str = "") -> int:
     """Enqueue a discovered paper (arXiv OR Semantic Scholar) into triage (pending),
-    carrying everything Accept needs: arxiv_id, doi, pdf_url, abstract, authors."""
+    carrying everything Accept needs + how it was found (source/source_detail for grouping)."""
     con = connect()
     try:
         cur = con.execute(
             "INSERT INTO triage_items (collection_slug, arxiv_id, doi, pdf_url, title, "
-            "abstract, authors, llm_relevance_note, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
+            "abstract, authors, llm_relevance_note, status, source, source_detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
             (slug, cand.get("arxiv_id"), cand.get("doi"), cand.get("pdf_url"),
              cand.get("title", ""), cand.get("summary", "") or cand.get("abstract", ""),
-             cand.get("authors", ""), note),
+             cand.get("authors", ""), note, source or "", source_detail or ""),
         )
         con.commit()
         return cur.lastrowid
+    finally:
+        con.close()
+
+
+def clear_pending(slug: str) -> int:
+    """Empty the pending suggested-reading list WITHOUT judging it — rows are deleted,
+    not rejected (no graveyard tombstone), so they aren't suppressed on a later find/Pull.
+    Returns the number cleared. (Distinct from `reject`, which records a rejection.)"""
+    con = connect()
+    try:
+        cur = con.execute(
+            "DELETE FROM triage_items WHERE collection_slug = ? AND status = 'pending'", (slug,))
+        con.commit()
+        return cur.rowcount
     finally:
         con.close()
