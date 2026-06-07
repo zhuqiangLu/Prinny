@@ -74,14 +74,14 @@
 
     {# tab bar #}
     {% set TABS = [
-      ('overview', '▢ Overview'), ('connections', '⊞ Map'), ('review', '❡ Review'),
+      ('overview', '▢ Overview'), ('connections', '⊞ Map'),
       ('papers', '▤ Papers'), ('reading', '✦ Suggested reading')
     ] %}
     <div class="flex items-center gap-1 overflow-x-auto -mb-px">
       {% for key, label in TABS %}
       <button type="button" @click="go('{{ key }}')"
               :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
-              class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}{% if key == 'review' and review_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
+              class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
       {% endfor %}
     </div>
   </div>
@@ -341,32 +341,4 @@
   </script>
   {% endif %}
 
-  {# ===== literature-review poller (no cover — the Review tab shows an inline
-       spinner; on done we re-fetch the panel, preserving the current tab). ===== #}
-  {% if review_running %}
-  <div id="wiki-review-cover" data-slug="{{ slug }}" hidden></div>
-  <script>
-    (function () {
-      var sentinel = document.getElementById("wiki-review-cover");
-      if (!sentinel) return;
-      var slug = sentinel.getAttribute("data-slug");
-      function tick() {
-        if (!document.body.contains(sentinel)) return;
-        fetch("/c/" + slug + "/wiki/review/status", { headers: { "Accept": "application/json" } })
-          .then(function (r) { return r.json(); })
-          .then(function (job) {
-            if (!document.body.contains(sentinel)) return;
-            if (job.status === "idle" || job.status === "done" || job.status === "failed") {
-              if (window.htmx) htmx.ajax("GET", "/c/" + slug + "/wiki/panel", { target: "#left-panel", swap: "innerHTML" });
-              else window.location.reload();
-              return;
-            }
-            setTimeout(tick, 1500);
-          })
-          .catch(function () { if (document.body.contains(sentinel)) setTimeout(tick, 2500); });
-      }
-      setTimeout(tick, 1000);
-    })();
-  </script>
-  {% endif %}
 </div>
