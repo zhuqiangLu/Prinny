@@ -14,7 +14,7 @@
              or ('·','','bg-slate-50 text-slate-500 border-slate-200') %}
 <div x-data="{ editing: false }">
   <div class="flex items-center gap-2 mb-1 flex-wrap">
-    <span class="text-lg text-violet-600">◆</span>
+    <span class="text-lg text-indigo-600">◆</span>
     <h3 x-show="!editing" class="text-base font-semibold text-slate-900 leading-snug">{{ t.name or ('Theme ' ~ t.index) }}</h3>
     <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ ST[2] }}">{{ ST[0] }} {{ ST[1] }}</span>
     <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600" title="Rename theme">✎ rename</button>

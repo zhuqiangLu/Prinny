@@ -611,7 +611,7 @@
     {# View switcher — pick what the card area shows: Theme clusters, the three entity
        types, or the Graph. (Replaces the old Card/Graph toggle + Papers/Connections stats.) #}
     <div class="kg-stats mb-4">
-      {% for v in [('theme','Theme', ov.themes, 'text-violet-600'),
+      {% for v in [('theme','Theme', ov.themes, 'text-indigo-600'),
                    ('concept','Concept', ov.concepts, 'text-violet-700'),
                    ('method','Method', ov.methods, 'text-sky-700'),
                    ('problem','Problem', ov.problems, 'text-rose-700')] %}
@@ -684,7 +684,7 @@
              @contextmenu.prevent="window.paAskEl($el)">
           <div class="p-4 cursor-pointer" @click="entityOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/theme?sig={{ t.sig }}', { target: '#entity-modal-body', swap: 'innerHTML' })">
             <div class="flex items-start gap-3">
-              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm {{ theme_color(t.index)|trim }}">◆</span>
+              <span class="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-sm bg-indigo-100 text-indigo-700">◆</span>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                   <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
