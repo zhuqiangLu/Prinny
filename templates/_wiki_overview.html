@@ -594,19 +594,10 @@
     'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': 'Medium'},
     'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': 'Emerging'}
   } %}
-  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ insight: null, cview: 'card', mapFilter: '' }"
-           @wiki-jump.window="cview = 'graph'; mapFilter = ''; $nextTick(() => window.kgRender && window.kgRender())">
+  <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ insight: null, mapView: 'theme' }"
+           @wiki-jump.window="mapView = 'graph'; $nextTick(() => window.kgRender && window.kgRender())">
     <div class="flex items-baseline gap-2 mb-1">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⊞</span> Map</h2>
-      <div class="ml-auto flex items-center gap-2">
-        {% if cx.graph and cx.graph.nodes %}
-        <div class="inline-flex rounded-md border border-slate-200 overflow-hidden text-xs">
-          <button type="button" @click="cview='card'" :class="cview==='card' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-2 py-0.5">▤ Card view</button>
-          <button type="button" @click="cview='graph'; $nextTick(() => window.kgRender && window.kgRender())" :class="cview==='graph' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'" class="px-2 py-0.5 border-l border-slate-200">⚯ Graph view</button>
-        </div>
-        {% endif %}
-        <span class="text-xs text-slate-400 cursor-help" title="Structural map — which ideas cluster by shared papers. Clustering is deterministic (no LLM); theme names are written by the agent when you regenerate, and you can rename them.">How? ⓘ</span>
-      </div>
     </div>
     <p class="text-xs text-slate-500 mb-3">
       The collection forms <b class="text-slate-700">{{ ov.themes }}</b> theme{{ 's' if ov.themes != 1 }}
@@ -619,48 +610,45 @@
       .kg-2col-main { display: flex; flex-direction: column; gap: .75rem; }
       .kg-ins { display: grid; grid-template-columns: 1fr; gap: .5rem; }
       .kg-theme-scroll { display: flex; flex-direction: column; gap: .75rem; }   /* no inner scrollbar — grows to content */
-      @media (min-width: 640px) { .kg-stats { grid-template-columns: repeat(6, minmax(0,1fr)); } .kg-ins { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+      @media (min-width: 640px) { .kg-stats { grid-template-columns: repeat(5, minmax(0,1fr)); } .kg-ins { grid-template-columns: repeat(2, minmax(0,1fr)); } }
     </style>
 
-    {# Stats strip — Concept/Method/Problem are clickable filters that swap the card
-       area to that entity type (click again to clear, back to themes). #}
+    {# View switcher — pick what the card area shows: Theme clusters, the three entity
+       types, or the Graph. (Replaces the old Card/Graph toggle + Papers/Connections stats.) #}
     <div class="kg-stats mb-4">
-      <div class="rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-2 text-center">
-        <div class="text-xl font-semibold tabular-nums text-slate-900">{{ ov.papers }}</div>
-        <div class="text-[10px] uppercase tracking-wide text-slate-400">Papers</div>
-      </div>
-      {% for f in [('concept','Concept', ov.concepts, 'text-violet-700'),
+      {% for v in [('theme','Theme', ov.themes, 'text-violet-600'),
+                   ('concept','Concept', ov.concepts, 'text-violet-700'),
                    ('method','Method', ov.methods, 'text-sky-700'),
                    ('problem','Problem', ov.problems, 'text-rose-700')] %}
-      <button type="button" @click="mapFilter = (mapFilter === '{{ f[0] }}' ? '' : '{{ f[0] }}'); cview='card'"
-              :class="mapFilter === '{{ f[0] }}' ? 'ring-2 ring-violet-400 bg-white' : 'bg-slate-50/50 hover:bg-white'"
-              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ f[1] }} cards">
-        <div class="text-xl font-semibold tabular-nums {{ f[3] }}">{{ f[2] }}</div>
-        <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ f[1] }}</div>
+      <button type="button" @click="mapView = '{{ v[0] }}'"
+              :class="mapView === '{{ v[0] }}' ? 'ring-2 ring-violet-400 bg-white' : 'bg-slate-50/50 hover:bg-white'"
+              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ v[1] }}s">
+        <div class="text-xl font-semibold tabular-nums {{ v[3] }}">{{ v[2] }}</div>
+        <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ v[1] }}</div>
       </button>
       {% endfor %}
-      <div class="rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-2 text-center">
-        <div class="text-xl font-semibold tabular-nums text-violet-600">{{ ov.themes }}</div>
-        <div class="text-[10px] uppercase tracking-wide text-slate-400">Themes</div>
-      </div>
-      <div class="rounded-lg border border-slate-200 bg-slate-50/50 px-2 py-2 text-center">
-        <div class="text-xl font-semibold tabular-nums text-slate-900">{{ ov.connections }}</div>
-        <div class="text-[10px] uppercase tracking-wide text-slate-400">Connections</div>
-      </div>
+      {% if cx.graph and cx.graph.nodes %}
+      <button type="button" @click="mapView = 'graph'; $nextTick(() => window.kgRender && window.kgRender())"
+              :class="mapView === 'graph' ? 'ring-2 ring-violet-400 bg-white' : 'bg-slate-50/50 hover:bg-white'"
+              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show the graph">
+        <div class="text-xl leading-7">⚯</div>
+        <div class="text-[10px] uppercase tracking-wide text-slate-400">Graph</div>
+      </button>
+      {% endif %}
     </div>
 
     {# Entity cards — shown when a stat filter is active (click a card → detail popup).
        Concepts show blurb + attention score and an Add button; all are paper-anchored. #}
-    <div x-show="cview === 'card' && mapFilter" x-cloak class="mb-4">
+    <div x-show="['concept','method','problem'].includes(mapView)" x-cloak class="mb-4">
       <div class="flex items-center gap-2 mb-2">
-        <p class="text-xs text-slate-500" x-text="(mapFilter === 'concept' ? 'Concepts — ideas you attend to (synonyms drive Focus).' : mapFilter === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
-        <button type="button" @click="mapFilter = ''" class="ml-auto text-[11px] text-slate-400 hover:text-slate-700">← back to themes</button>
+        <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — ideas you attend to (synonyms drive Focus).' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
+        <button type="button" @click="mapView = 'theme'" class="ml-auto text-[11px] text-slate-400 hover:text-slate-700">← back to themes</button>
       </div>
       {% set ENT = {'concept': ('◈','border-violet-200','bg-violet-50/40','text-violet-800'),
                     'method':  ('🔧','border-sky-200','bg-sky-50/40','text-sky-800'),
                     'problem': ('🚩','border-rose-200','bg-rose-50/40','text-rose-800')} %}
       {% for kind, lists in cx.entities.items() %}
-      <div x-show="mapFilter === '{{ kind }}'" x-cloak class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      <div x-show="mapView === '{{ kind }}'" x-cloak class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {% if kind == 'concept' %}
         <form hx-post="/c/{{ slug }}/wiki/concepts/add" hx-target="#left-panel" hx-swap="innerHTML"
               x-data="{ a:false }" class="rounded-lg border border-dashed border-violet-200 p-3">
@@ -693,7 +681,7 @@
     </div>
 
     <div class="kg-2col mb-4">
-      <div class="kg-2col-main" x-show="cview === 'card' && !mapFilter">
+      <div class="kg-2col-main" x-show="mapView === 'theme'">
         <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
@@ -794,7 +782,7 @@
       </div>
 
       {% if cx.graph and cx.graph.nodes %}
-      <div class="kg-2col-side" x-show="cview === 'graph'" x-cloak>
+      <div class="kg-2col-side" x-show="mapView === 'graph'" x-cloak>
         <div class="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
           <div class="flex items-center gap-2 mb-2">
             <span class="text-xs font-semibold text-slate-600">Collection map</span>
