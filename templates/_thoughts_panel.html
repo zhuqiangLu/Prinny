@@ -1,10 +1,13 @@
-{# Thoughts tab body (collection chat panel). Quick add + recent cards. Each card
-   renders its body as markdown, expands on click, and is editable inline. Full
-   management (supersede/consolidate) lives on the /thoughts page. #}
-<div id="thoughts-panel" class="space-y-3">
-  <form hx-post="/c/{{ slug }}/thoughts/add" hx-target="#thoughts-panel" hx-swap="outerHTML"
+{# Thoughts tab body. Quick add + recent markdown cards (expand on click, edit inline).
+   `panel_id` lets a second copy (the "manage all" modal) live on the same page without
+   colliding ids; the primary panel (default id) also renders the modal. #}
+{% set pid = panel_id|default('thoughts-panel') %}
+{% set primary = (pid == 'thoughts-panel') %}
+<div id="{{ pid }}" class="space-y-3">
+  <form hx-post="/c/{{ slug }}/thoughts/add" hx-target="#{{ pid }}" hx-swap="outerHTML"
         hx-on::after-request="if(event.detail.successful) this.reset()">
     <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
+    <input type="hidden" name="panel_id" value="{{ pid }}">
     <textarea name="text" rows="3" required placeholder="{% if paper_key %}A note on this paper… (markdown){% else %}A new thought… (markdown supported){% endif %}"
               class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
     <div class="mt-1 flex items-center gap-2">
@@ -14,7 +17,23 @@
         <option value="seed" selected>seed</option>
         <option value="reasoning">reasoning</option>
       </select>
-      <a href="/c/{{ slug }}/thoughts" class="ml-auto text-xs text-slate-500 hover:text-slate-800">manage all →</a>
+      {% if primary %}
+      {# "Manage all" opens a modal with the whole stream (lazy-loaded), instead of navigating away #}
+      <div class="ml-auto" x-data="{ open: false, loaded: false }" @keydown.escape.window="open = false">
+        <button type="button" class="text-xs text-slate-500 hover:text-slate-800"
+                @click="open = true; if(!loaded){ loaded = true; $nextTick(() => window.htmx && window.htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: $refs.mbody, swap: 'innerHTML' })) }">manage all →</button>
+        <div x-show="open" x-cloak class="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 p-4 pt-16"
+             @click.self="open = false">
+          <div class="bg-white rounded-xl shadow-xl w-[min(640px,94vw)] max-h-[80vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 shrink-0">
+              <h2 class="font-semibold text-slate-900">All thoughts</h2>
+              <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+            </div>
+            <div x-ref="mbody" class="p-4 overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </form>
   {% if not thoughts %}
@@ -42,16 +61,18 @@
       {# actions (only when expanded) #}
       <div x-show="open && !editing" x-cloak class="flex items-center gap-3 px-2.5 pb-2.5 text-xs">
         <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ Edit</button>
-        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#thoughts-panel" hx-swap="outerHTML"
+        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#{{ pid }}" hx-swap="outerHTML"
               hx-confirm="Delete this thought? This cannot be undone.">
           <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
+          <input type="hidden" name="panel_id" value="{{ pid }}">
           <button class="text-rose-600 hover:text-rose-700">Delete</button>
         </form>
       </div>
       {# inline editor #}
       <div x-show="editing" x-cloak class="p-2.5">
-        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/update" hx-target="#thoughts-panel" hx-swap="outerHTML">
+        <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/update" hx-target="#{{ pid }}" hx-swap="outerHTML">
           <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
+          <input type="hidden" name="panel_id" value="{{ pid }}">
           <textarea name="text" rows="6"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ t.body }}</textarea>
           <div class="mt-1 flex items-center gap-2">

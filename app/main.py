@@ -2159,52 +2159,55 @@ def thoughts_create(slug: str, text: str = Form(...), synth_kind: str = Form("se
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
-def _thoughts_panel_response(request: Request, slug: str, paper_key: str = "") -> HTMLResponse:
-    """Render the Thoughts tab fragment (bodies pre-rendered to markdown). When
-    ``paper_key`` is set, the panel is scoped to that paper (per-paper notes)."""
+def _thoughts_panel_response(request: Request, slug: str, paper_key: str = "",
+                             panel_id: str = "thoughts-panel") -> HTMLResponse:
+    """Render the Thoughts tab fragment (bodies pre-rendered to markdown). ``paper_key``
+    scopes it to one paper; ``panel_id`` lets the 'manage all' modal copy coexist."""
     items = thoughts_mod.list_thoughts(slug, paper_key=paper_key or None)
     for t in items:
         t["body_html"] = render_md(t["body"], slug)
     return templates.TemplateResponse(
         request, "_thoughts_panel.html",
-        {"slug": slug, "thoughts": items, "paper_key": paper_key})
+        {"slug": slug, "thoughts": items, "paper_key": paper_key, "panel_id": panel_id})
 
 
 @app.get("/c/{slug}/thoughts/panel", response_class=HTMLResponse)
-def thoughts_panel(request: Request, slug: str, paper_key: str = "") -> HTMLResponse:
-    """Thoughts tab body (HTMX-loaded). ?paper_key=<id> scopes it to one paper."""
+def thoughts_panel(request: Request, slug: str, paper_key: str = "",
+                   panel_id: str = "thoughts-panel") -> HTMLResponse:
+    """Thoughts tab body (HTMX-loaded). ?paper_key=<id> scopes it; ?panel_id for the modal."""
     _require_collection(slug)
-    return _thoughts_panel_response(request, slug, paper_key)
+    return _thoughts_panel_response(request, slug, paper_key, panel_id)
 
 
 @app.post("/c/{slug}/thoughts/add", response_class=HTMLResponse)
 def thoughts_add(
     request: Request, slug: str, text: str = Form(""), synth_kind: str = Form("seed"),
-    paper_key: str = Form(""),
+    paper_key: str = Form(""), panel_id: str = Form("thoughts-panel"),
 ) -> HTMLResponse:
     """Quick-add from the Thoughts tab; anchors to a paper when paper_key is set."""
     _require_collection(slug)
     if text.strip():
         thoughts_mod.create_thought(slug, text.strip(), synth_kind=synth_kind,
                                     author_origin="human", paper_key=paper_key or None)
-    return _thoughts_panel_response(request, slug, paper_key)
+    return _thoughts_panel_response(request, slug, paper_key, panel_id)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/update")
 def thoughts_update(request: Request, slug: str, tid: str, text: str = Form(...),
-                    paper_key: str = Form("")):
+                    paper_key: str = Form(""), panel_id: str = Form("thoughts-panel")):
     """Edit a thought. HTMX → refreshed (paper-scoped) panel; plain form → redirect."""
     thoughts_mod.update_thought(slug, tid, text.strip())
     if request.headers.get("HX-Request"):
-        return _thoughts_panel_response(request, slug, paper_key)
+        return _thoughts_panel_response(request, slug, paper_key, panel_id)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
 @app.post("/c/{slug}/thoughts/{tid}/delete")
-def thoughts_delete(request: Request, slug: str, tid: str, paper_key: str = Form("")):
+def thoughts_delete(request: Request, slug: str, tid: str, paper_key: str = Form(""),
+                    panel_id: str = Form("thoughts-panel")):
     thoughts_mod.delete_thought(slug, tid)
     if request.headers.get("HX-Request"):
-        return _thoughts_panel_response(request, slug, paper_key)
+        return _thoughts_panel_response(request, slug, paper_key, panel_id)
     return RedirectResponse(f"/c/{slug}/thoughts", status_code=303)
 
 
