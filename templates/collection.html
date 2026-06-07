@@ -323,7 +323,7 @@
       init() {
         // A notification link (/c/<slug>?tab=benchmarks) jumps straight to that tab.
         const qt = new URLSearchParams(location.search).get("tab");
-        if (qt && ["overview","concepts","benchmarks","understanding","connections","review","papers","reading"].includes(qt)) {
+        if (qt && ["overview","fieldmap","benchmarks","understanding","connections","review","papers","reading"].includes(qt)) {
           this.tab = qt;
         }
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));
