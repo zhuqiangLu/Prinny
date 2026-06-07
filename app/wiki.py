@@ -559,6 +559,66 @@ def merge_user_concepts(user_owned: list[dict], agent_concepts: list[dict]) -> l
     return merged
 
 
+def _concept_words(c: dict) -> set:
+    """Significant (>2-char) words across a concept's name + synonyms, lowercased."""
+    toks: set = set()
+    for s in [c.get("name", "")] + list(c.get("synonyms") or []):
+        toks |= {w for w in re.split(r"[^a-z0-9]+", (s or "").lower()) if len(w) > 2}
+    return toks
+
+
+def _attention_excerpts(slug: str, n_high: int = 20, n_notes: int = 10) -> str:
+    """The user's recent highlights + notes as a compact block — so a regenerate can
+    make concept synonyms cover the researcher's actual vocabulary (keeps Focus alive)."""
+    con = connect()
+    try:
+        hs = [(r["selected_text"] or "").strip() for r in con.execute(
+            "SELECT selected_text FROM annotations WHERE collection_slug=? AND kind='highlight' "
+            "AND COALESCE(selected_text,'')<>'' ORDER BY created_at DESC LIMIT ?", (slug, n_high))]
+        ns = [" ".join(filter(None, [r["s"], r["t"], r["q"]])).strip() for r in con.execute(
+            "SELECT COALESCE(summary,'') s, COALESCE(thoughts,'') t, COALESCE(key_quotes,'') q "
+            "FROM paper_notes WHERE collection_slug=? AND (COALESCE(summary,'')<>'' "
+            "OR COALESCE(thoughts,'')<>'' OR COALESCE(key_quotes,'')<>'') "
+            "ORDER BY updated_at DESC LIMIT ?", (slug, n_notes))]
+    finally:
+        con.close()
+    lines = [f"- {h[:240]}" for h in hs if h] + [f"- (note) {x[:300]}" for x in ns if x]
+    return "\n".join(lines)
+
+
+def carry_concept_synonyms(old_concepts: list[dict], new_concepts: list[dict]) -> list[dict]:
+    """Carry synonyms from the PREVIOUS concept list into the most word-overlapping new
+    concept (mutates + returns new_concepts).
+
+    Regeneration renames concepts ('Token Efficiency' → 'Visual Token Reduction'), and the
+    deterministic attention scorer matches highlights/notes against concept *synonyms*. A
+    rename that drops the user's vocabulary (e.g. 'patches') silently zeroes their Focus.
+    Folding the old synonyms into the best-matching new concept keeps the match alive so
+    Focus survives a regen."""
+    if not old_concepts or not new_concepts:
+        return new_concepts
+    new_words = [(c, _concept_words(c)) for c in new_concepts]
+    for oc in old_concepts:
+        ow = _concept_words(oc)
+        if not ow:
+            continue
+        best, score = None, 0
+        for c, nw in new_words:
+            ov = len(ow & nw)
+            if ov > score:
+                best, score = c, ov
+        if best is None or score < 1:
+            continue
+        syns = list(best.get("synonyms") or [])
+        have = {s.lower() for s in syns}
+        for s in (oc.get("synonyms") or []):
+            if s and s.lower() not in have:
+                syns.append(s)
+                have.add(s.lower())
+        best["synonyms"] = syns
+    return new_concepts
+
+
 def add_concept(slug: str, name: str, blurb: str = "") -> dict:
     name = (name or "").strip()
     if len(name) < 2:
@@ -1430,6 +1490,16 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
             "their stated focus: foreground them in the Thesis (especially core_tension / "
             "key_intuition / central_question) and let them shape which Landscape items lead. "
             "Do not contradict or omit them; do not fabricate beyond the papers:\n" + _focus + "\n")
+    # Fold in the researcher's ATTENTION (their highlights/notes) so the concepts cover
+    # the vocabulary they actually use — the Focus panel matches highlights against concept
+    # synonyms, so a concept must carry the researcher's wording or their Focus goes blank.
+    _att = _attention_excerpts(slug)
+    if _att:
+        user_content += (
+            "\n\n=== WHAT THE RESEARCHER HAS BEEN READING (their highlights & notes) ===\n"
+            "These are passages they highlighted / wrote. Make sure your concepts COVER these "
+            "themes, and include the researcher's own wording (key noun phrases below) in the "
+            "relevant concept's `synonyms` so their attention keeps matching:\n" + _att + "\n")
     msgs = [{"role": "system", "content": system},
             {"role": "user", "content": user_content}]
     # The field-model agent is non-deterministic — a run occasionally returns prose
@@ -1462,6 +1532,11 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     # Three files: thesis.md, landscape.md (+ landscape.json), concepts.json.
     stage("writing", pages_done=0, pages_total=3)
     kept_concepts = user_owned_concepts(slug)        # capture BEFORE the wipe
+    try:                                             # all old concepts → synonym carry-over
+        _old_concepts = (json.loads(_concepts_path(slug).read_text(encoding="utf-8"))
+                         .get("concepts") or [])
+    except Exception:  # noqa: BLE001
+        _old_concepts = []
     _wipe_sections_tree(slug)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
     meta_extra = {"paper_count": len(included_refs),
@@ -1471,7 +1546,9 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     stage("writing", pages_done=1, pages_total=3)
     _write_landscape_page(slug, field["landscape"], meta_extra)
     stage("writing", pages_done=2, pages_total=3)
-    _write_concepts_file(slug, merge_user_concepts(kept_concepts, field["concepts"]))  # keep user-owned
+    # Carry old synonyms forward so a rename doesn't zero the user's Focus, then keep user-owned.
+    _carried = carry_concept_synonyms(_old_concepts, field["concepts"])
+    _write_concepts_file(slug, merge_user_concepts(kept_concepts, _carried))
     stage("writing", pages_done=3, pages_total=3)
     _append_log(slug, f"generated field model "
                        f"({len(pdf_refs)}/{len(included_refs)} PDFs, "
