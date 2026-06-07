@@ -109,6 +109,17 @@
     </div>
   </div>
 
+  <!-- Map entity detail: concept/method/problem popup (concepts editable). Opened from a card. -->
+  <div x-show="entityOpen" x-cloak @keydown.escape.window="entityOpen = false" @click.self="entityOpen = false"
+       class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
+    <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] max-h-[82vh] flex flex-col p-5">
+      <div class="flex items-center justify-end mb-1 shrink-0">
+        <button type="button" @click="entityOpen = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+      </div>
+      <div id="entity-modal-body" class="overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+    </div>
+  </div>
+
   <!-- Export / sync destination chooser -->
   <div x-show="syncOpen" x-cloak @keydown.escape.window="syncOpen = false" @click.self="syncOpen = false"
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
@@ -320,10 +331,11 @@
       dupOpen: false,
       thoughtsOpen: false,   // 💭 Thoughts manager (moved off the tab bar into ⋯)
       regenOpen: false,      // ↻ Regenerate gate: review beliefs before re-drafting
+      entityOpen: false,     // Map: concept/method/problem detail popup
       init() {
         // A notification link (/c/<slug>?tab=benchmarks) jumps straight to that tab.
         const qt = new URLSearchParams(location.search).get("tab");
-        if (qt && ["overview","concepts","benchmarks","understanding","connections","review","papers","reading"].includes(qt)) {
+        if (qt && ["overview","benchmarks","understanding","connections","review","papers","reading"].includes(qt)) {
           this.tab = qt;
         }
         this.$watch("paneOpen", (v) => localStorage.setItem("cc.open", v ? "1" : "0"));

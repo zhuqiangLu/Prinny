@@ -2861,6 +2861,42 @@ def connection_view(slug: str) -> dict | None:
                             "n_themes": len(nbr_themes), "papers": _papers_of(nid)[:6]})
     bridges.sort(key=lambda b: (-b["n_themes"], b["label"]))
 
+    # --- Entity browser (Map): concept/method/problem cards (paper-anchored only).
+    # Concepts carry blurb + attention score; problems/methods are read-only text. --
+    _cmeta: dict = {}
+    try:
+        if _concepts_path(slug).is_file():
+            _cl = (json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or [])
+            _cs = attention_per_concept(slug, _cl)
+            for c in _cl:
+                _cmeta[c["slug"]] = {"blurb": c.get("blurb", ""), "score": _cs.get(c["slug"], 0),
+                                     "name": c.get("name", c["slug"])}
+    except (ValueError, OSError):
+        pass
+
+    def _entity_card(nid):
+        k = kind(nid)
+        rel = [{"label": label(r), "kind": kind(r)}
+               for r, _w in _graph.related(g, nid, k=5) if kind(r) != "paper"]
+        card = {"key": nid, "label": label(nid), "kind": k,
+                "paper_count": len(nodes[nid]["papers"]),
+                "papers": _papers_of(nid)[:6], "related": rel,
+                "theme": entity_themes.get(nid)}
+        if k == "concept":
+            cslug = nid.split(":", 1)[1]
+            m = _cmeta.get(cslug, {})
+            card.update(blurb=m.get("blurb", ""), score=m.get("score", 0),
+                        concept_slug=cslug, name=m.get("name", card["label"]))
+        return card
+
+    entities = {"concept": [], "method": [], "problem": []}
+    for _nid, _n in nodes.items():
+        if _n["kind"] in entities:
+            entities[_n["kind"]].append(_entity_card(_nid))
+    entities["concept"].sort(key=lambda e: (-e.get("score", 0), e["label"].lower()))
+    for _k in ("method", "problem"):
+        entities[_k].sort(key=lambda e: (-e["paper_count"], e["label"].lower()))
+
     # --- Overview dashboard stats (all cheap, all honest) -------------------
     n_nodes = len(nodes)
     n_ideas = sum(1 for n in nodes.values() if n["kind"] != "paper")
@@ -2873,7 +2909,9 @@ def connection_view(slug: str) -> dict | None:
     max_edges = n_nodes * (n_nodes - 1) / 2 if n_nodes > 1 else 0
     density = round(n_edges / max_edges, 2) if max_edges else 0.0
     overview = {"papers": n_papers_total, "ideas": n_ideas, "themes": len(themes),
-                "connections": n_edges, "orphans": len(orphans), "density": density}
+                "connections": n_edges, "orphans": len(orphans), "density": density,
+                "concepts": len(entities["concept"]), "methods": len(entities["method"]),
+                "problems": len(entities["problem"])}
 
     # --- Key Insights (call-outs carry real data for the click-to-expand) ----
     strongest = None
@@ -2901,6 +2939,44 @@ def connection_view(slug: str) -> dict | None:
     return {"themes": themes, "overview": overview, "insights": insights_out,
             "bridges": bridges, "orphans": orphans, "co_occurrences": co,
             "paper_themes": {pid: idxs for pid, idxs in paper_themes.items()},
-            "entity_themes": entity_themes,
+            "entity_themes": entity_themes, "entities": entities,
             "graph": {"nodes": viz_nodes, "edges": viz_edges},
             "needs_naming": any(t["name"] is None for t in themes)}
+
+
+def entity_detail(slug: str, key: str) -> dict | None:
+    """Rich detail for one Map entity (concept/method/problem): description, top papers,
+    related entities. Concepts include blurb + attention score (editable in the popup)."""
+    from . import graph as _graph
+    try:
+        g = build_collection_graph(slug)
+    except Exception:  # noqa: BLE001
+        return None
+    nodes = g.get("nodes", {})
+    if key not in nodes:
+        return None
+    n = nodes[key]
+    k = n["kind"]
+    lbl = lambda nid: nodes[nid]["label"] if nid in nodes else nid
+    papers = [{"id": pid, "title": lbl(f"paper:{pid}")}
+              for pid in sorted(n["papers"]) if f"paper:{pid}" in nodes]
+    related = [{"label": lbl(r), "kind": nodes[r]["kind"], "key": r}
+               for r, _w in _graph.related(g, key, k=8) if nodes.get(r, {}).get("kind") != "paper"]
+    out = {"key": key, "kind": k, "label": n["label"], "papers": papers,
+           "related": related, "blurb": "", "score": 0, "concept_slug": ""}
+    if k == "concept":
+        cslug = key.split(":", 1)[1]
+        out["concept_slug"] = cslug
+        try:
+            if _concepts_path(slug).is_file():
+                cl = json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or []
+                cs = attention_per_concept(slug, cl)
+                for c in cl:
+                    if c["slug"] == cslug:
+                        out["blurb"] = c.get("blurb", "")
+                        out["label"] = c.get("name", out["label"])
+                        out["score"] = cs.get(cslug, 0)
+                        break
+        except (ValueError, OSError):
+            pass
+    return out

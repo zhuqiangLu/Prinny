@@ -1,0 +1,76 @@
+{# Map entity detail (HTMX-loaded into #entity-modal-body). Concept = editable
+   (name/blurb/remove, reusing the concept routes); problem/method = read-only
+   (they change only on a Field-Model regenerate). Related chips re-load the
+   popup for that entity. Lives in the collectionView() scope (entityOpen). #}
+{% if not e %}
+<p class="text-sm text-slate-400 py-6 text-center">Couldn't load this entity.</p>
+{% else %}
+{% set style = {'concept': ('◈','text-violet-700','border-violet-200','bg-violet-50'),
+                'method':  ('🔧','text-sky-700','border-sky-200','bg-sky-50'),
+                'problem': ('🚩','text-rose-700','border-rose-200','bg-rose-50')}[e.kind]
+                or ('•','text-slate-700','border-slate-200','bg-slate-50') %}
+<div x-data="{ editing: false }">
+  <div class="flex items-start gap-2 mb-1">
+    <span class="text-lg">{{ style[0] }}</span>
+    <div class="flex-1 min-w-0">
+      <h3 x-show="!editing" class="text-base font-semibold {{ style[1] }} leading-snug">{{ e.label }}</h3>
+      <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+        <span class="uppercase tracking-wide">{{ e.kind }}</span>
+        {% if e.kind == 'concept' and e.score %}<span class="rounded-full px-1.5 py-0.5 bg-violet-100 text-violet-700" title="{{ e.score }} attention points">🔥 {{ e.score }}</span>{% endif %}
+        <span>· {{ e.papers|length }} paper{{ 's' if e.papers|length != 1 }}</span>
+      </div>
+    </div>
+    {% if e.kind == 'concept' %}
+    <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600" title="Edit concept">✎ edit</button>
+    {% endif %}
+  </div>
+
+  {# description / blurb #}
+  {% if e.kind == 'concept' %}
+    <div x-show="!editing">
+      {% if e.blurb %}<p class="text-sm text-slate-700 leading-snug mb-3">{{ e.blurb }}</p>
+      {% else %}<p class="text-xs text-slate-400 italic mb-3">No description yet — ✎ edit to add one.</p>{% endif %}
+    </div>
+    {# inline edit (name + blurb), reusing the concept routes; closes the popup + refreshes panel #}
+    <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/concepts/edit" hx-target="#left-panel" hx-swap="innerHTML"
+          @submit="entityOpen = false" class="space-y-2 mb-3">
+      <input type="hidden" name="target" value="{{ e.label }}">
+      <input name="name" value="{{ e.label }}" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
+      <textarea name="blurb" rows="2" placeholder="One-line description" class="w-full rounded border border-slate-300 px-2 py-1 text-sm">{{ e.blurb }}</textarea>
+      <div class="flex items-center gap-2">
+        <button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
+        <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+        <form hx-post="/c/{{ slug }}/wiki/concepts/remove" hx-target="#left-panel" hx-swap="innerHTML" @submit="entityOpen = false"
+              onsubmit="return confirm('Remove the concept “{{ e.label }}”?')" class="ml-auto inline">
+          <input type="hidden" name="target" value="{{ e.label }}">
+          <button class="text-xs text-rose-500 hover:text-rose-700">Remove concept</button>
+        </form>
+      </div>
+    </form>
+  {% else %}
+    <p class="text-sm text-slate-700 leading-snug mb-1">{{ e.label }}</p>
+    <p class="text-[11px] text-slate-400 italic mb-3">Read-only — {{ e.kind }}s are redrafted by the agent on ↻ Regenerate.</p>
+  {% endif %}
+
+  {# top related papers #}
+  {% if e.papers %}
+  <p class="text-xs font-medium text-slate-500 mb-1.5">Top papers</p>
+  <div class="space-y-1 mb-3">
+    {% for p in e.papers %}
+    <a href="/c/{{ slug }}/p/{{ p.id }}" class="block text-[13px] text-violet-700 hover:underline truncate">{{ p.title }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# related entities (click to pivot the popup) #}
+  {% if e.related %}
+  <p class="text-xs font-medium text-slate-500 mb-1.5">Related</p>
+  <div class="flex flex-wrap gap-1.5">
+    {% for r in e.related %}
+    <button type="button" class="text-[11px] rounded px-1.5 py-0.5 border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+            hx-get="/c/{{ slug }}/wiki/entity?key={{ r.key|urlencode }}" hx-target="#entity-modal-body" hx-swap="innerHTML">{{ r.label|truncate(34) }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

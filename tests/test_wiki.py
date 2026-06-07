@@ -252,11 +252,11 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     # The fixture wires concepts + methods to shared papers, so SOMETHING surfaces.
     assert cv is not None
     assert set(cv) == {"themes", "overview", "insights", "bridges", "orphans",
-                       "co_occurrences", "paper_themes", "entity_themes", "graph",
-                       "needs_naming"}
+                       "co_occurrences", "paper_themes", "entity_themes", "entities",
+                       "graph", "needs_naming"}
     # Overview dashboard stats are all present and numeric.
     assert set(cv["overview"]) == {"papers", "ideas", "themes", "connections",
-                                    "orphans", "density"}
+                                    "orphans", "density", "concepts", "methods", "problems"}
     # Themes carry index/sig/strength/key_papers; name is None until named.
     for t in cv["themes"]:
         assert t["index"] >= 1 and isinstance(t["sig"], str)

@@ -2612,6 +2612,15 @@ def _regen_gate(request: Request, slug: str) -> HTMLResponse:
     })
 
 
+@app.get("/c/{slug}/wiki/entity", response_class=HTMLResponse)
+def wiki_entity_detail(request: Request, slug: str, key: str = "") -> HTMLResponse:
+    """Detail popup for a Map entity (concept/method/problem): description, top papers,
+    related entities. Concepts are editable here; problems/methods are read-only."""
+    _require_collection(slug)
+    return templates.TemplateResponse(request, "_entity_detail.html",
+                                      {"slug": slug, "e": wiki.entity_detail(slug, key)})
+
+
 @app.post("/c/{slug}/wiki/regen/prepare", response_class=HTMLResponse)
 def wiki_regen_prepare(request: Request, slug: str) -> HTMLResponse:
     """Step 1 of the gated regenerate: draft fresh belief candidates (only if the
