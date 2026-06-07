@@ -946,8 +946,9 @@
 <div x-show="tab==='papers'" x-cloak>
   {% if overview.papers %}
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
+  {% set cxe = (overview.connections.entities if overview.connections else {}) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5"
-           x-data="{ themeFilter: 0, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }">
+           x-data="{ filterKey: '', filterDim: 'all', sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
@@ -967,23 +968,39 @@
               class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Add a paper by arXiv id / URL">＋ Add paper</button>
     </div>
 
-    {% if themelist %}
-    <div class="flex flex-wrap items-center gap-1.5 mb-3 text-[11px]">
-      <span class="text-slate-400 mr-0.5">Filter:</span>
-      <button type="button" @click="themeFilter = 0" :class="themeFilter === 0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-      {% for t in themelist %}
-      <button type="button" @click="themeFilter = {{ t.index }}" :class="themeFilter === {{ t.index }} ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'" class="rounded px-2 py-0.5">{{ (t.name or ('Theme ' ~ t.index))|truncate(28) }}</button>
-      {% endfor %}
-      <button type="button" @click="themeFilter = -1" :class="themeFilter === -1 ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
+    {% if themelist or cxe.concept or cxe.method or cxe.problem %}
+    <div class="mb-3 text-[11px]">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-slate-400 mr-0.5">Filter:</span>
+        <button type="button" @click="filterKey=''; filterDim='all'" :class="filterDim==='all' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
+        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
+        {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
+        {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>{% endif %}
+        {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button>{% endif %}
+        <button type="button" @click="filterKey='unmapped'; filterDim='unmapped'" :class="filterDim==='unmapped' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
+        <span x-show="filterKey && filterKey !== 'unmapped'" x-cloak class="text-slate-400">· filtering by 1</span>
+      </div>
+      {# chips for the active dimension — click one to filter the papers below #}
+      <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        {% for t in themelist %}<button type="button" @click="filterKey='theme:{{ t.index }}'" :class="filterKey==='theme:{{ t.index }}' ? 'ring-2 ring-indigo-400 bg-indigo-100' : 'bg-indigo-50 hover:bg-indigo-100'" class="rounded px-2 py-0.5 text-indigo-700">{{ (t.name or ('Theme ' ~ t.index))|truncate(30) }}</button>{% endfor %}
+      </div>
+      <div x-show="filterDim==='concept'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        {% for e in cxe.concept %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+      </div>
+      <div x-show="filterDim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        {% for e in cxe.method %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+      </div>
+      <div x-show="filterDim==='problem'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        {% for e in cxe.problem %}<button type="button" @click="filterKey='{{ e.key }}'" :class="filterKey==='{{ e.key }}' ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+      </div>
     </div>
     {% endif %}
 
     <div class="flex flex-wrap gap-3">
       {% for p in overview.papers %}
-      {% set pthemes = p.themes|map(attribute='index')|list %}
       <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
-           data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}"
-           x-show="(themeFilter === 0 || (themeFilter === -1 && {{ pthemes|length }} === 0) || {{ pthemes|tojson }}.includes(themeFilter)) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
+           data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}"
+           x-show="(filterKey === '' || (filterKey === 'unmapped' && $el.dataset.ents.trim() === '') || $el.dataset.ents.split(' ').includes(filterKey)) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
         <div class="flex items-center gap-1 mb-2">
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
                  class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
@@ -996,16 +1013,6 @@
           </form>
         </div>
         <a href="/c/{{ slug }}/p/{{ p.id }}" class="block text-sm font-medium text-slate-900 leading-snug line-clamp-3 hover:underline">{{ p.title }}</a>
-        {% if p.themes %}
-        <div class="mt-2 flex flex-wrap gap-1">
-          {% for t in p.themes %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200" title="In theme “{{ t.name }}”">◆ {{ t.name|truncate(22) }}</span>{% endfor %}
-        </div>
-        {% endif %}
-        {% if p.tags %}
-        <div class="mt-1.5 flex flex-wrap gap-1">
-          {% for t in p.tags %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700" title="Maps to the concept “{{ t.name }}”">{{ t.name }}</span>{% endfor %}
-        </div>
-        {% endif %}
         <div class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
           {% if p.arxiv_id %}<span>arXiv</span>{% endif %}
           {% if p.year %}{% if p.arxiv_id %}<span>·</span>{% endif %}<span>{{ p.year }}</span>{% endif %}

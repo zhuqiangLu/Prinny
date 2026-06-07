@@ -253,7 +253,7 @@ def test_connection_view_gates_and_formats(tmp_path, monkeypatch):
     assert cv is not None
     assert set(cv) == {"themes", "overview", "insights", "bridges", "orphans",
                        "co_occurrences", "paper_themes", "entity_themes", "entities",
-                       "graph", "needs_naming"}
+                       "paper_entities", "graph", "needs_naming"}
     # Overview dashboard stats are all present and numeric.
     assert set(cv["overview"]) == {"papers", "ideas", "themes", "connections",
                                     "orphans", "density", "concepts", "methods", "problems"}

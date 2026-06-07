@@ -58,11 +58,12 @@
 
   {# top related papers #}
   {% if e.papers %}
-  <p class="text-xs font-medium text-slate-500 mb-1.5">Top papers</p>
-  <div class="space-y-1 mb-3">
+  <p class="text-xs font-medium text-slate-500 mb-1.5">Papers ({{ e.papers|length }})</p>
+  <div class="space-y-1 mb-3" x-data="{ all: false }">
     {% for p in e.papers %}
-    <a href="/c/{{ slug }}/p/{{ p.id }}" class="block text-[13px] text-violet-700 hover:underline truncate">{{ p.title }}</a>
+    <a href="/c/{{ slug }}/p/{{ p.id }}" {% if not loop.first %}x-show="all" x-cloak{% endif %} class="block text-[13px] text-violet-700 hover:underline truncate">{{ p.title }}</a>
     {% endfor %}
+    {% if e.papers|length > 1 %}<button type="button" x-show="!all" @click="all = true" class="text-[11px] text-slate-400 hover:text-slate-700">Show all {{ e.papers|length }} ↓</button>{% endif %}
   </div>
   {% endif %}
 

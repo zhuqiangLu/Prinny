@@ -2476,10 +2476,13 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
         theme_name = {t["index"]: (t["name"] or f"Theme {t['index']}")
                       for t in connections.get("themes", [])}
         ptheme_map = connections.get("paper_themes", {})
+        pent_map = connections.get("paper_entities", {})
         for p in papers:
             idxs = ptheme_map.get(p["id"], [])
             p["themes"] = [{"index": i, "name": theme_name.get(i, f"Theme {i}")}
                            for i in idxs]
+            # full entity membership (theme:idx / concept|method|problem:slug) for the filter
+            p["ent_keys"] = pent_map.get(p["id"], [])
         # Link Section 2 ↔ Section 5: tag each landscape problem/method with the
         # graph node it maps to (same slug the graph uses) + its theme, so the
         # template can show a theme badge and jump-to-highlight in the map. Only
@@ -2934,12 +2937,25 @@ def connection_view(slug: str) -> dict | None:
                  for nid, n in nodes.items() if n["kind"] != "paper"]
     viz_edges = _graph.projection_edges(g)
 
+    # paper_id → every entity key it belongs to (theme:idx / concept|method|problem:slug),
+    # for the Papers-tab filter (slice by theme/concept/method/problem).
+    paper_entities: dict = defaultdict(list)
+    for _nid, _n in nodes.items():
+        if _n["kind"] == "paper":
+            continue
+        for pid in _n["papers"]:
+            paper_entities[pid].append(_nid)
+    for pid, idxs in paper_themes.items():
+        for i in idxs:
+            paper_entities[pid].append(f"theme:{i}")
+
     if not viz_nodes and not orphans:
         return None
     return {"themes": themes, "overview": overview, "insights": insights_out,
             "bridges": bridges, "orphans": orphans, "co_occurrences": co,
             "paper_themes": {pid: idxs for pid, idxs in paper_themes.items()},
             "entity_themes": entity_themes, "entities": entities,
+            "paper_entities": {pid: keys for pid, keys in paper_entities.items()},
             "graph": {"nodes": viz_nodes, "edges": viz_edges},
             "needs_naming": any(t["name"] is None for t in themes)}
 
