@@ -14,16 +14,19 @@
   </div>
   <div class="space-y-3">
     {% for d in drafts %}
-    <div class="draft-card rounded-lg border border-slate-200 p-3">
+    <div class="draft-card rounded-lg border border-slate-200 p-3" x-data="{ editing: false }">
       <div class="flex items-baseline gap-2 mb-1.5">
         <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ d.title }}</p>
         {% if d.additive %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700" title="You already have a note — this appends to it">+ additions</span>{% endif %}
         {% if d.created_at %}<span class="shrink-0 text-[10px] text-slate-400" x-text="paFmtTime('{{ d.created_at }}')"></span>{% endif %}
+        <button type="button" @click="editing = !editing" class="shrink-0 text-[11px] text-slate-500 hover:text-slate-800" x-text="editing ? 'Preview' : '✎ Edit'"></button>
         <a href="/c/{{ d.slug }}/p/{{ d.paper_id }}" class="shrink-0 text-[11px] text-violet-600 hover:underline">open paper ↗</a>
       </div>
       <form hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/accept"
             hx-target="closest .draft-card" hx-swap="outerHTML">
-        <textarea name="text" rows="8"
+        {# Rendered markdown by default; the textarea (still submitted) shows on Edit #}
+        <div x-show="!editing" class="rounded border border-slate-100 bg-slate-50/50 px-3 py-2 max-h-64 overflow-auto prose prose-sm max-w-none prose-headings:text-sm prose-headings:font-semibold prose-p:my-1">{{ d.draft_html|safe }}</div>
+        <textarea name="text" rows="8" x-show="editing" x-cloak
                   class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ d.draft_md }}</textarea>
         <div class="mt-1.5 flex items-center gap-2">
           <button type="submit" class="draft-accept rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700">{{ 'Append to note' if d.additive else 'Accept as note' }}</button>

@@ -2136,8 +2136,9 @@ def drafts_review(request: Request) -> HTMLResponse:
         additive = any((n.get(k) or "").strip() for k in ("summary", "thoughts", "key_quotes"))
         items.append({"slug": d["collection_slug"], "paper_id": d["paper_id"],
                       "title": ((p or {}).get("title") or f"paper {d['paper_id']}"),
-                      "draft_md": d["draft_md"], "additive": additive,
-                      "created_at": d.get("created_at")})
+                      "draft_md": d["draft_md"],
+                      "draft_html": render_md(d["draft_md"], d["collection_slug"]),
+                      "additive": additive, "created_at": d.get("created_at")})
     return templates.TemplateResponse(request, "_drafts_review.html", {"drafts": items})
 
 
