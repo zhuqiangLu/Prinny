@@ -278,6 +278,8 @@ CREATE TABLE IF NOT EXISTS topic_experiments (
   method TEXT NOT NULL DEFAULT '',
   metric TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'planned',      -- planned | running | done
+  result TEXT NOT NULL DEFAULT '',             -- the outcome the user logged
+  analysis TEXT NOT NULL DEFAULT '',           -- agent's reading of the result vs the hypothesis
   position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -445,6 +447,12 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE triage_items ADD COLUMN source TEXT NOT NULL DEFAULT ''")
         if "source_detail" not in tcols:    # the query/paper-title/concept behind it
             con.execute("ALTER TABLE triage_items ADD COLUMN source_detail TEXT NOT NULL DEFAULT ''")
+    if "topic_experiments" in _tables:
+        xcols = {r[1] for r in con.execute("PRAGMA table_info(topic_experiments)")}
+        if "result" not in xcols:
+            con.execute("ALTER TABLE topic_experiments ADD COLUMN result TEXT NOT NULL DEFAULT ''")
+        if "analysis" not in xcols:
+            con.execute("ALTER TABLE topic_experiments ADD COLUMN analysis TEXT NOT NULL DEFAULT ''")
     ccols = {r[1] for r in con.execute("PRAGMA table_info(collections)")}
     if "wiki_proactive" not in ccols:
         con.execute("ALTER TABLE collections ADD COLUMN wiki_proactive INTEGER NOT NULL DEFAULT 1")

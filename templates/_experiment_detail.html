@@ -1,0 +1,55 @@
+{# Experiment detail (HTMX-loaded into #hyp-modal-body). Log a result, then Analyze →
+   the agent reasons result-vs-hypothesis + suggests the next step. Forms re-render this
+   fragment in place. Lives in the topicShell() scope (hypOpen). #}
+{% if not x %}
+<p class="text-sm text-slate-400 py-6 text-center">Couldn't load this experiment.</p>
+{% else %}
+{% set EXP = {'planned':'bg-slate-100 text-slate-600','running':'bg-sky-100 text-sky-700','done':'bg-emerald-100 text-emerald-700'} %}
+<div>
+  <div class="flex items-start gap-3 mb-3">
+    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-emerald-100 text-emerald-700">⚗</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">Experiment</div>
+      <h2 class="text-base font-bold text-slate-900 leading-snug">{{ x.title }}</h2>
+      <div class="flex items-center gap-2 mt-1.5 text-[11px] text-slate-400 flex-wrap">
+        <span class="rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
+        {% if hyp %}<span>tests <span class="text-violet-700">H{{ hyp_idx }}</span>: {{ hyp.text|truncate(60) }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if x.method or x.metric %}
+  <div class="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 mb-3 text-[12px] text-slate-600 space-y-0.5">
+    {% if x.method %}<div><span class="text-slate-400">Method:</span> {{ x.method }}</div>{% endif %}
+    {% if x.metric %}<div><span class="text-slate-400">Metric:</span> {{ x.metric }}</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {# Log result #}
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Result</div>
+  <form hx-post="/t/{{ slug }}/experiments/{{ x.id }}/result" hx-target="#hyp-modal-body" hx-swap="innerHTML" class="mb-4">
+    <textarea name="result" rows="4" placeholder="What happened? Numbers, observations, the outcome you measured…"
+              class="w-full rounded border border-slate-300 px-3 py-2 text-sm">{{ x.result }}</textarea>
+    <div class="mt-1.5 flex items-center gap-2">
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Save result</button>
+      <select name="status" class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600">
+        {% for s in ['planned','running','done'] %}<option value="{{ s }}" {% if x.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+
+  {# Analyze — agent reasons result vs hypothesis #}
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Analysis</span>
+    <form hx-post="/t/{{ slug }}/experiments/{{ x.id }}/analyze" hx-target="#hyp-modal-body" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded-lg border border-violet-200 bg-violet-50 text-violet-700 px-3 py-1.5 text-sm hover:bg-violet-100 disabled:opacity-50"
+              {% if not x.result.strip() %}disabled title="Log a result first"{% endif %}>✦ Analyze <span class="htmx-indicator">…</span></button>
+    </form>
+  </div>
+  {% if analysis_html %}
+  <div class="rounded-lg border border-violet-100 bg-violet-50/40 p-3 prose prose-sm max-w-none text-slate-700 prose-p:my-1 prose-strong:text-slate-900">{{ analysis_html|safe }}</div>
+  {% else %}
+  <p class="text-[12px] text-slate-400">Log the result, then click <b>Analyze</b> — the agent will judge whether it supports the hypothesis and suggest the next step.</p>
+  {% endif %}
+</div>
+{% endif %}

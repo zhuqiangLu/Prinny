@@ -145,10 +145,11 @@ def get_topic(slug: str) -> dict | None:
             "WHERE topic_id=? ORDER BY position, id", (tid,)).fetchall()]
         t["experiments"] = [
             {"id": row["id"], "title": row["title"], "method": row["method"],
-             "metric": row["metric"], "status": row["status"], "hypothesis_id": row["hypothesis_id"]}
+             "metric": row["metric"], "status": row["status"], "hypothesis_id": row["hypothesis_id"],
+             "result": row["result"], "analysis": row["analysis"]}
             for row in con.execute(
-            "SELECT id, title, method, metric, status, hypothesis_id FROM topic_experiments "
-            "WHERE topic_id=? ORDER BY position, id", (tid,)).fetchall()]
+            "SELECT id, title, method, metric, status, hypothesis_id, result, analysis "
+            "FROM topic_experiments WHERE topic_id=? ORDER BY position, id", (tid,)).fetchall()]
         t["notes"] = [{"id": row["id"], "body": row["body"], "created_at": row["created_at"]}
                       for row in con.execute(
             "SELECT id, body, created_at FROM topic_notes WHERE topic_id=? "
@@ -481,6 +482,44 @@ def add_experiment(slug: str, title: str, method: str = "", metric: str = "",
 
 def delete_experiment(slug: str, eid: int) -> bool:
     return _delete_row(slug, "topic_experiments", eid)
+
+
+def set_experiment(slug: str, eid: int, *, result: str | None = None,
+                   analysis: str | None = None, status: str | None = None,
+                   method: str | None = None, metric: str | None = None) -> bool:
+    """Update an experiment's logged result / agent analysis / status / plan fields."""
+    sets, args = [], []
+    if result is not None:
+        sets.append("result=?"); args.append(result)
+    if analysis is not None:
+        sets.append("analysis=?"); args.append(analysis)
+    if status in ("planned", "running", "done"):
+        sets.append("status=?"); args.append(status)
+    if method is not None:
+        sets.append("method=?"); args.append(method)
+    if metric is not None:
+        sets.append("metric=?"); args.append(metric)
+    if not sets:
+        return False
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        args += [eid, tid]
+        cur = con.execute(f"UPDATE topic_experiments SET {', '.join(sets)} WHERE id=? AND topic_id=?", args)
+        _touch(con, slug)
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def get_experiment(slug: str, eid: int) -> dict | None:
+    t = get_topic(slug)
+    if not t:
+        return None
+    return next((x for x in t["experiments"] if x["id"] == eid), None)
 
 
 def add_note(slug: str, body: str) -> bool:

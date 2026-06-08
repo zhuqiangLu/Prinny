@@ -378,12 +378,14 @@
           <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add</button></div>
       </form>
       {% for x in t.experiments %}
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 hover:shadow-sm transition cursor-pointer group"
+           @click="hypOpen = true; htmx.ajax('GET', '/t/{{ t.slug }}/experiment/{{ x.id }}', { target: '#hyp-modal-body', swap: 'innerHTML' })">
         <div class="flex items-start gap-2">
           <span class="text-slate-400 mt-0.5 shrink-0">⚗</span>
           <p class="flex-1 text-sm font-medium text-slate-800">{{ x.title }}</p>
+          {% if x.result %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-600 border border-violet-200" title="Result logged{{ ' · analyzed' if x.analysis }}">📋{% if x.analysis %} ✦{% endif %}</span>{% endif %}
           <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
-          <form method="post" action="/t/{{ t.slug }}/experiments/{{ x.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
+          <form method="post" action="/t/{{ t.slug }}/experiments/{{ x.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
         </div>
         <div class="mt-1.5 pl-6 text-[12px] text-slate-600 space-y-0.5">
           {% if x.method %}<div><span class="text-slate-400">Method:</span> {{ x.method }}</div>{% endif %}

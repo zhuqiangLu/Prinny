@@ -484,6 +484,39 @@ def start_reading_async(slug: str, purpose: str = "related", target_id=None,
     return True
 
 
+def analyze_experiment(slug: str, eid: int) -> dict:
+    """One LLM call → reason whether the logged result supports/refutes the experiment's
+    hypothesis, and suggest the next step / a revised plan. Stores the analysis on the
+    experiment. Returns {ok, error}."""
+    x = topics.get_experiment(slug, eid)
+    if not x:
+        return {"ok": False, "error": "Experiment not found."}
+    if not (x.get("result") or "").strip():
+        return {"ok": False, "error": "Log a result first, then Analyze."}
+    t = topics.get_topic(slug)
+    hyp = next((h for h in (t["hypotheses"] if t else []) if h.get("id") == x.get("hypothesis_id")), None)
+    user = (f"RESEARCH QUESTION: {(t or {}).get('question', '')}\n\n"
+            f"HYPOTHESIS UNDER TEST: {hyp['text'] if hyp else '(none linked)'}\n\n"
+            f"EXPERIMENT: {x['title']}\n"
+            f"Method: {x.get('method', '')}\nMetric: {x.get('metric', '')}\n\n"
+            f"RESULT (logged by the researcher):\n{x['result']}\n")
+    system = (agent_skills.skill_body("experiment-analyze")
+              or ("Analyze whether the result supports, refutes, or is inconclusive for the "
+                  "hypothesis. Give: a one-line **Verdict**, brief **Reasoning** grounded in the "
+                  "result, and a **Next step** (a revised experiment or follow-up). Markdown only; "
+                  "no invented numbers."))
+    try:
+        out = llm.complete([{"role": "system", "content": system},
+                            {"role": "user", "content": user}])
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"The LLM call failed: {exc}"}
+    out = (out or "").strip()
+    if not out:
+        return {"ok": False, "error": "The agent produced no analysis."}
+    topics.set_experiment(slug, eid, analysis=out)
+    return {"ok": True}
+
+
 def generate_investigation(slug: str, stage_cb=None) -> dict:
     """One LLM call → the full scientific investigation (assumptions, hypotheses
     with status/counts, supporting/counter/missing evidence, unknowns, candidate

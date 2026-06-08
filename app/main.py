@@ -653,6 +653,43 @@ def topic_del_experiment(slug: str, eid: int) -> RedirectResponse:
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
+def _experiment_popup(request: Request, slug: str, eid: int) -> HTMLResponse:
+    """Render the experiment detail popup body (log result + Analyze + analysis)."""
+    t = topics_mod.get_topic(slug)
+    x = topics_mod.get_experiment(slug, eid)
+    hyp, hyp_idx = None, None
+    if x and x.get("hypothesis_id") and t:
+        for i, h in enumerate(t["hypotheses"], 1):
+            if h.get("id") == x["hypothesis_id"]:
+                hyp, hyp_idx = h, i
+                break
+    analysis_html = render_md(x["analysis"], "") if (x and x.get("analysis")) else ""
+    return templates.TemplateResponse(request, "_experiment_detail.html",
+                                      {"slug": slug, "x": x, "hyp": hyp, "hyp_idx": hyp_idx,
+                                       "analysis_html": analysis_html})
+
+
+@app.get("/t/{slug}/experiment/{eid}", response_class=HTMLResponse)
+def topic_experiment_detail(request: Request, slug: str, eid: int) -> HTMLResponse:
+    return _experiment_popup(request, slug, eid)
+
+
+@app.post("/t/{slug}/experiments/{eid}/result", response_class=HTMLResponse)
+def topic_experiment_result(request: Request, slug: str, eid: int,
+                            result: str = Form(""), status: str = Form("")) -> HTMLResponse:
+    """Log the experiment's result (and optionally bump status); re-render the popup."""
+    topics_mod.set_experiment(slug, eid, result=result, status=(status or None))
+    return _experiment_popup(request, slug, eid)
+
+
+@app.post("/t/{slug}/experiments/{eid}/analyze", response_class=HTMLResponse)
+def topic_experiment_analyze(request: Request, slug: str, eid: int) -> HTMLResponse:
+    """Agent reasons whether the logged result supports the hypothesis + suggests the next
+    step; stores the analysis and re-renders the popup."""
+    topic_view.analyze_experiment(slug, eid)
+    return _experiment_popup(request, slug, eid)
+
+
 @app.post("/t/{slug}/notes")
 def topic_add_note(slug: str, body: str = Form("")) -> RedirectResponse:
     topics_mod.add_note(slug, body)
