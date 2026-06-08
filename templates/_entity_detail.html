@@ -100,7 +100,7 @@
           @submit="entityOpen = false; tab = 'reading'">
       <input type="hidden" name="purpose" value="{{ e.kind }}">
       <input type="hidden" name="target" value="{{ e.label }}">
-      <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50" title="Find external papers similar to this {{ e.kind }} → Suggested reading">🔎 Find similar</button>
+      <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50" title="Find external papers related to this {{ e.kind }} → Suggested reading">🔎 Find papers</button>
     </form>
     <button type="button" @click="entityOpen = false; window.wikiJump && window.wikiJump('{{ e.key }}')"
             class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">View in Connections</button>
