@@ -931,16 +931,16 @@
       </div>
       {# chips for the active dimension — click to toggle (multi-select, across/within dims) #}
       <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for t in themelist %}<button type="button" @click="toggleKey('theme:{{ t.index }}')" :class="selKeys.includes('theme:{{ t.index }}') ? 'ring-2 ring-emerald-400 bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'" class="rounded px-2 py-0.5 text-emerald-700">{{ (t.name or ('Theme ' ~ t.index))|truncate(30) }}</button>{% endfor %}
+        {% for t in themelist %}<button type="button" @click="toggleKey('theme:{{ t.index }}')" :class="selKeys.includes('theme:{{ t.index }}') ? 'ring-2 ring-emerald-400 bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'" class="rounded px-2 py-0.5 text-emerald-700 text-left">{{ t.name or ('Theme ' ~ t.index) }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='concept'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.concept %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-slate-400 bg-slate-200' : 'bg-slate-100 hover:bg-slate-200'" class="rounded px-2 py-0.5 text-slate-600">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.concept %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-slate-400 bg-slate-200' : 'bg-slate-100 hover:bg-slate-200'" class="rounded px-2 py-0.5 text-slate-600 text-left">{{ e.label }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.method %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.method %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700 text-left">{{ e.label }}</button>{% endfor %}
       </div>
       <div x-show="filterDim==='problem'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        {% for e in cxe.problem %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700">{{ e.label|truncate(30) }}</button>{% endfor %}
+        {% for e in cxe.problem %}<button type="button" @click="toggleKey('{{ e.key }}')" :class="selKeys.includes('{{ e.key }}') ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700 text-left">{{ e.label }}</button>{% endfor %}
       </div>
     </div>
     {% endif %}

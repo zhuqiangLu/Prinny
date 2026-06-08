@@ -41,6 +41,18 @@ def has(slug: str, paper_id: int) -> bool:
     return get(slug, paper_id) is not None
 
 
+def staged_at(slug: str, paper_id: int) -> str | None:
+    """The queued draft's created_at (raw UTC string), or None if there's no draft."""
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT created_at FROM note_drafts WHERE paper_id=? AND collection_slug=?",
+            (paper_id, slug)).fetchone()
+        return row["created_at"] if row else None
+    finally:
+        con.close()
+
+
 def staged_epoch(slug: str, paper_id: int) -> float:
     """The queued draft's created_at as a UTC epoch (0.0 if none). Watermark for deciding
     whether a fresher draft should replace the one already in the review queue."""

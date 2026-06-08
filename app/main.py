@@ -1545,6 +1545,7 @@ def paper_page(request: Request, slug: str, paper_id: int, nav: str = "") -> HTM
             # exists; a full draft (replaces an empty note) otherwise.
             "staged_draft": note_drafts.get(slug, paper_id),
             "staged_draft_additive": bool(note_md.strip()),
+            "staged_draft_at": note_drafts.staged_at(slug, paper_id),
             "highlight_scheme": config_highlight_scheme(),
             "show_highlight_legend": load_config().get("show_highlight_legend", "true") != "false",
             "statuses": notes_mod.STATUSES,
@@ -2135,7 +2136,8 @@ def drafts_review(request: Request) -> HTMLResponse:
         additive = any((n.get(k) or "").strip() for k in ("summary", "thoughts", "key_quotes"))
         items.append({"slug": d["collection_slug"], "paper_id": d["paper_id"],
                       "title": ((p or {}).get("title") or f"paper {d['paper_id']}"),
-                      "draft_md": d["draft_md"], "additive": additive})
+                      "draft_md": d["draft_md"], "additive": additive,
+                      "created_at": d.get("created_at")})
     return templates.TemplateResponse(request, "_drafts_review.html", {"drafts": items})
 
 

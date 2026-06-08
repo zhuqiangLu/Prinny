@@ -93,7 +93,10 @@
         <div x-show="tab==='notes'" x-cloak class="h-full flex flex-col p-4">
           {# staged auto-draft (from leaving the paper with chat/highlights) — review before it's a note #}
           <div x-show="stagedDraft" x-cloak class="mb-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-sm shrink-0">
-            <p class="font-medium text-violet-800" x-text="stagedDraftAdditive ? '✨ Suggested additions from your recent reading' : '✨ Draft ready from your reading'"></p>
+            <p class="font-medium text-violet-800 flex items-center gap-2">
+              <span x-text="stagedDraftAdditive ? '✨ Suggested additions from your recent reading' : '✨ Draft ready from your reading'"></span>
+              <span x-show="stagedDraftAt" x-cloak class="text-[10px] font-normal text-slate-500" x-text="paFmtTime(stagedDraftAt)"></span>
+            </p>
             <p class="text-xs text-slate-600 mt-0.5" x-text="stagedDraftAdditive ? 'New highlights/chat since your note. Append & edit — your note isn\'t changed until you Save.' : 'Auto-drafted from your highlights + chat. Review & edit — it only becomes your note when you Save.'"></p>
             <div class="mt-1.5 flex items-center gap-2">
               <template x-if="stagedDraftAdditive">
@@ -196,6 +199,7 @@
       noteMd: {{ note_md|tojson }},
       stagedDraft: {{ staged_draft|tojson }},   // auto-draft awaiting review (null if none)
       stagedDraftAdditive: {{ staged_draft_additive|tojson }},  // append-to-note vs replace-empty
+      stagedDraftAt: {{ staged_draft_at|tojson }},   // when the draft was generated (UTC)
       status: {{ note.status|tojson }},
       showPreview: false, previewHtml: "",
       busy: false, err: "", saved: false,

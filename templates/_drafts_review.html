@@ -18,6 +18,7 @@
       <div class="flex items-baseline gap-2 mb-1.5">
         <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ d.title }}</p>
         {% if d.additive %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700" title="You already have a note — this appends to it">+ additions</span>{% endif %}
+        {% if d.created_at %}<span class="shrink-0 text-[10px] text-slate-400" x-text="paFmtTime('{{ d.created_at }}')"></span>{% endif %}
         <a href="/c/{{ d.slug }}/p/{{ d.paper_id }}" class="shrink-0 text-[11px] text-violet-600 hover:underline">open paper ↗</a>
       </div>
       <form hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/accept"
