@@ -280,14 +280,15 @@ def recommendation_history(slug: str) -> dict:
 
 
 def list_papers(slug: str) -> dict:
-    """The collection's papers as {ref, title}. Use a `ref` when citing
+    """The collection's papers as {id, ref, title}. `id` is the internal integer id used by
+    get_paper_context / read_paper_text to open a specific paper; `ref` is for citing
     supporting_papers in propose_wiki_edit. Read-only."""
     seen, out = set(), []
     for ref, info in wiki._ref_map(slug).items():
         if info["id"] in seen:
             continue
         seen.add(info["id"])
-        out.append({"ref": ref, "title": info.get("title", "")})
+        out.append({"id": info["id"], "ref": ref, "title": info.get("title", "")})
     return {"count": len(out), "papers": out[:200]}
 
 
@@ -344,7 +345,7 @@ _TOOLS = [
      "description": "What the user previously KEPT vs PASSED ON for suggested reading in this collection. Use it to prefer accepted-like papers, deprioritise rejected-like ones, and avoid re-pitching.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "list_papers",
-     "description": "List the collection's papers as {ref, title}. Use a ref value when you cite supporting_papers in propose_wiki_edit.",
+     "description": "List the collection's papers as {id, ref, title}. Pass `id` to get_paper_context / read_paper_text to open a specific paper; use `ref` to cite supporting_papers in propose_wiki_edit.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "propose_wiki_edit",
      "description": ("Propose a TYPED edit to this collection's wiki. This does NOT write — it creates a "
