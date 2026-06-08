@@ -494,14 +494,25 @@
         q: "",
         cur: current || "",
         col: current || (groups[0] && groups[0].slug) || "",
-        unread: false, theme: "", method: "", dim: "",   // current-collection-only filters (dim = open chip row)
+        // Shares the Papers-tab filter model + sessionStorage (one filter, two views).
+        filterDim: "all", selKeys: [],
+        init() {
+          try {
+            this.selKeys = JSON.parse(sessionStorage.getItem("pa.pf.keys." + this.cur) || "[]");
+            this.filterDim = sessionStorage.getItem("pa.pf.dim." + this.cur) || "all";
+          } catch (e) {}
+          this.$watch("selKeys", (v) => { try { sessionStorage.setItem("pa.pf.keys." + this.cur, JSON.stringify(v)); } catch (e) {} });
+          this.$watch("filterDim", (v) => { try { sessionStorage.setItem("pa.pf.dim." + this.cur, v); } catch (e) {} });
+        },
+        toggleKey(k) { this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter((x) => x !== k) : [...this.selKeys, k]; },
+        clearFilters() { this.selKeys = []; this.filterDim = "all"; },
         get cols() { return this.groups.map((g) => ({ slug: g.slug, name: g.name, current: g.current, count: g.papers.length })); },
         get curGroup() { return this.groups.find((g) => g.slug === this.col); },
         get onCurrent() { return this.col === this.cur && !this.q.trim(); },   // filters apply only here
-        get filterThemes() { const g = this.curGroup; return (g && g.themes) || []; },
-        get filterMethods() { const g = this.curGroup; return (g && g.methods) || []; },
-        get hasFilter() { return this.unread || this.theme || this.method; },
-        clearFilters() { this.unread = false; this.theme = ""; this.method = ""; this.dim = ""; },
+        get optThemes() { return (this.curGroup && this.curGroup.themes) || []; },
+        get optConcepts() { return (this.curGroup && this.curGroup.concepts) || []; },
+        get optMethods() { return (this.curGroup && this.curGroup.methods) || []; },
+        get optProblems() { return (this.curGroup && this.curGroup.problems) || []; },
         _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, read: p.read, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
         rows() {
           const q = this.q.trim().toLowerCase();
@@ -509,10 +520,9 @@
             const g = this.curGroup;
             if (!g) return [];
             let ps = g.papers;
-            if (g.current) {                       // apply filters only on the current collection
-              if (this.unread) ps = ps.filter((p) => !p.read);
-              if (this.theme) ps = ps.filter((p) => (p.ents || []).includes(this.theme));
-              if (this.method) ps = ps.filter((p) => (p.ents || []).includes(this.method));
+            if (g.current && this.selKeys.length) {   // multi-select AND, current collection only
+              ps = ps.filter((p) => this.selKeys.every((k) =>
+                k === "unmapped" ? ((p.ents || []).length === 0) : (p.ents || []).includes(k)));
             }
             return ps.map((p) => this._row(p, g));
           }

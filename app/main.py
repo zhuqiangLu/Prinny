@@ -2236,15 +2236,19 @@ def jump_panel(request: Request, current: str = "") -> HTMLResponse:
     cur_read: dict[int, bool] = {}
     cur_ents: dict[int, list] = {}
     themes_opt: list[dict] = []
+    concepts_opt: list[dict] = []
     methods_opt: list[dict] = []
+    problems_opt: list[dict] = []
     if current:
         try:
             cv = wiki.connection_view(current)
             cur_ents = {int(k): v for k, v in (cv.get("paper_entities") or {}).items()}
             themes_opt = [{"key": f"theme:{t['index']}", "label": t.get("name") or f"Theme {t['index']}"}
                           for t in (cv.get("themes") or [])]
-            methods_opt = [{"key": e["key"], "label": e["label"]}
-                           for e in (cv.get("entities") or {}).get("method", [])]
+            ent = cv.get("entities") or {}
+            concepts_opt = [{"key": e["key"], "label": e["label"]} for e in ent.get("concept", [])]
+            methods_opt = [{"key": e["key"], "label": e["label"]} for e in ent.get("method", [])]
+            problems_opt = [{"key": e["key"], "label": e["label"]} for e in ent.get("problem", [])]
         except Exception:  # noqa: BLE001 - filters are best-effort; the list still works
             pass
         con = connect()
@@ -2267,7 +2271,8 @@ def jump_panel(request: Request, current: str = "") -> HTMLResponse:
             papers.append(row)
         g = {"slug": c["slug"], "name": c["name"], "current": is_cur, "papers": papers}
         if is_cur:
-            g["themes"], g["methods"] = themes_opt, methods_opt
+            g["themes"], g["concepts"] = themes_opt, concepts_opt
+            g["methods"], g["problems"] = methods_opt, problems_opt
         groups.append(g)
     return templates.TemplateResponse(request, "_jump.html", {"groups": groups, "current": current})
 

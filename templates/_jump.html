@@ -13,30 +13,29 @@
     </div>
     <input x-model="q" x-ref="jumpq" placeholder="Search papers across collections…"
            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400">
-    {# Lightweight filters — pills, mirroring the Papers tab (current collection only) #}
+    {# Filter — same model + sessionStorage as the Papers tab (one shared filter, two views) #}
     <div x-show="onCurrent" x-cloak class="text-[11px]">
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-slate-400 mr-0.5">Filter:</span>
-        <button type="button" @click="clearFilters()" :class="!hasFilter ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-        <button type="button" @click="unread = !unread" :class="unread ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unread</button>
-        <template x-if="filterThemes.length">
-          <button type="button" @click="dim = dim==='theme' ? '' : 'theme'" :class="(dim==='theme' || theme) ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button>
-        </template>
-        <template x-if="filterMethods.length">
-          <button type="button" @click="dim = dim==='method' ? '' : 'method'" :class="(dim==='method' || method) ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>
-        </template>
-        <span x-show="hasFilter" x-cloak class="text-slate-400">· <button type="button" @click="clearFilters()" class="hover:text-slate-700 underline">clear</button></span>
+        <button type="button" @click="clearFilters()" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
+        <template x-if="optThemes.length"><button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button></template>
+        <template x-if="optConcepts.length"><button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">Concept</button></template>
+        <template x-if="optMethods.length"><button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button></template>
+        <template x-if="optProblems.length"><button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button></template>
+        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
+        <span x-show="selKeys.length" x-cloak class="text-slate-400">· filtering by <span x-text="selKeys.length"></span></span>
       </div>
-      {# chips for the active dimension — click to select/toggle (single-select) #}
-      <div x-show="dim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        <template x-for="t in filterThemes" :key="t.key">
-          <button type="button" @click="theme = theme===t.key ? '' : t.key" :class="theme===t.key ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700" x-text="t.label"></button>
-        </template>
+      <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="t in optThemes" :key="t.key"><button type="button" @click="toggleKey(t.key)" :class="selKeys.includes(t.key) ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700" x-text="t.label"></button></template>
       </div>
-      <div x-show="dim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
-        <template x-for="m in filterMethods" :key="m.key">
-          <button type="button" @click="method = method===m.key ? '' : m.key" :class="method===m.key ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700" x-text="m.label"></button>
-        </template>
+      <div x-show="filterDim==='concept'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="e in optConcepts" :key="e.key"><button type="button" @click="toggleKey(e.key)" :class="selKeys.includes(e.key) ? 'ring-2 ring-slate-400 bg-slate-200' : 'bg-slate-100 hover:bg-slate-200'" class="rounded px-2 py-0.5 text-slate-600" x-text="e.label"></button></template>
+      </div>
+      <div x-show="filterDim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="e in optMethods" :key="e.key"><button type="button" @click="toggleKey(e.key)" :class="selKeys.includes(e.key) ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700" x-text="e.label"></button></template>
+      </div>
+      <div x-show="filterDim==='problem'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="e in optProblems" :key="e.key"><button type="button" @click="toggleKey(e.key)" :class="selKeys.includes(e.key) ? 'ring-2 ring-rose-400 bg-rose-100' : 'bg-rose-50 hover:bg-rose-100'" class="rounded px-2 py-0.5 text-rose-700" x-text="e.label"></button></template>
       </div>
     </div>
   </div>
