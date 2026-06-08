@@ -896,7 +896,7 @@
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
   {% set cxe = (overview.connections.entities if overview.connections else {}) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5"
-           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys.includes(k) ? (this.selKeys = this.selKeys.filter(x => x !== k)) : this.selKeys.push(k) }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) } }"
+           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter(x => x !== k) : [...this.selKeys, k] }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) }, init(){ try{ this.selKeys = JSON.parse(sessionStorage.getItem('pa.pf.keys.{{ slug }}') || '[]'); this.filterDim = sessionStorage.getItem('pa.pf.dim.{{ slug }}') || 'all'; }catch(e){} this.$watch('selKeys', v => { try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(v)); }catch(e){} }); this.$watch('filterDim', v => { try{ sessionStorage.setItem('pa.pf.dim.{{ slug }}', v); }catch(e){} }); } }"
            @pa-filter-papers.window="selKeys = [$event.detail.key]; filterDim = $event.detail.dim">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
