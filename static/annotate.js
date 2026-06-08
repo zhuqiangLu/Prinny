@@ -209,6 +209,7 @@
     editPop.className = "hidden fixed z-50 rounded shadow bg-white border border-slate-200 px-1.5 py-1 flex items-center gap-1";
     editPop.innerHTML =
       PALETTE.map(([hex, name]) => `<button data-color="${hex}" title="${name}" style="background:${hex}" class="w-4 h-4 rounded-sm border border-slate-300"></button>`).join("") +
+      `<button data-act="ask" title="ask the chat about this highlight" class="px-1 text-sm text-slate-600 hover:text-violet-700">💬</button>` +
       `<button data-act="note" title="note" class="px-1 text-sm text-slate-600 hover:text-slate-900">✎</button>` +
       `<button data-act="del" title="delete" class="px-1 text-sm text-rose-600 hover:text-rose-800">🗑</button>`;
     document.body.appendChild(editPop);
@@ -216,6 +217,7 @@
       const a = editPop._ann; if (!a) return;
       const t = e.target;
       if (t.dataset.color) { await patchAnn(a, { color: t.dataset.color }); hideEditPop(); return; }
+      else if (t.dataset.act === "ask") { askAboutHighlight(a); hideEditPop(); return; }
       else if (t.dataset.act === "del") { await deleteAnn(a); hideEditPop(); return; }
       else if (t.dataset.act === "note") {
         const r = editPop.getBoundingClientRect();
@@ -319,6 +321,19 @@
       ta.focus();
     }
     try { win.getSelection().removeAllRanges(); } catch (e) {}
+  }
+
+  // Ask the chat about an EXISTING highlight (from its edit popup): quote its text + page
+  // into the message box, same page-anchored format as a fresh selection.
+  function askAboutHighlight(a) {
+    if (window.__showChat) window.__showChat();
+    const ta = document.querySelector('textarea[name="message"]');
+    if (ta && a) {
+      const pg = (a.page | 0) + 1;
+      const txt = (a.selected_text || a.note_text || "").replace(/\s+/g, " ").trim();
+      if (txt) ta.value = "> (p. " + pg + ") " + txt + "\n\n" + ta.value;
+      ta.focus();
+    }
   }
 
   // --- selection toolbar wiring (parent-side) ------------------------------
