@@ -83,7 +83,7 @@ def _session_missing(text: str) -> bool:
 # writes and never needs a shell.
 _TOOLS = ["Read"] + [f"mcp__pa__{t}" for t in
                      ("read_paper_text", "get_paper_context", "search_fragments",
-                      "get_fragment", "read_wiki_page", "get_chat_history")]
+                      "get_fragment", "read_wiki_page", "list_papers", "get_chat_history")]
 
 
 def _resume_hint(paper_id: int, n_prior: int) -> str:
@@ -120,6 +120,11 @@ def _system(collection: str, title: str, paper_id: int, pdf_path: str, n_prior: 
         "Use get_paper_context to see the user's current notes/highlights for this paper, "
         "and search_fragments / read_wiki_page for collection context. Ground what you "
         "say in what you actually read; don't assume the paper's contents.\n"
+        "COLLECTION CONTEXT: when the question is about the collection rather than only this "
+        "paper (e.g. 'most similar paper I have', 'how does this compare to my others', "
+        "'have I seen this elsewhere'), call list_papers to enumerate the collection and "
+        "search_fragments / read_wiki_page to compare — do this yourself, don't ask the user "
+        "for the paper list. Stay paper-centric otherwise.\n"
         "The earlier messages in this session ARE our chat history — treat them as such. If "
         "you ever lack prior context, call get_chat_history(paper_id) to read the stored "
         "transcript; never claim there is no prior history.\n"
@@ -286,7 +291,10 @@ def _codex_system(collection: str, title: str, paper_id: int, n_prior: int = 0) 
         f"Read the paper with the pa MCP tool read_paper_text(paper_id={paper_id}, "
         "start_page, pages) — it returns total_pages so you can page through it. Use "
         "get_paper_context for the user's current notes/highlights, and search_fragments "
-        "/ read_wiki_page for collection context. You have READ-only access; do not "
+        "/ read_wiki_page for collection context. When the question is about the collection "
+        "rather than only this paper (e.g. 'most similar paper I have', 'how does this "
+        "compare'), call list_papers and search_fragments yourself to compare — don't ask "
+        "the user for the paper list. You have READ-only access; do not "
         "attempt to write files or run shell commands. Ground what you say in what you "
         "actually read. When the user quotes a passage prefixed with a page marker like "
         f"'(p. 7)', call read_paper_text(paper_id={paper_id}, start_page=7, pages=1) to "
@@ -304,7 +312,8 @@ class CodexPaperAgent(PaperChatAgent):
     read_paper_text (Codex has no visual PDF read)."""
     name = "codex"
     READ_TOOLS = ["get_unreasoned_seeds", "get_fragment", "search_fragments",
-                  "read_wiki_page", "get_paper_context", "read_paper_text", "get_chat_history"]
+                  "read_wiki_page", "get_paper_context", "read_paper_text",
+                  "list_papers", "get_chat_history"]
 
     def __init__(self, eng: engine_mod.CodexEngine):
         self.eng = eng
