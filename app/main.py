@@ -2218,13 +2218,45 @@ def jump_panel(request: Request, current: str = "") -> HTMLResponse:
     every collection and its papers; the current collection floats to the top."""
     cols = library.list_collections()
     cols.sort(key=lambda c: (c["slug"] != current, c["name"].lower()))
-    groups = [
-        {"slug": c["slug"], "name": c["name"], "current": c["slug"] == current,
-         "papers": [{"id": p["id"], "title": p.get("title") or "(untitled)",
-                     "authors": p.get("authors") or "", "year": p.get("year") or ""}
-                    for p in library.list_papers(c["slug"])]}
-        for c in cols
-    ]
+    # Enrich the CURRENT collection so the modal can offer lightweight in-flow filters
+    # (read status + theme/method membership). Other collections stay plain — the filters
+    # are cognitive-model artifacts that only make sense within one collection.
+    cur_read: dict[int, bool] = {}
+    cur_ents: dict[int, list] = {}
+    themes_opt: list[dict] = []
+    methods_opt: list[dict] = []
+    if current:
+        try:
+            cv = wiki.connection_view(current)
+            cur_ents = {int(k): v for k, v in (cv.get("paper_entities") or {}).items()}
+            themes_opt = [{"key": f"theme:{t['index']}", "label": t.get("name") or f"Theme {t['index']}"}
+                          for t in (cv.get("themes") or [])]
+            methods_opt = [{"key": e["key"], "label": e["label"]}
+                           for e in (cv.get("entities") or {}).get("method", [])]
+        except Exception:  # noqa: BLE001 - filters are best-effort; the list still works
+            pass
+        con = connect()
+        try:
+            for r in con.execute("SELECT paper_id, read_at FROM collection_papers "
+                                 "WHERE collection_slug=?", (current,)):
+                cur_read[r["paper_id"]] = bool(r["read_at"])
+        finally:
+            con.close()
+    groups = []
+    for c in cols:
+        is_cur = c["slug"] == current
+        papers = []
+        for p in library.list_papers(c["slug"]):
+            row = {"id": p["id"], "title": p.get("title") or "(untitled)",
+                   "authors": p.get("authors") or "", "year": p.get("year") or ""}
+            if is_cur:
+                row["read"] = cur_read.get(p["id"], False)
+                row["ents"] = cur_ents.get(p["id"], [])
+            papers.append(row)
+        g = {"slug": c["slug"], "name": c["name"], "current": is_cur, "papers": papers}
+        if is_cur:
+            g["themes"], g["methods"] = themes_opt, methods_opt
+        groups.append(g)
     return templates.TemplateResponse(request, "_jump.html", {"groups": groups, "current": current})
 
 

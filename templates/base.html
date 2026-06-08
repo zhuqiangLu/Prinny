@@ -492,14 +492,29 @@
       return {
         groups: groups || [],
         q: "",
+        cur: current || "",
         col: current || (groups[0] && groups[0].slug) || "",
+        unread: false, theme: "", method: "",   // current-collection-only filters
         get cols() { return this.groups.map((g) => ({ slug: g.slug, name: g.name, current: g.current, count: g.papers.length })); },
-        _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
+        get curGroup() { return this.groups.find((g) => g.slug === this.col); },
+        get onCurrent() { return this.col === this.cur && !this.q.trim(); },   // filters apply only here
+        get filterThemes() { const g = this.curGroup; return (g && g.themes) || []; },
+        get filterMethods() { const g = this.curGroup; return (g && g.methods) || []; },
+        get hasFilter() { return this.unread || this.theme || this.method; },
+        clearFilters() { this.unread = false; this.theme = ""; this.method = ""; },
+        _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, read: !!p.read, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
         rows() {
           const q = this.q.trim().toLowerCase();
           if (!q) {
-            const g = this.groups.find((x) => x.slug === this.col);
-            return g ? g.papers.map((p) => this._row(p, g)) : [];
+            const g = this.curGroup;
+            if (!g) return [];
+            let ps = g.papers;
+            if (g.current) {                       // apply filters only on the current collection
+              if (this.unread) ps = ps.filter((p) => !p.read);
+              if (this.theme) ps = ps.filter((p) => (p.ents || []).includes(this.theme));
+              if (this.method) ps = ps.filter((p) => (p.ents || []).includes(this.method));
+            }
+            return ps.map((p) => this._row(p, g));
           }
           const out = [];
           for (const g of this.groups)
