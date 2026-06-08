@@ -22,7 +22,7 @@ logger = logging.getLogger("paper_agent.agentic_chat")
 # lethal-trifecta surface stays closed (no autonomous write, no external comms).
 CHAT_TOOLS = [f"mcp__pa__{t}" for t in
               ("get_unreasoned_seeds", "get_fragment", "search_fragments", "read_wiki_page",
-               "list_papers", "propose_wiki_edit")]
+               "list_papers", "get_paper_context", "read_paper_text", "propose_wiki_edit")]
 
 # Legacy literal tokens handled by chat_post itself (include-wiki), not collection slugs.
 _RESERVED = {"collection", "wiki"}
@@ -43,9 +43,15 @@ _SYSTEM = (
     "Answer conversational or general questions DIRECTLY and immediately — do NOT call "
     "tools for greetings, meta questions ('who are you'), or anything you already know. "
     "ONLY use the read tools (search_fragments, get_fragment, read_wiki_page, "
-    "get_unreasoned_seeds, list_papers) when the question genuinely needs specifics from "
-    "THIS collection — then ground claims in what you find and say when it isn't covered. "
-    "Prefer the fewest tool calls that answer the question (often zero)."
+    "get_unreasoned_seeds, list_papers, get_paper_context, read_paper_text) when the question "
+    "genuinely needs specifics from THIS collection — then ground claims in what you find and "
+    "say when it isn't covered. Prefer the fewest tool calls that answer the question (often zero). "
+    "CROSS-PAPER questions (contradictions, connections, similarities among papers the user has "
+    "read): use search_fragments (it covers notes, thoughts, AND highlights) and list_papers to "
+    "find candidate papers, then get_paper_context(paper_id) to read the user's notes/highlights "
+    "on each — prefer the user's own take; use read_paper_text(paper_id) only if their notes are "
+    "thin. CITE the specific passages (get_fragment, page numbers) behind any contradiction or "
+    "link you claim — never manufacture one to be helpful."
     + _PROPOSE_RULES +
     " Do this SPARINGLY — at most one or two proposals per turn, and only when the "
     "conversation clearly surfaces something worth capturing."

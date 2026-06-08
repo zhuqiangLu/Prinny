@@ -206,7 +206,11 @@ def read_paper_text(slug: str, paper_id, start_page=1, pages=5) -> dict:
 
 
 def search_fragments(slug: str, query: str) -> dict:
-    """FTS5 over notes + substring over thoughts. Previews only."""
+    """FTS5 over notes + substring over thoughts AND highlights. Previews only.
+
+    Highlights are included so cross-paper questions (does this contradict / connect to a
+    passage I highlighted elsewhere?) surface the user's highlighted claims, not just notes.
+    Each hit carries a composite id usable with get_fragment, plus paper_id for context."""
     hits = []
     con = connect()
     try:
@@ -217,7 +221,7 @@ def search_fragments(slug: str, query: str) -> dict:
             ).fetchall()
             for r in rows:
                 hits.append({"id": f"note:{r['paper_id']}", "type": "note",
-                             "preview": _preview(r["summary"] or "")})
+                             "paper_id": r["paper_id"], "preview": _preview(r["summary"] or "")})
         except Exception:  # noqa: BLE001 - bad FTS query syntax -> just skip notes
             pass
     finally:
@@ -228,6 +232,23 @@ def search_fragments(slug: str, query: str) -> dict:
             hits.append({"id": f"thought:{t['id']}", "type": "thought", "preview": _preview(t["body"])})
         if len(hits) >= SEARCH_CAP:
             break
+    if ql and len(hits) < SEARCH_CAP:                     # highlighted passages + inline notes
+        con = connect()
+        try:
+            like = f"%{ql}%"
+            rows = con.execute(
+                "SELECT id, paper_id, selected_text, note_text FROM annotations "
+                "WHERE collection_slug = ? AND (LOWER(COALESCE(selected_text,'')) LIKE ? "
+                "OR LOWER(COALESCE(note_text,'')) LIKE ?) LIMIT ?",
+                (slug, like, like, SEARCH_CAP)).fetchall()
+            for r in rows:
+                txt = r["selected_text"] or r["note_text"] or ""
+                hits.append({"id": f"highlight:{r['id']}", "type": "highlight",
+                             "paper_id": r["paper_id"], "preview": _preview(txt)})
+                if len(hits) >= SEARCH_CAP:
+                    break
+        finally:
+            con.close()
     return {"collection": slug, "count": len(hits), "hits": hits[:SEARCH_CAP]}
 
 
@@ -302,7 +323,7 @@ _TOOLS = [
      "description": "Fetch one fragment in full by id (note:<paperId> | thought:<id> | highlight:<id> | paper:<paperId>).",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
     {"name": "search_fragments",
-     "description": "Search the collection's notes and thoughts; returns previews.",
+     "description": "Search the collection's notes, thoughts, and highlights; returns previews with paper_id. Use to find which other papers the user has written about a topic.",
      "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}},
     {"name": "get_paper_context",
      "description": "The user's current notes + highlights for one paper (by paper id). Use to compare a paper to the user's own thinking.",
