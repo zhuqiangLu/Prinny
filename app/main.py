@@ -2462,9 +2462,19 @@ def _draft_note_fields(slug: str, paper_id: int, paper_title: str,
         resp = llm.complete([{"role": "system", "content": system},
                              {"role": "user", "content": user}])
         data = json.loads(resp[resp.find("{"): resp.rfind("}") + 1])
-        fields = {"summary": data.get("summary", ""), "thoughts": data.get("thoughts", ""),
-                  "key_quotes": data.get("key_quotes", "")}
-        if has_existing and not any((v or "").strip() for v in fields.values()):
+
+        def _coerce(v, bullet=False):
+            # The model sometimes returns a field as a JSON list (esp. key_quotes); normalize
+            # to a string so _serialize_body / save_note never see a non-str.
+            if isinstance(v, list):
+                items = [str(x).strip() for x in v if str(x).strip()]
+                return "\n".join((f"- {i.lstrip('- ').strip()}" if bullet else i) for i in items)
+            return str(v) if v is not None else ""
+
+        fields = {"summary": _coerce(data.get("summary")),
+                  "thoughts": _coerce(data.get("thoughts")),
+                  "key_quotes": _coerce(data.get("key_quotes"), bullet=True)}
+        if has_existing and not any(v.strip() for v in fields.values()):
             return ({}, None)            # nothing new to add
         return (fields, None)
     except llm.LLMError as exc:
