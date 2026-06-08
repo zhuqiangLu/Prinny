@@ -79,6 +79,18 @@ templates.env.globals["pa_theme"] = theme_mod.load_theme
 templates.env.globals["pa_branding"] = theme_mod.branding
 
 
+def _asset_v(name: str) -> int:
+    """Cache-busting token for a local static asset = its file mtime. Appended as ?v= so a
+    rebuilt annotate.js / app.css is fetched fresh without a manual hard-reload."""
+    try:
+        return int((BASE_DIR / "static" / name).stat().st_mtime)
+    except OSError:
+        return 0
+
+
+templates.env.globals["asset_v"] = _asset_v
+
+
 def _pa_nav() -> dict:
     """Sidebar data for the app shell (base.html) — collections + research topics.
     Evaluated per render; degrades to empty lists if the DB isn't ready."""

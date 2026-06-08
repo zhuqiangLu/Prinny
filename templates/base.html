@@ -30,7 +30,7 @@
        to HTMX-swapped fragments (the wiki panel: sizes, arbitrary values like
        text-[9px], colors) were silently dropped, worst on Safari. The compiled
        sheet contains every class scanned from templates, so this can't recur. -->
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_v('app.css') }}">
 
   <!-- KaTeX: render LaTeX in chat + note previews (vendored, with woff2 fonts) -->
   <link rel="stylesheet" href="/static/vendor/katex/katex.min.css">
@@ -502,7 +502,7 @@
         get filterMethods() { const g = this.curGroup; return (g && g.methods) || []; },
         get hasFilter() { return this.unread || this.theme || this.method; },
         clearFilters() { this.unread = false; this.theme = ""; this.method = ""; },
-        _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, read: !!p.read, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
+        _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, read: p.read, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
         rows() {
           const q = this.q.trim().toLowerCase();
           if (!q) {

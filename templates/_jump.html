@@ -35,28 +35,26 @@
     </div>
   </div>
 
-  <div class="mt-2 flex-1 min-h-0 overflow-auto rounded-lg border border-slate-100">
+  <div class="mt-2 flex-1 min-h-0 overflow-auto rounded-lg border border-slate-100 p-3">
     <template x-if="!rows().length">
-      <p class="px-3 py-6 text-center text-sm text-slate-400" x-text="q.trim() ? 'No matching papers.' : 'No papers in this collection.'"></p>
+      <p class="px-3 py-6 text-center text-sm text-slate-400" x-text="q.trim() ? 'No matching papers.' : 'No papers match these filters.'"></p>
     </template>
-    <ul class="divide-y divide-slate-50">
+    <div class="flex flex-wrap gap-3">
       <template x-for="p in rows()" :key="p.slug + '-' + p.id">
-        <li>
-          <a :href="`/c/${p.slug}/p/${p.id}`"
-             class="flex items-start gap-2 px-3 py-2 hover:bg-slate-50 transition">
-            <span class="min-w-0 flex-1">
-              <span class="block text-sm text-slate-800 leading-snug" x-text="p.title"></span>
-              <span class="block text-xs text-slate-400 truncate">
-                <span x-show="q.trim()" x-text="p.gname + ' · '"></span><span x-text="p.meta"></span>
-              </span>
-            </span>
-            <span x-show="onCurrent" x-cloak class="shrink-0 mt-0.5 text-[11px]"
-                  :class="p.read ? 'text-emerald-600' : 'text-slate-300'" x-text="p.read ? '✓' : '○'"
-                  :title="p.read ? 'Read' : 'Unread'"></span>
-          </a>
-        </li>
+        <a :href="`/c/${p.slug}/p/${p.id}`"
+           class="group flex-1 min-w-[170px] max-w-[230px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition"
+           :class="p.read === true ? 'opacity-75' : ''">
+          <div class="flex items-center gap-1 mb-2 text-[10px] min-h-[1.1rem]">
+            <span x-show="q.trim() && p.gname" x-cloak class="rounded bg-slate-100 text-slate-500 px-1.5 py-0.5 truncate max-w-[70%]" x-text="p.gname"></span>
+            <span x-show="p.read !== undefined" x-cloak class="ml-auto rounded px-1.5 py-0.5"
+                  :class="p.read ? 'bg-emerald-100 text-emerald-700' : 'bg-white border border-slate-200 text-slate-400'"
+                  x-text="p.read ? '✓ read' : '○'"></span>
+          </div>
+          <span class="block text-sm font-medium text-slate-900 leading-snug line-clamp-3 group-hover:underline" x-text="p.title"></span>
+          <div class="mt-2 text-[11px] text-slate-500 truncate" x-text="p.meta"></div>
+        </a>
       </template>
-    </ul>
+    </div>
   </div>
 </div>
 <script>
