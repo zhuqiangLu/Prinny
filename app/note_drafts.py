@@ -41,6 +41,20 @@ def has(slug: str, paper_id: int) -> bool:
     return get(slug, paper_id) is not None
 
 
+def staged_epoch(slug: str, paper_id: int) -> float:
+    """The queued draft's created_at as a UTC epoch (0.0 if none). Watermark for deciding
+    whether a fresher draft should replace the one already in the review queue."""
+    from .notes import _iso_to_epoch
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT created_at FROM note_drafts WHERE paper_id=? AND collection_slug=?",
+            (paper_id, slug)).fetchone()
+        return _iso_to_epoch(row["created_at"]) if row else 0.0
+    finally:
+        con.close()
+
+
 def delete(slug: str, paper_id: int) -> None:
     con = connect()
     try:

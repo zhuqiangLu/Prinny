@@ -2046,8 +2046,6 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
 
     def runner():
         try:
-            if note_drafts.has(slug, paper_id):
-                return
             note = notes_mod.get_note(slug, paper_id)
             has_note = any((note.get(k) or "").strip()
                            for k in ("summary", "thoughts", "key_quotes"))
@@ -2056,12 +2054,17 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
             has_high = bool(context._highlights_block(slug, paper_id))
             if not (has_chat or has_high):
                 return                       # no signal → no speculative LLM call
-            if has_note:
-                # Additive: only draft if there's chat/highlight signal NEWER than the note,
-                # and only the net-new material (never overwrite the user's own note).
-                if _latest_signal_epoch(slug, paper_id, thread_id) <= \
-                        notes_mod.note_updated_epoch(slug, paper_id):
-                    return
+            # Watermark: (re)draft only when there's chat/highlight signal NEWER than whatever
+            # is already there — the user's note OR a draft already queued for this paper. A
+            # fresh draft then REPLACES the queued one (one draft per paper, always the latest);
+            # if nothing changed since, keep what's queued and skip the LLM call. (Additive when
+            # a note exists — net-new material only, never overwriting the user's own note.)
+            draft_epoch = note_drafts.staged_epoch(slug, paper_id)
+            draft_exists = draft_epoch > 0
+            note_epoch = notes_mod.note_updated_epoch(slug, paper_id) if has_note else 0.0
+            if (has_note or draft_exists) and \
+                    _latest_signal_epoch(slug, paper_id, thread_id) <= max(note_epoch, draft_epoch):
+                return
             # Past the cheap gates → the speculative LLM draft is about to run; surface it
             # in the Background Jobs dropdown until it finishes.
             _AUTODRAFT_JOBS[paper_id] = {
@@ -2076,8 +2079,9 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
                                                fields.get("thoughts", ""),
                                                fields.get("key_quotes", ""))
                 if md.strip():
-                    note_drafts.stage(slug, paper_id, md)
-                    label = "Draft additions ready" if has_note else "Draft ready to review"
+                    note_drafts.stage(slug, paper_id, md)   # ON CONFLICT → replaces any queued draft
+                    label = ("Draft refreshed" if draft_exists else
+                             ("Draft additions ready" if has_note else "Draft ready to review"))
                     notify.add(f"{label}: {(paper['title'] or '')[:60]}",
                                link=f"/c/{slug}/p/{paper_id}", collection=slug)
             finally:
