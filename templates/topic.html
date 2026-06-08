@@ -71,7 +71,7 @@
       </div>
 
       {# tab bar #}
-      {% set TABS = [('overview','▢ Overview'),('hypotheses','🧪 Hypotheses'),('evidence','◈ Evidence'),('unknowns','❓ Unknowns'),('experiments','⚗ Experiments'),('reading','✦ Suggested reading'),('notes','🗒 Notes'),('timeline','◷ Timeline')] %}
+      {% set TABS = [('overview','▢ Overview'),('investigation','◆ Investigation'),('reading','✦ Suggested reading'),('notes','🗒 Notes'),('timeline','◷ Timeline')] %}
       <div class="flex items-center gap-1 overflow-x-auto -mb-px">
         {% for key, label in TABS %}
         <button @click="go('{{ key }}')"
@@ -296,8 +296,25 @@
       {% endif %}
     </div>{# /overview #}
 
+    {# ===== INVESTIGATION: Map-style switcher over Hypotheses · Evidence · Unknowns · Experiments ===== #}
+    <div x-show="tab==='investigation'" x-cloak class="mb-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {% for v in [('hypotheses','Hypotheses', t.hypotheses|length, 'text-violet-700','ring-violet-400'),
+                     ('evidence','Evidence', t.evidence|length, 'text-sky-700','ring-sky-400'),
+                     ('unknowns','Unknowns', t.unknowns|length, 'text-amber-700','ring-amber-400'),
+                     ('experiments','Experiments', t.experiments|length, 'text-emerald-700','ring-emerald-400')] %}
+        <button type="button" @click="inv='{{ v[0] }}'"
+                :class="inv==='{{ v[0] }}' ? 'ring-2 {{ v[4] }} bg-white' : 'bg-slate-50/50 hover:bg-white'"
+                class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ v[1] }}">
+          <div class="text-xl font-semibold tabular-nums {{ v[3] }}">{{ v[2] }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ v[1] }}</div>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
     {# ============================ HYPOTHESES ============================ #}
-    <div x-show="tab==='hypotheses'" x-cloak class="space-y-3">
+    <div x-show="tab==='investigation' && inv==='hypotheses'" x-cloak class="space-y-3">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧪</span> Hypotheses
         <button @click="addHyp=true" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button></h2>
       {% for h in t.hypotheses %}
@@ -344,7 +361,7 @@
     </div>
 
     {# ============================ EVIDENCE ============================ #}
-    <div x-show="tab==='evidence'" x-cloak>
+    <div x-show="tab==='investigation' && inv==='evidence'" x-cloak>
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-1"><span>◈</span> Evidence</h2>
       <p class="text-xs text-slate-500 mb-3">Each item is a <b>claim</b> tied to a paper (or a gap). Supporting / Counter cite real papers from your linked collections; Missing drives discovery.</p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
@@ -386,7 +403,7 @@
     </div>
 
     {# ============================ UNKNOWNS ============================ #}
-    <div x-show="tab==='unknowns'" x-cloak class="space-y-3" x-data="{ add: false }">
+    <div x-show="tab==='investigation' && inv==='unknowns'" x-cloak class="space-y-3" x-data="{ add: false }">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>❓</span> Unknowns
         <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add unknown</button></h2>
       <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/unknowns" class="flex gap-2">
@@ -415,7 +432,7 @@
     </div>
 
     {# ============================ EXPERIMENTS ============================ #}
-    <div x-show="tab==='experiments'" x-cloak class="space-y-3" x-data="{ add: false }">
+    <div x-show="tab==='investigation' && inv==='experiments'" x-cloak class="space-y-3" x-data="{ add: false }">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚗</span> Experiments
         <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add experiment</button></h2>
       <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/experiments" class="rounded-lg border border-slate-200 p-3 space-y-2">
@@ -722,7 +739,12 @@
       tab: (function(){ try { var t = localStorage.getItem('pa.ttab'); localStorage.removeItem('pa.ttab'); return t || 'overview'; } catch(e){ return 'overview'; } })(),
       q: "",
       addHyp: false, viewAll: "", manage: false, aeditOpen: false,
-      go(t) { this.tab = t; },     // no persistence — entry always defaults to Overview
+      inv: 'hypotheses',           // Investigation sub-view (hypotheses/evidence/unknowns/experiments)
+      go(t) {
+        var sub = ['hypotheses', 'evidence', 'unknowns', 'experiments'];
+        if (sub.indexOf(t) >= 0) { this.tab = 'investigation'; this.inv = t; }
+        else { this.tab = t; }
+      },
       asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
       asstW: (function(){ try { return parseInt(localStorage.getItem('pa.tasstW') || '384', 10); } catch(e){ return 384; } })(),
       setAsst(v) { this.asstOpen = v; try { localStorage.setItem('pa.tasst', v ? 'open' : 'closed'); } catch(e){} },
