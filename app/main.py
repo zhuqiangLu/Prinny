@@ -1280,7 +1280,8 @@ def papers_add(slug: str, entries: str = Form("[]")) -> RedirectResponse:
         parsed = []
     if isinstance(parsed, list):
         triage_mod.add_entries(slug, parsed)
-    return RedirectResponse(f"/c/{slug}", status_code=303)
+    # Land back on the Papers tab (where Add paper was invoked), not Overview.
+    return RedirectResponse(f"/c/{slug}?tab=papers", status_code=303)
 
 
 @app.get("/c/{slug}/p/{paper_id}/pdf-status", response_class=HTMLResponse)
