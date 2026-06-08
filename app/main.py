@@ -2445,9 +2445,19 @@ def _draft_note_fields(slug: str, paper_id: int, paper_title: str,
     else:
         system = ("You output only valid JSON with keys summary, thoughts, key_quotes. Draft "
                   "the USER's note from their highlights and chat about this paper; do not "
-                  "invent content beyond them.")
+                  "invent content beyond them.\n"
+                  "`summary` must be ORGANIZED, not a long paragraph: one short TL;DR line "
+                  "(<=25 words) naming the paper, a blank line, then EXACTLY these three "
+                  "markdown lines, each one sentence:\n"
+                  "**Problem:** the gap/problem this paper sets out to solve.\n"
+                  "**Method:** the core approach it proposes.\n"
+                  "**Insight:** the key takeaway / why it works.\n"
+                  "Put the user's own reactions or criticisms in `thoughts`, and notable "
+                  "quotes in `key_quotes` (markdown list). If the highlights/chat don't "
+                  "support a field, write 'unclear' rather than inventing.")
         user = (f"Paper: {paper_title}\n\nHighlights:\n{highlights}\n\nChat:\n{convo}\n\n"
-                'Return {"summary": "...", "thoughts": "...", "key_quotes": "- ..."}')
+                'Return JSON. Example summary value: "Short TL;DR line.\\n\\n'
+                '**Problem:** ...\\n**Method:** ...\\n**Insight:** ..."')
     try:
         resp = llm.complete([{"role": "system", "content": system},
                              {"role": "user", "content": user}])
