@@ -665,6 +665,35 @@ def topic_del_note(slug: str, nid: int) -> RedirectResponse:
     return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
+@app.get("/t/{slug}/hypothesis/{hid}", response_class=HTMLResponse)
+def topic_hypothesis_detail(request: Request, slug: str, hid: str) -> HTMLResponse:
+    """Hypothesis detail popup: the claim + its supporting/counter evidence + its
+    unknowns (each with Find-papers). hid='unlinked' gathers evidence/unknowns with no
+    hypothesis (the catch-all card)."""
+    t = topics_mod.get_topic(slug)
+    if not t:
+        return templates.TemplateResponse(request, "_hypothesis_detail.html",
+                                          {"slug": slug, "hyp": None})
+    if hid == "unlinked":
+        hyp, hyp_idx = None, None
+        evs = [e for e in t["evidence"] if not e.get("hypothesis_id")]
+        unks = [u for u in t["unknowns"] if not u.get("hypothesis_id")]
+        unlinked = True
+    else:
+        hid_i = int(hid) if hid.isdigit() else -1
+        hyp, hyp_idx = None, None
+        for i, h in enumerate(t["hypotheses"], 1):
+            if h.get("id") == hid_i:
+                hyp, hyp_idx = h, i
+                break
+        evs = [e for e in t["evidence"] if e.get("hypothesis_id") == hid_i]
+        unks = [u for u in t["unknowns"] if u.get("hypothesis_id") == hid_i]
+        unlinked = False
+    return templates.TemplateResponse(request, "_hypothesis_detail.html",
+                                      {"slug": slug, "hyp": hyp, "hyp_idx": hyp_idx,
+                                       "evs": evs, "unks": unks, "unlinked": unlinked})
+
+
 @app.post("/t/{slug}/evidence/{eid}/delete")
 def topic_del_evidence(slug: str, eid: int) -> RedirectResponse:
     topics_mod.delete_evidence(slug, eid)

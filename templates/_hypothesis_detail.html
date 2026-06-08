@@ -1,0 +1,82 @@
+{# Hypothesis detail (HTMX-loaded into #hyp-modal-body). The hypothesis is the hub:
+   its claim + supporting/counter evidence + its unknowns (each with Find papers).
+   hid='unlinked' → the catch-all card (evidence/unknowns with no hypothesis).
+   Lives in the topicShell() scope (hypOpen). #}
+{% if not hyp and not unlinked %}
+<p class="text-sm text-slate-400 py-6 text-center">Couldn't load this hypothesis.</p>
+{% else %}
+{% set HSTAT = {'supported':'bg-emerald-100 text-emerald-700','challenged':'bg-rose-100 text-rose-700',
+                'mixed':'bg-amber-100 text-amber-800','unknown':'bg-slate-100 text-slate-500'} %}
+<div>
+  <div class="flex items-start gap-3 mb-3">
+    <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-violet-100 text-violet-700">🧪</span>
+    <div class="min-w-0 flex-1">
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">{{ 'Unlinked' if unlinked else 'Hypothesis H' ~ hyp_idx }}</div>
+      <h2 class="text-base font-bold text-slate-900 leading-snug">{{ 'Evidence & questions not tied to a hypothesis' if unlinked else hyp.text }}</h2>
+      {% if not unlinked %}
+      <div class="flex items-center gap-2 mt-1.5 text-[11px]">
+        <span class="rounded px-1.5 py-0.5 {{ HSTAT.get(hyp.status,'bg-slate-100 text-slate-500') }}">{{ hyp.status }}</span>
+        <span class="text-emerald-600">👍 {{ hyp.support_count }}</span>
+        <span class="text-rose-600">👎 {{ hyp.counter_count }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Evidence — supporting / counter / missing #}
+  {% set ev_groups = [('Supporting','supporting','＋','emerald'),('Counter','counter','－','rose'),('Missing','missing','?','amber')] %}
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Evidence</div>
+  <div class="space-y-1.5 mb-4">
+    {% for label, kind, sym, tint in ev_groups %}
+      {% for e in evs if e.kind == kind %}
+      <div class="rounded-lg border border-{{ tint }}-100 bg-{{ tint }}-50/40 px-2.5 py-2 {% if e.unverified %}ring-1 ring-amber-300{% endif %}">
+        <div class="flex items-start gap-1.5">
+          <span class="text-{{ tint }}-600 shrink-0 font-semibold">{{ sym }}</span>
+          <p class="flex-1 text-[13px] text-slate-700 leading-snug">{{ e.claim }}</p>
+        </div>
+        <div class="mt-1 pl-5 flex flex-wrap items-center gap-1.5 text-[10px]">
+          {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" target="_blank" class="rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">{{ (e.paper_title or 'paper')|truncate(40) }} ↗</a>{% endif %}
+          {% if e.unverified %}<form method="post" action="/t/{{ slug }}/evidence/{{ e.id }}/verify"><button class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200">✓ confirm</button></form>{% endif %}
+          {% if e.kind == 'missing' %}
+          <form method="post" action="/t/{{ slug }}/reading/suggest" onsubmit="try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+            <input type="hidden" name="purpose" value="missing"><input type="hidden" name="target" value="{{ e.id }}">
+            <button class="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">🔎 find papers</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% endfor %}
+    {% if not evs %}<p class="text-[12px] text-slate-400">No evidence yet.</p>{% endif %}
+  </div>
+
+  {# Unknowns — each with Find papers #}
+  <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Open questions</div>
+  <div class="space-y-1.5 mb-4">
+    {% for u in unks %}
+    <div class="rounded-lg border border-amber-100 bg-amber-50/40 px-2.5 py-2 flex items-start gap-2">
+      <span class="text-amber-500 shrink-0">❓</span>
+      <p class="flex-1 text-[13px] text-slate-700 leading-snug">{{ u.text }}</p>
+      <form method="post" action="/t/{{ slug }}/reading/suggest" class="shrink-0" onsubmit="try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+        <input type="hidden" name="purpose" value="unknown"><input type="hidden" name="target" value="{{ u.id }}">
+        <button class="rounded px-1.5 py-0.5 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">🔎 find papers</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% if not unks %}<p class="text-[12px] text-slate-400">No open questions.</p>{% endif %}
+  </div>
+
+  {% if not unlinked %}
+  <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+    <form method="post" action="/t/{{ slug }}/reading/suggest" onsubmit="try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+      <input type="hidden" name="purpose" value="support"><input type="hidden" name="target" value="{{ hyp.id }}">
+      <button class="rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-1.5 text-sm hover:bg-emerald-100">🔎 Find support</button>
+    </form>
+    <form method="post" action="/t/{{ slug }}/reading/suggest" onsubmit="try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
+      <input type="hidden" name="purpose" value="challenge"><input type="hidden" name="target" value="{{ hyp.id }}">
+      <button class="rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-3 py-1.5 text-sm hover:bg-rose-100">🔎 Find counter</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endif %}

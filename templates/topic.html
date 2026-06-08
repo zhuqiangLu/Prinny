@@ -81,6 +81,15 @@
       </div>
     </div>{# /header #}
 
+    <!-- Hypothesis detail popup (opened from a hypothesis card; holds its evidence + unknowns) -->
+    <div x-show="hypOpen" x-cloak @keydown.escape.window="hypOpen = false" @click.self="hypOpen = false"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12 overflow-auto">
+      <div class="relative bg-white rounded-2xl shadow-2xl w-[min(680px,95vw)] max-h-[88vh] overflow-auto p-6">
+        <button type="button" @click="hypOpen = false" class="absolute right-4 top-4 grid place-items-center w-8 h-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50">✕</button>
+        <div id="hyp-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      </div>
+    </div>
+
     <div class="px-6 py-6">
     {% if gen_error %}
     <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -298,10 +307,9 @@
 
     {# ===== INVESTIGATION: Map-style switcher over Hypotheses · Evidence · Unknowns · Experiments ===== #}
     <div x-show="tab==='investigation'" x-cloak class="mb-4">
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <p class="text-xs text-slate-500 mb-2">Each hypothesis holds its evidence &amp; open questions — click one to open it.</p>
+      <div class="grid grid-cols-2 gap-2">
         {% for v in [('hypotheses','Hypotheses', t.hypotheses|length, 'text-violet-700','ring-violet-400'),
-                     ('evidence','Evidence', t.evidence|length, 'text-sky-700','ring-sky-400'),
-                     ('unknowns','Unknowns', t.unknowns|length, 'text-amber-700','ring-amber-400'),
                      ('experiments','Experiments', t.experiments|length, 'text-emerald-700','ring-emerald-400')] %}
         <button type="button" @click="inv='{{ v[0] }}'"
                 :class="inv==='{{ v[0] }}' ? 'ring-2 {{ v[4] }} bg-white' : 'bg-slate-50/50 hover:bg-white'"
@@ -318,7 +326,10 @@
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧪</span> Hypotheses
         <button @click="addHyp=true" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button></h2>
       {% for h in t.hypotheses %}
-      <div class="rounded-xl border border-slate-200 bg-white p-4">
+      {% set nevs = t.evidence|selectattr('hypothesis_id','equalto',h.id)|list %}
+      {% set nunk = t.unknowns|selectattr('hypothesis_id','equalto',h.id)|list %}
+      <div class="rounded-xl border border-slate-200 bg-white p-4 hover:border-violet-300 hover:shadow-sm transition cursor-pointer group"
+           @click="hypOpen = true; htmx.ajax('GET', '/t/{{ t.slug }}/hypothesis/{{ h.id }}', { target: '#hyp-modal-body', swap: 'innerHTML' })">
         <div class="flex items-start gap-3">
           <span class="text-sm font-semibold text-violet-500 mt-0.5 shrink-0">H{{ loop.index }}</span>
           <p class="flex-1 text-sm text-slate-800 leading-snug">{{ h.text }}</p>
@@ -326,109 +337,34 @@
           <span class="shrink-0 text-[11px] text-emerald-600 tabular-nums" title="supporting">👍{{ h.support_count }}</span>
           <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="counter">👎{{ h.counter_count }}</span>
           <button type="button" data-ask-label="H{{ loop.index }}: {{ h.text }}"
-                  @click="$dispatch('pa-ask', {kind:'topic', label: $el.dataset.askLabel, icon:'💬'})"
+                  @click.stop="$dispatch('pa-ask', {kind:'topic', label: $el.dataset.askLabel, icon:'💬'})"
                   class="shrink-0 text-[11px] text-slate-300 hover:text-violet-600" title="Ask the assistant about this hypothesis">💬</button>
-          <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button></form>
+          <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button></form>
         </div>
-        {# contextual one-click: find papers that support / challenge this hypothesis #}
-        <div class="mt-2 pl-7 flex items-center gap-2 text-[11px]">
-          <span class="text-slate-400">Find reading:</span>
-          {% set sr = "onsubmit=\"this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}\"" %}
-          <form method="post" action="/t/{{ t.slug }}/reading/suggest" {{ sr|safe }}>
-            <input type="hidden" name="purpose" value="support"><input type="hidden" name="target" value="{{ h.id }}">
-            <button class="rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50">🔎 support</button>
-          </form>
-          <form method="post" action="/t/{{ t.slug }}/reading/suggest" {{ sr|safe }}>
-            <input type="hidden" name="purpose" value="challenge"><input type="hidden" name="target" value="{{ h.id }}">
-            <button class="rounded px-1.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 disabled:opacity-50">🔎 challenge</button>
-          </form>
+        <div class="mt-2 pl-7 flex items-center gap-3 text-[11px] text-slate-400">
+          <span><b class="text-slate-600 tabular-nums">{{ nevs|length }}</b> evidence</span>
+          <span><b class="text-slate-600 tabular-nums">{{ nunk|length }}</b> open question{{ 's' if nunk|length != 1 }}</span>
+          <span class="ml-auto text-violet-500 opacity-0 group-hover:opacity-100">open →</span>
         </div>
-        {% set evs = t.evidence|selectattr('hypothesis_id','equalto',h.id)|list %}
-        {% if evs %}
-        <div class="mt-2 pl-7 space-y-1">
-          {% for e in evs %}
-          <div class="flex items-start gap-1.5 text-[12px]">
-            <span class="shrink-0">{% if e.kind=='supporting' %}<span class="text-emerald-600">＋</span>{% elif e.kind=='counter' %}<span class="text-rose-600">－</span>{% else %}<span class="text-amber-500">?</span>{% endif %}</span>
-            <span class="text-slate-600">{{ e.claim }}</span>
-            {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="text-violet-600 hover:underline shrink-0">[paper]</a>{% endif %}
-            {% if e.unverified %}<span class="shrink-0 text-[10px] text-amber-700" title="From suggested reading — confirm in the Evidence tab">⚠</span>{% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
       </div>
       {% else %}<p class="text-sm text-slate-400">No hypotheses yet — use Find evidence to generate them, or add your own.</p>{% endfor %}
-    </div>
-
-    {# ============================ EVIDENCE ============================ #}
-    <div x-show="tab==='investigation' && inv==='evidence'" x-cloak>
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2 mb-1"><span>◈</span> Evidence</h2>
-      <p class="text-xs text-slate-500 mb-3">Each item is a <b>claim</b> tied to a paper (or a gap). Supporting / Counter cite real papers from your linked collections; Missing drives discovery.</p>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-        {% for col, kind, tint in [('Supporting Evidence','supporting','emerald'),('Counter Evidence','counter','rose'),('Missing Evidence','missing','amber')] %}
-        <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <h3 class="text-sm font-semibold text-{{ tint }}-700 mb-2 pb-1.5 border-b border-slate-100">{{ col }}</h3>
-          <div class="space-y-2">
-            {% for e in t.evidence if e.kind == kind %}
-            <div class="rounded-lg border border-{{ tint }}-100 bg-{{ tint }}-50/40 p-2.5 group {% if e.unverified %}ring-1 ring-amber-300{% endif %}"
-                 data-s="{{ (e.claim ~ ' ' ~ (e.paper_title or ''))|lower }}"
-                 x-show="q.trim()==='' || $el.dataset.s.includes(q.trim().toLowerCase())">
-              <div class="flex items-start gap-1.5">
-                <p class="flex-1 text-[13px] text-slate-700 leading-snug">{{ e.claim }}</p>
-                <button type="button" data-ask-label="{{ e.claim }}"
-                        @click="$dispatch('pa-ask', {kind:'topic', label: $el.dataset.askLabel, icon:'💬'})"
-                        class="shrink-0 opacity-0 group-hover:opacity-100 text-[11px] text-slate-300 hover:text-violet-600" title="Ask the assistant about this evidence">💬</button>
-                <form method="post" action="/t/{{ t.slug }}/evidence/{{ e.id }}/delete" class="shrink-0 opacity-0 group-hover:opacity-100"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
-              </div>
-              <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-                {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-100">{{ (e.paper_title or 'paper')|truncate(32) }}</a>{% endif %}
-                {% if e.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == e.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
-                {% if e.unverified %}
-                <span class="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800" title="From suggested reading — not yet grounded against the paper">⚠ unverified</span>
-                <form method="post" action="/t/{{ t.slug }}/evidence/{{ e.id }}/verify"><button class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200">✓ confirm</button></form>
-                {% endif %}
-                {% if e.kind == 'missing' %}
-                <form method="post" action="/t/{{ t.slug }}/reading/suggest" onsubmit="this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
-                  <input type="hidden" name="purpose" value="missing"><input type="hidden" name="target" value="{{ e.id }}">
-                  <button class="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50">🔎 find papers</button>
-                </form>
-                {% endif %}
-              </div>
-            </div>
-            {% else %}<p class="text-[12px] text-slate-400">None.</p>{% endfor %}
-          </div>
+      {# Unlinked: evidence / unknowns with no hypothesis #}
+      {% set orphE = t.evidence|rejectattr('hypothesis_id')|list %}
+      {% set orphU = t.unknowns|rejectattr('hypothesis_id')|list %}
+      {% if orphE or orphU %}
+      <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 p-4 hover:border-slate-400 transition cursor-pointer group"
+           @click="hypOpen = true; htmx.ajax('GET', '/t/{{ t.slug }}/hypothesis/unlinked', { target: '#hyp-modal-body', swap: 'innerHTML' })">
+        <div class="flex items-start gap-3">
+          <span class="text-sm text-slate-400 mt-0.5 shrink-0">◌</span>
+          <p class="flex-1 text-sm text-slate-600 leading-snug">Unlinked — evidence &amp; questions not tied to a hypothesis</p>
         </div>
-        {% endfor %}
-      </div>
-    </div>
-
-    {# ============================ UNKNOWNS ============================ #}
-    <div x-show="tab==='investigation' && inv==='unknowns'" x-cloak class="space-y-3" x-data="{ add: false }">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>❓</span> Unknowns
-        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add unknown</button></h2>
-      <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/unknowns" class="flex gap-2">
-        <input name="text" required placeholder="An open research question" class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
-        <select name="priority" class="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-600"><option value="high">high</option><option value="medium" selected>medium</option><option value="low">low</option></select>
-        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add</button>
-      </form>
-      {% for u in t.unknowns %}
-      <div class="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3">
-        <span class="text-violet-400 mt-0.5 shrink-0">?</span>
-        <div class="flex-1 min-w-0">
-          <p class="text-sm text-slate-800 leading-snug">{{ u.text }}</p>
-          <div class="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span class="rounded px-1.5 py-0.5 {{ PRIO.get(u.priority,'bg-slate-100 text-slate-500') }}">{{ u.priority }} priority</span>
-            <span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">{{ u.status }}</span>
-            {% if u.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == u.hypothesis_id %}<span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">H{{ loop.index }}</span>{% endif %}{% endfor %}{% endif %}
-            <form method="post" action="/t/{{ t.slug }}/reading/suggest" onsubmit="this.querySelector('button').disabled=true; try{localStorage.setItem('pa.ttab','reading')}catch(e){}">
-              <input type="hidden" name="purpose" value="unknown"><input type="hidden" name="target" value="{{ u.id }}">
-              <button class="rounded px-1.5 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 disabled:opacity-50">🔎 find papers</button>
-            </form>
-          </div>
+        <div class="mt-2 pl-7 flex items-center gap-3 text-[11px] text-slate-400">
+          <span><b class="text-slate-600 tabular-nums">{{ orphE|length }}</b> evidence</span>
+          <span><b class="text-slate-600 tabular-nums">{{ orphU|length }}</b> open question{{ 's' if orphU|length != 1 }}</span>
+          <span class="ml-auto text-slate-500 opacity-0 group-hover:opacity-100">open →</span>
         </div>
-        <form method="post" action="/t/{{ t.slug }}/unknowns/{{ u.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
       </div>
-      {% else %}<p class="text-sm text-slate-400">No unknowns yet — what does this investigation still need to answer?</p>{% endfor %}
+      {% endif %}
     </div>
 
     {# ============================ EXPERIMENTS ============================ #}
@@ -739,10 +675,13 @@
       tab: (function(){ try { var t = localStorage.getItem('pa.ttab'); localStorage.removeItem('pa.ttab'); return t || 'overview'; } catch(e){ return 'overview'; } })(),
       q: "",
       addHyp: false, viewAll: "", manage: false, aeditOpen: false,
-      inv: 'hypotheses',           // Investigation sub-view (hypotheses/evidence/unknowns/experiments)
+      inv: 'hypotheses',           // Investigation sub-view: 'hypotheses' | 'experiments'
+      hypOpen: false,              // hypothesis detail popup (its evidence + unknowns inside)
       go(t) {
-        var sub = ['hypotheses', 'evidence', 'unknowns', 'experiments'];
-        if (sub.indexOf(t) >= 0) { this.tab = 'investigation'; this.inv = t; }
+        // evidence/unknowns now live inside the hypothesis popup → route them to hypotheses
+        var invMap = { hypotheses: 'hypotheses', experiments: 'experiments',
+                       evidence: 'hypotheses', unknowns: 'hypotheses' };
+        if (invMap[t]) { this.tab = 'investigation'; this.inv = invMap[t]; }
         else { this.tab = t; }
       },
       asstOpen: (function(){ try { return localStorage.getItem('pa.tasst') !== 'closed'; } catch(e){ return true; } })(),
