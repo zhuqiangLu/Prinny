@@ -267,7 +267,8 @@
       <div class="relative" x-data="{ open: false, unseen: 0, running: 0, items: [], jobs: [],
              feed() { fetch('/notifications').then(r => r.json()).then(d => { this.unseen = d.unseen; this.running = d.running || 0; this.items = d.items; this.jobs = d.running_jobs || []; }).catch(() => {}); },
              toggle() { this.open = !this.open; if (this.open && this.unseen) { fetch('/notifications/seen', { method: 'POST' }).then(() => this.unseen = 0); } } }"
-           x-init="feed(); setInterval(() => feed(), 8000)">
+           x-init="feed(); setInterval(() => feed(), 4000);
+                   (() => { let t; window.addEventListener('htmx:afterRequest', () => { clearTimeout(t); t = setTimeout(() => feed(), 200); }); })()">
         <button type="button" @click="toggle()"
                 class="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50">
           <span class="shrink-0 w-2.5 h-2.5 rounded-full" :class="running > 0 ? 'bg-emerald-500 animate-pulse' : (unseen > 0 ? 'bg-emerald-500' : 'bg-slate-300')"></span>
