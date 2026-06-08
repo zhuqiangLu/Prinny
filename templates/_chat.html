@@ -164,23 +164,6 @@
     </div>
 
     <div class="flex gap-2 items-stretch">
-      {# "+" button: opens the command menu (mouse-discoverable; "/" still works for keyboard) #}
-      <div class="relative shrink-0" x-data="{ pOpen: false }" @click.outside="pOpen = false">
-        <button type="button" @click="pOpen = !pOpen" :disabled="compacting" aria-label="Commands" title="Commands"
-                class="h-full w-9 grid place-items-center rounded border border-slate-300 text-slate-500 hover:bg-slate-50 disabled:opacity-50">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <div x-show="pOpen" x-cloak class="absolute bottom-full left-0 mb-1 w-72 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg z-40 py-1 text-sm">
-          <div class="px-3 pt-1 pb-1 text-[11px] uppercase tracking-wide text-slate-400">Commands</div>
-          <template x-for="it in allCmds()" :key="it.c">
-            <button type="button" @click="pickCmd(it); pOpen = false"
-                    class="w-full text-left px-3 py-1.5 flex items-baseline gap-2 hover:bg-violet-50">
-              <span class="font-mono text-violet-700 shrink-0" x-text="it.c"></span>
-              <span class="text-xs text-slate-500 truncate" x-text="it.d"></span>
-            </button>
-          </template>
-        </div>
-      </div>
       <textarea name="message" x-ref="msg" :style="`height:${h}px`" :disabled="compacting"
                 @paste="onPaste($event)" @input="onSlashInput()"
                 @keydown.arrow-down="if(cmdOpen){ $event.preventDefault(); moveCmd(1) }"
