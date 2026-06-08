@@ -36,11 +36,6 @@
           PDF: <span x-text="pdfDark ? 'dark' : 'light'"></span> — click to flip</span>
       </button>
       {% endif %}
-      <button type="button" @click="prevPaper()"
-              class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
-        <span class="text-base leading-none">⏮</span>
-        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">Previous paper (reading history)</span>
-      </button>
       <button type="button" @click="openJump()"
               class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
         <span class="text-base leading-none">🔍</span>
@@ -265,14 +260,6 @@
             { target: "#jump-body", swap: "innerHTML" });
         }
       },
-      async prevPaper() {                       // browser-style back through the reading log
-        try {
-          const d = await (await fetch("/c/{{ slug }}/p/{{ paper.id }}/prev")).json();
-          if (d.paper_id) window.location.href = `/c/{{ slug }}/p/${d.paper_id}?nav=back`;
-          else await window.paAlert("This is the first paper you've read in this collection.");
-        } catch (e) { /* ignore */ }
-      },
-
       init() {
         // let annotate.js / the selection toolbar jump back to the chat tab
         window.__showChat = () => { this.tab = "chat"; this.paneOpen = true; };
