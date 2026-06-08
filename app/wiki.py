@@ -1299,10 +1299,10 @@ def _add_seed(slug: str) -> str:
 
 
 # Collection "Suggested reading" purposes → (seed, intent) for the arXiv search.
-COLLECTION_PURPOSES = ("related", "gaps", "concept", "thesis", "adjacent", "custom", "similar")
+COLLECTION_PURPOSES = ("related", "gaps", "concept", "method", "problem", "thesis", "adjacent", "custom", "similar")
 
 # Suggested-reading grouping: source → (display order, label template). "" = ungrouped (old).
-_READING_SOURCE_ORDER = ["similar", "custom", "concept", "related", "thesis", "adjacent", "gaps", ""]
+_READING_SOURCE_ORDER = ["similar", "custom", "concept", "method", "problem", "related", "thesis", "adjacent", "gaps", ""]
 
 
 def _reading_group_label(source: str, detail: str) -> str:
@@ -1313,6 +1313,10 @@ def _reading_group_label(source: str, detail: str) -> str:
         return f"Custom search: “{detail}”" if detail else "Custom search"
     if source == "concept":
         return f"Concept: {detail}" if detail else "Concept"
+    if source == "method":
+        return f"Method: {detail}" if detail else "Method"
+    if source == "problem":
+        return f"Problem: {detail}" if detail else "Problem"
     if source == "related":
         return "Related to this collection"
     if source == "thesis":
@@ -1362,6 +1366,14 @@ def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -
         name = target.strip() or (concepts[0] if concepts else "")
         return (f"{para}\n\nConcept of interest: {name}".strip(),
                 f"deepen or extend the concept “{name}”")
+    if purpose == "method":
+        name = target.strip()
+        return (f"{para}\n\nMethod family: {name}".strip(),
+                f"use, advance, or compete with the method “{name}”")
+    if purpose == "problem":
+        name = target.strip()
+        return (f"{para}\n\nProblem: {name}".strip(),
+                f"address or study the problem “{name}”")
     if purpose == "thesis":
         return (para or _add_seed(slug),
                 "represent recent or state-of-the-art work directly relevant to this thesis")
@@ -1403,7 +1415,7 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     src_detail = ""
     if purpose == "custom":
         src_detail = custom.strip()
-    elif purpose == "concept":
+    elif purpose in ("concept", "method", "problem"):
         src_detail = target.strip()
     elif purpose == "similar" and target and str(target).isdigit():
         _sp = library.get_paper(int(target))

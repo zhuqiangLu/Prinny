@@ -94,11 +94,18 @@
   </div>
   {% endif %}
 
-  <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+  <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+    {# find external papers similar to / extending this entity → Suggested reading #}
+    <form hx-post="/c/{{ slug }}/wiki/recommend-add" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
+          @submit="entityOpen = false; tab = 'reading'">
+      <input type="hidden" name="purpose" value="{{ e.kind }}">
+      <input type="hidden" name="target" value="{{ e.label }}">
+      <button class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50" title="Find external papers similar to this {{ e.kind }} → Suggested reading">🔎 Find similar</button>
+    </form>
     <button type="button" @click="entityOpen = false; window.wikiJump && window.wikiJump('{{ e.key }}')"
             class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">View in Connections</button>
     <button type="button" @click="entityOpen = false; tab = 'papers'; $dispatch('pa-filter-papers', { key: '{{ e.key }}', dim: '{{ e.kind }}' })"
-            class="rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">Explore this {{ e.kind }} →</button>
+            class="ml-auto rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">Explore →</button>
   </div>
 </div>
 {% endif %}
