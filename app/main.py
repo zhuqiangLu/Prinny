@@ -118,6 +118,11 @@ def _shutdown() -> None:
     live_session.shutdown_all()   # don't orphan persistent chat processes
 
 
+# Autodraft note jobs (keyed by paper_id) — registered only while the speculative LLM
+# draft is actually running, so the Background Jobs dropdown lists it.
+_AUTODRAFT_JOBS: dict[int, dict] = {}
+
+
 def _active_jobs() -> list[dict]:
     """Currently-running background jobs across all registries, as labeled items for the
     Background Jobs dropdown (so in-progress work is listed, not just counted)."""
@@ -132,6 +137,9 @@ def _active_jobs() -> list[dict]:
         for slug, job in list(reg.items()):
             if (job or {}).get("status") == "running":
                 out.append({"label": label, "slug": slug})
+    for job in list(_AUTODRAFT_JOBS.values()):
+        if (job or {}).get("status") == "running":
+            out.append({"label": job.get("label", "Drafting note"), "slug": job.get("slug", "")})
     return out
 
 
@@ -2042,19 +2050,28 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
                 if _latest_signal_epoch(slug, paper_id, thread_id) <= \
                         notes_mod.note_updated_epoch(slug, paper_id):
                     return
-                fields, error = _draft_note_fields(slug, paper_id, paper["title"], existing=note)
-            else:
-                fields, error = _draft_note_fields(slug, paper_id, paper["title"])
-            if error or not fields:
-                return
-            md = notes_mod._serialize_body(fields.get("summary", ""), fields.get("thoughts", ""),
-                                           fields.get("key_quotes", ""))
-            if md.strip():
-                note_drafts.stage(slug, paper_id, md)
-                label = "Draft additions ready" if has_note else "Draft ready to review"
-                notify.add(f"{label}: {(paper['title'] or '')[:60]}",
-                           link=f"/c/{slug}/p/{paper_id}", collection=slug)
+            # Past the cheap gates → the speculative LLM draft is about to run; surface it
+            # in the Background Jobs dropdown until it finishes.
+            _AUTODRAFT_JOBS[paper_id] = {
+                "status": "running", "slug": slug,
+                "label": "Drafting note additions" if has_note else "Drafting note"}
+            try:
+                fields, error = _draft_note_fields(
+                    slug, paper_id, paper["title"], existing=note if has_note else None)
+                if error or not fields:
+                    return
+                md = notes_mod._serialize_body(fields.get("summary", ""),
+                                               fields.get("thoughts", ""),
+                                               fields.get("key_quotes", ""))
+                if md.strip():
+                    note_drafts.stage(slug, paper_id, md)
+                    label = "Draft additions ready" if has_note else "Draft ready to review"
+                    notify.add(f"{label}: {(paper['title'] or '')[:60]}",
+                               link=f"/c/{slug}/p/{paper_id}", collection=slug)
+            finally:
+                _AUTODRAFT_JOBS.pop(paper_id, None)
         except Exception:  # noqa: BLE001
+            _AUTODRAFT_JOBS.pop(paper_id, None)
             logging.getLogger("paper_agent.autodraft").exception("autodraft failed")
 
     threading.Thread(target=runner, daemon=True).start()
