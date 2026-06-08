@@ -171,7 +171,7 @@
                 @keydown.tab="if(cmdOpen){ $event.preventDefault(); acceptCmd() }"
                 @keydown.escape="if(cmdOpen){ cmdOpen = false } else if(sending){ interrupt() }"
                 @keydown.enter="if(!$event.shiftKey){ $event.preventDefault(); if(cmdOpen){ acceptCmd() } else if($el.value.trim() || images.length){ $el.form.requestSubmit() } }"
-                placeholder="{% if paper_key %}Message about this paper… (type / for commands · paste an image){% else %}Message… (type / for commands){% endif %}"
+                placeholder="{% if paper_key %}Ask about this paper, your notes, or how it compares to your collection… (/ for commands · paste an image){% else %}Ask about your papers, notes, or where the gaps are… (/ for commands){% endif %}"
                 class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"></textarea>
       {# Send → becomes a Stop button while a turn is in flight (click or Esc interrupts) #}
       <button x-show="!sending" type="submit" aria-label="Send" title="Send (Enter)" :disabled="compacting"
