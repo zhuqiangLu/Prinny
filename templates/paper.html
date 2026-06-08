@@ -12,7 +12,7 @@
       {# On leaving, fire a background "draft from highlights+chat" (server gates on
          chat/highlights + no note + no existing draft); sendBeacon survives navigation. #}
       <a href="/c/{{ slug }}?tab=papers" class="text-sm text-slate-600 hover:text-slate-900 shrink-0"
-         @click="try { navigator.sendBeacon('/c/{{ slug }}/p/{{ paper.id }}/autodraft') } catch(e){}">← Return</a>
+         @click="navigator.sendBeacon && navigator.sendBeacon('/c/{{ slug }}/p/{{ paper.id }}/autodraft')">← Return</a>
       <a href="/c/{{ slug }}" class="text-sm font-medium text-slate-800 hover:text-slate-600 truncate max-w-[28ch]" title="Collection: {{ name }}">{{ name }}</a>
     </div>
 
@@ -103,11 +103,17 @@
         <div x-show="tab==='notes'" x-cloak class="h-full flex flex-col p-4">
           {# staged auto-draft (from leaving the paper with chat/highlights) — review before it's a note #}
           <div x-show="stagedDraft" x-cloak class="mb-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-sm shrink-0">
-            <p class="font-medium text-violet-800">✨ Draft ready from your reading</p>
-            <p class="text-xs text-slate-600 mt-0.5">Auto-drafted from your highlights + chat. Review &amp; edit — it only becomes your note when you Save.</p>
+            <p class="font-medium text-violet-800" x-text="stagedDraftAdditive ? '✨ Suggested additions from your recent reading' : '✨ Draft ready from your reading'"></p>
+            <p class="text-xs text-slate-600 mt-0.5" x-text="stagedDraftAdditive ? 'New highlights/chat since your note. Append & edit — your note isn\'t changed until you Save.' : 'Auto-drafted from your highlights + chat. Review & edit — it only becomes your note when you Save.'"></p>
             <div class="mt-1.5 flex items-center gap-2">
-              <button type="button" @click="noteMd = stagedDraft; stagedDraft = null; showPreview = false"
-                      class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Use this draft</button>
+              <template x-if="stagedDraftAdditive">
+                <button type="button" @click="noteMd = (noteMd.trim() ? noteMd.trimEnd() + '\n\n' : '') + stagedDraft; stagedDraft = null; showPreview = false"
+                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Append to my note</button>
+              </template>
+              <template x-if="!stagedDraftAdditive">
+                <button type="button" @click="noteMd = stagedDraft; stagedDraft = null; showPreview = false"
+                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Use this draft</button>
+              </template>
               <form hx-post="/c/{{ slug }}/p/{{ paper.id }}/autodraft/discard" hx-swap="none" @submit="stagedDraft = null">
                 <button class="text-xs text-slate-500 hover:text-rose-600">Discard</button>
               </form>
@@ -199,6 +205,7 @@
       paneW: parseInt(localStorage.getItem("pp.w") || "440", 10),
       noteMd: {{ note_md|tojson }},
       stagedDraft: {{ staged_draft|tojson }},   // auto-draft awaiting review (null if none)
+      stagedDraftAdditive: {{ staged_draft_additive|tojson }},  // append-to-note vs replace-empty
       status: {{ note.status|tojson }},
       showPreview: false, previewHtml: "",
       busy: false, err: "", saved: false,

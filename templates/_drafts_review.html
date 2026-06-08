@@ -17,6 +17,7 @@
     <div class="draft-card rounded-lg border border-slate-200 p-3">
       <div class="flex items-baseline gap-2 mb-1.5">
         <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ d.title }}</p>
+        {% if d.additive %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700" title="You already have a note — this appends to it">+ additions</span>{% endif %}
         <a href="/c/{{ d.slug }}/p/{{ d.paper_id }}" class="shrink-0 text-[11px] text-violet-600 hover:underline">open paper ↗</a>
       </div>
       <form hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/accept"
@@ -24,7 +25,7 @@
         <textarea name="text" rows="8"
                   class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ d.draft_md }}</textarea>
         <div class="mt-1.5 flex items-center gap-2">
-          <button type="submit" class="draft-accept rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700">Accept as note</button>
+          <button type="submit" class="draft-accept rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700">{{ 'Append to note' if d.additive else 'Accept as note' }}</button>
           <button type="button" class="text-xs text-slate-500 hover:text-rose-600"
                   hx-post="/c/{{ d.slug }}/p/{{ d.paper_id }}/autodraft/discard"
                   hx-target="closest .draft-card" hx-swap="outerHTML">Discard</button>

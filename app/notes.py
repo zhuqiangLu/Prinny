@@ -174,6 +174,17 @@ def get_note(slug: str, paper_id: int) -> dict:
     return dict(EMPTY)
 
 
+def note_updated_epoch(slug: str, paper_id: int) -> float:
+    """Effective last-update epoch of the note: the DB ``updated_at`` or the mirror
+    file's mtime, whichever is newer (0.0 if there's no note). Used as the watermark
+    for 'is there new chat/highlight signal since the note?'."""
+    db = _read_db(slug, paper_id)
+    db_epoch = _iso_to_epoch(db["updated_at"]) if db else 0.0
+    path = _note_path(slug, paper_id)
+    file_mtime = path.stat().st_mtime if path.exists() else 0.0
+    return max(db_epoch, file_mtime)
+
+
 def save_note(
     slug: str, paper_id: int, summary: str, thoughts: str, key_quotes: str, status: str,
     synth_kind: str = "auto", author_origin: str = "human",

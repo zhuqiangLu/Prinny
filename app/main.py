@@ -47,7 +47,7 @@ from . import (
     wiki_propose,
 )
 from .config import highlight_scheme as config_highlight_scheme, load_config, save_config
-from .db import init_db
+from .db import connect, init_db
 from .markdown import render as render_md
 from .repo import (
     add_message,
@@ -1521,8 +1521,10 @@ def paper_page(request: Request, slug: str, paper_id: int, nav: str = "") -> HTM
             "active_thread": get_or_create_thread(slug, paper_id),
             "note": note,
             "note_md": note_md,
-            # A staged auto-draft awaiting review (only meaningful when there's no note yet).
-            "staged_draft": (note_drafts.get(slug, paper_id) if not note_md.strip() else None),
+            # A staged auto-draft awaiting review. Additive (appends) when a note already
+            # exists; a full draft (replaces an empty note) otherwise.
+            "staged_draft": note_drafts.get(slug, paper_id),
+            "staged_draft_additive": bool(note_md.strip()),
             "highlight_scheme": config_highlight_scheme(),
             "show_highlight_legend": load_config().get("show_highlight_legend", "true") != "false",
             "statuses": notes_mod.STATUSES,
@@ -2027,20 +2029,30 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
             if note_drafts.has(slug, paper_id):
                 return
             note = notes_mod.get_note(slug, paper_id)
-            if any((note.get(k) or "").strip() for k in ("summary", "thoughts", "key_quotes")):
-                return                       # a real note already exists — don't draft over it
-            has_chat = thread_message_count(get_or_create_thread(slug, paper_id)) > 0
+            has_note = any((note.get(k) or "").strip()
+                           for k in ("summary", "thoughts", "key_quotes"))
+            thread_id = get_or_create_thread(slug, paper_id)
+            has_chat = thread_message_count(thread_id) > 0
             has_high = bool(context._highlights_block(slug, paper_id))
             if not (has_chat or has_high):
                 return                       # no signal → no speculative LLM call
-            fields, error = _draft_note_fields(slug, paper_id, paper["title"])
+            if has_note:
+                # Additive: only draft if there's chat/highlight signal NEWER than the note,
+                # and only the net-new material (never overwrite the user's own note).
+                if _latest_signal_epoch(slug, paper_id, thread_id) <= \
+                        notes_mod.note_updated_epoch(slug, paper_id):
+                    return
+                fields, error = _draft_note_fields(slug, paper_id, paper["title"], existing=note)
+            else:
+                fields, error = _draft_note_fields(slug, paper_id, paper["title"])
             if error or not fields:
                 return
             md = notes_mod._serialize_body(fields.get("summary", ""), fields.get("thoughts", ""),
                                            fields.get("key_quotes", ""))
             if md.strip():
                 note_drafts.stage(slug, paper_id, md)
-                notify.add(f"Draft ready to review: {(paper['title'] or '')[:60]}",
+                label = "Draft additions ready" if has_note else "Draft ready to review"
+                notify.add(f"{label}: {(paper['title'] or '')[:60]}",
                            link=f"/c/{slug}/p/{paper_id}", collection=slug)
         except Exception:  # noqa: BLE001
             logging.getLogger("paper_agent.autodraft").exception("autodraft failed")
@@ -2059,11 +2071,22 @@ def paper_autodraft_discard(slug: str, paper_id: int) -> HTMLResponse:
 @app.post("/c/{slug}/p/{paper_id}/autodraft/accept", response_class=HTMLResponse)
 def paper_autodraft_accept(slug: str, paper_id: int, text: str = Form("")) -> HTMLResponse:
     """Accept a staged auto-draft (possibly edited) as the paper's note, then drop the
-    draft. The user reviewed/edited it here, so it's saved as their note."""
+    draft. The user reviewed/edited it here, so it's saved as their note. If a note already
+    exists, the draft is APPENDED field-wise (never overwrites the user's own words)."""
     _require_collection(slug)
     fields = notes_mod._parse_body(text or "")
-    notes_mod.save_note(slug, paper_id, fields.get("summary", ""), fields.get("thoughts", ""),
-                        fields.get("key_quotes", ""), "noted", author_origin="human")
+    existing = notes_mod.get_note(slug, paper_id)
+    has_note = any((existing.get(k) or "").strip()
+                   for k in ("summary", "thoughts", "key_quotes"))
+    if has_note:
+        summary = _append_field(existing.get("summary", ""), fields.get("summary", ""))
+        thoughts = _append_field(existing.get("thoughts", ""), fields.get("thoughts", ""))
+        key_quotes = _append_field(existing.get("key_quotes", ""), fields.get("key_quotes", ""))
+    else:
+        summary, thoughts, key_quotes = (fields.get("summary", ""), fields.get("thoughts", ""),
+                                         fields.get("key_quotes", ""))
+    notes_mod.save_note(slug, paper_id, summary, thoughts, key_quotes, "noted",
+                        author_origin="human")
     note_drafts.delete(slug, paper_id)
     return HTMLResponse("")          # hx-swap removes the card
 
@@ -2075,9 +2098,11 @@ def drafts_review(request: Request) -> HTMLResponse:
     items = []
     for d in note_drafts.list_all():
         p = library.get_paper(d["paper_id"])
+        n = notes_mod.get_note(d["collection_slug"], d["paper_id"])
+        additive = any((n.get(k) or "").strip() for k in ("summary", "thoughts", "key_quotes"))
         items.append({"slug": d["collection_slug"], "paper_id": d["paper_id"],
                       "title": ((p or {}).get("title") or f"paper {d['paper_id']}"),
-                      "draft_md": d["draft_md"]})
+                      "draft_md": d["draft_md"], "additive": additive})
     return templates.TemplateResponse(request, "_drafts_review.html", {"drafts": items})
 
 
@@ -2316,31 +2341,75 @@ def notes_post(
     return RedirectResponse(f"/c/{slug}/p/{paper_id}/notes", status_code=303)
 
 
-def _draft_note_fields(slug: str, paper_id: int, paper_title: str) -> tuple[dict, str | None]:
+def _draft_note_fields(slug: str, paper_id: int, paper_title: str,
+                       existing: dict | None = None) -> tuple[dict, str | None]:
     """Draft note fields from this paper's highlights + its chat history.
 
-    Returns ({summary, thoughts, key_quotes}, error). Never saves.
+    Returns ({summary, thoughts, key_quotes}, error). Never saves. When ``existing`` is a
+    non-empty note, drafts ONLY net-new material the note doesn't already capture (additive
+    mode) — empty fields mean nothing new to add, and ({}, None) is returned if the whole
+    draft would be empty.
     """
     thread_id = get_or_create_thread(slug, paper_id)  # the paper's own thread
     history = get_messages(thread_id, limit=12)
     convo = "\n".join(f"{m['role']}: {m['content']}" for m in history) or "(no chat yet)"
     highlights = context._highlights_block(slug, paper_id) or "(no highlights yet)"
+    has_existing = bool(existing and any((existing.get(k) or "").strip()
+                                         for k in ("summary", "thoughts", "key_quotes")))
+    if has_existing:
+        note_block = notes_mod._serialize_body(existing.get("summary", ""),
+                                               existing.get("thoughts", ""),
+                                               existing.get("key_quotes", ""))
+        system = ("You output only valid JSON with keys summary, thoughts, key_quotes. The "
+                  "user ALREADY has a note on this paper (below). From their highlights and "
+                  "chat, draft ONLY net-new material the existing note does NOT already "
+                  "capture — points to ADD, not a rewrite. Do not repeat or rephrase what's "
+                  "already there; do not invent beyond the highlights/chat. Leave a field as "
+                  '"" if there is nothing new for it.')
+        user = (f"Paper: {paper_title}\n\nEXISTING NOTE:\n{note_block}\n\n"
+                f"Highlights:\n{highlights}\n\nChat:\n{convo}\n\n"
+                'Return only the additions: {"summary": "...", "thoughts": "...", "key_quotes": "- ..."}')
+    else:
+        system = ("You output only valid JSON with keys summary, thoughts, key_quotes. Draft "
+                  "the USER's note from their highlights and chat about this paper; do not "
+                  "invent content beyond them.")
+        user = (f"Paper: {paper_title}\n\nHighlights:\n{highlights}\n\nChat:\n{convo}\n\n"
+                'Return {"summary": "...", "thoughts": "...", "key_quotes": "- ..."}')
     try:
-        resp = llm.complete([
-            {"role": "system", "content": "You output only valid JSON with keys "
-             "summary, thoughts, key_quotes. Draft the USER's note from their "
-             "highlights and chat about this paper; do not invent content beyond them."},
-            {"role": "user", "content":
-             f"Paper: {paper_title}\n\nHighlights:\n{highlights}\n\nChat:\n{convo}\n\n"
-             'Return {"summary": "...", "thoughts": "...", "key_quotes": "- ..."}'},
-        ])
+        resp = llm.complete([{"role": "system", "content": system},
+                             {"role": "user", "content": user}])
         data = json.loads(resp[resp.find("{"): resp.rfind("}") + 1])
-        return ({"summary": data.get("summary", ""), "thoughts": data.get("thoughts", ""),
-                 "key_quotes": data.get("key_quotes", "")}, None)
+        fields = {"summary": data.get("summary", ""), "thoughts": data.get("thoughts", ""),
+                  "key_quotes": data.get("key_quotes", "")}
+        if has_existing and not any((v or "").strip() for v in fields.values()):
+            return ({}, None)            # nothing new to add
+        return (fields, None)
     except llm.LLMError as exc:
         return ({}, str(exc))
     except Exception as exc:  # noqa: BLE001
         return ({}, f"Draft failed: {exc}")
+
+
+def _latest_signal_epoch(slug: str, paper_id: int, thread_id: int) -> float:
+    """Newest chat-message / highlight timestamp for a paper (UTC epoch). The watermark
+    for deciding whether there's new signal since the note was last updated."""
+    con = connect()
+    try:
+        msg = con.execute("SELECT MAX(created_at) AS t FROM chat_messages WHERE thread_id=?",
+                          (thread_id,)).fetchone()["t"]
+        hl = con.execute("SELECT MAX(created_at) AS t FROM annotations WHERE paper_id=? AND "
+                         "collection_slug=?", (paper_id, slug)).fetchone()["t"]
+    finally:
+        con.close()
+    return max(notes_mod._iso_to_epoch(msg), notes_mod._iso_to_epoch(hl))
+
+
+def _append_field(existing: str, addition: str) -> str:
+    """Non-destructively append an addition to an existing note field (blank-line join)."""
+    existing, addition = (existing or "").rstrip(), (addition or "").strip()
+    if not addition:
+        return existing
+    return f"{existing}\n\n{addition}".strip() if existing else addition
 
 
 @app.post("/c/{slug}/p/{paper_id}/notes/draft", response_class=HTMLResponse)
