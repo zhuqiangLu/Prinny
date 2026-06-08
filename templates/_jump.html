@@ -13,25 +13,31 @@
     </div>
     <input x-model="q" x-ref="jumpq" placeholder="Search papers across collections…"
            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400">
-    {# Lightweight filters — current collection only (hidden while searching across collections) #}
-    <div x-show="onCurrent" x-cloak class="flex flex-wrap items-center gap-2 text-xs">
-      <span class="text-slate-400">Filter:</span>
-      <label class="inline-flex items-center gap-1 text-slate-600 cursor-pointer">
-        <input type="checkbox" x-model="unread" class="accent-violet-600"> Unread
-      </label>
-      <template x-if="filterThemes.length">
-        <select x-model="theme" class="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs max-w-[42%] truncate">
-          <option value="">All themes</option>
-          <template x-for="t in filterThemes" :key="t.key"><option :value="t.key" x-text="t.label"></option></template>
-        </select>
-      </template>
-      <template x-if="filterMethods.length">
-        <select x-model="method" class="rounded border border-slate-300 bg-white px-1.5 py-1 text-xs max-w-[42%] truncate">
-          <option value="">All methods</option>
-          <template x-for="m in filterMethods" :key="m.key"><option :value="m.key" x-text="m.label"></option></template>
-        </select>
-      </template>
-      <button type="button" x-show="hasFilter" @click="clearFilters()" class="text-slate-400 hover:text-slate-700">clear</button>
+    {# Lightweight filters — pills, mirroring the Papers tab (current collection only) #}
+    <div x-show="onCurrent" x-cloak class="text-[11px]">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-slate-400 mr-0.5">Filter:</span>
+        <button type="button" @click="clearFilters()" :class="!hasFilter ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
+        <button type="button" @click="unread = !unread" :class="unread ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unread</button>
+        <template x-if="filterThemes.length">
+          <button type="button" @click="dim = dim==='theme' ? '' : 'theme'" :class="(dim==='theme' || theme) ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button>
+        </template>
+        <template x-if="filterMethods.length">
+          <button type="button" @click="dim = dim==='method' ? '' : 'method'" :class="(dim==='method' || method) ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>
+        </template>
+        <span x-show="hasFilter" x-cloak class="text-slate-400">· <button type="button" @click="clearFilters()" class="hover:text-slate-700 underline">clear</button></span>
+      </div>
+      {# chips for the active dimension — click to select/toggle (single-select) #}
+      <div x-show="dim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="t in filterThemes" :key="t.key">
+          <button type="button" @click="theme = theme===t.key ? '' : t.key" :class="theme===t.key ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700" x-text="t.label"></button>
+        </template>
+      </div>
+      <div x-show="dim==='method'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
+        <template x-for="m in filterMethods" :key="m.key">
+          <button type="button" @click="method = method===m.key ? '' : m.key" :class="method===m.key ? 'ring-2 ring-sky-400 bg-sky-100' : 'bg-sky-50 hover:bg-sky-100'" class="rounded px-2 py-0.5 text-sky-700" x-text="m.label"></button>
+        </template>
+      </div>
     </div>
   </div>
 

@@ -494,14 +494,14 @@
         q: "",
         cur: current || "",
         col: current || (groups[0] && groups[0].slug) || "",
-        unread: false, theme: "", method: "",   // current-collection-only filters
+        unread: false, theme: "", method: "", dim: "",   // current-collection-only filters (dim = open chip row)
         get cols() { return this.groups.map((g) => ({ slug: g.slug, name: g.name, current: g.current, count: g.papers.length })); },
         get curGroup() { return this.groups.find((g) => g.slug === this.col); },
         get onCurrent() { return this.col === this.cur && !this.q.trim(); },   // filters apply only here
         get filterThemes() { const g = this.curGroup; return (g && g.themes) || []; },
         get filterMethods() { const g = this.curGroup; return (g && g.methods) || []; },
         get hasFilter() { return this.unread || this.theme || this.method; },
-        clearFilters() { this.unread = false; this.theme = ""; this.method = ""; },
+        clearFilters() { this.unread = false; this.theme = ""; this.method = ""; this.dim = ""; },
         _row(p, g) { return { id: p.id, title: p.title, slug: g.slug, gname: g.name, read: p.read, meta: [p.authors, p.year].filter(Boolean).join(" · ") }; },
         rows() {
           const q = this.q.trim().toLowerCase();
