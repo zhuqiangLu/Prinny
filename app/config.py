@@ -131,11 +131,10 @@ def agent_model() -> str:
 
 # Default PDF-highlight scheme (user-editable in Settings). color + short legend label.
 DEFAULT_HIGHLIGHT_SCHEME = [
-    {"color": "#ffd400", "label": "core claim"},
-    {"color": "#6fb3ff", "label": "evidence"},
-    {"color": "#5fd35f", "label": "understood"},
-    {"color": "#ff8fc7", "label": "confusing"},
-    {"color": "#ffb84d", "label": "connection"},
+    {"color": "#ffd400", "label": "methodology"},
+    {"color": "#6fb3ff", "label": "insight"},
+    {"color": "#ff0000", "label": "limitation"},
+    {"color": "#00e1ff", "label": "interesting"},
 ]
 
 
