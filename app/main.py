@@ -1378,6 +1378,16 @@ def wiki_papers_remove(request: Request, slug: str, paper_ids: list[int] = Form(
     return _wiki_panel(request, slug)
 
 
+@app.post("/c/{slug}/wiki/papers/important", response_class=HTMLResponse)
+def wiki_paper_important(request: Request, slug: str, paper_id: int = Form(...)) -> HTMLResponse:
+    """Toggle a paper's 'core focus' flag and re-render. Flagged papers get full PDF excerpts
+    and are named to the agent as core, so a (re)generated field model orbits around them."""
+    _require_collection(slug)
+    p = library.get_collection_paper(slug, paper_id)
+    library.set_important(slug, paper_id, not (p and p.get("important")))
+    return _wiki_panel(request, slug)
+
+
 def _tags_editor(request: Request, slug: str, paper_id: int) -> HTMLResponse:
     """The per-paper tag editor body: concept/method/problem entities with the paper's current
     membership checked. Toggling persists an override (build_collection_graph applies it)."""

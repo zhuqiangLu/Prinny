@@ -682,6 +682,7 @@ def _decorate_paper(d: dict) -> dict:
     """Add the derived UI fields a paper row needs (PDF availability + live download state)."""
     d["has_pdf"] = _has_pdf(d)
     d["read"] = bool(d.get("read_at"))
+    d["important"] = bool(d.get("important"))
     d["fetching"] = pdf_store.is_fetching(d["id"])
     d["failed"] = pdf_store.download_failed(d["id"])
     d["pct"] = pdf_store.download_percent(d["id"])
@@ -695,7 +696,7 @@ def get_collection_paper(slug: str, paper_id: int) -> dict | None:
         r = con.execute(
             """SELECT p.id, p.title, p.authors, p.year, p.origin, p.sync_status,
                       p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id, p.added_at,
-                      cp.source_flag, cp.read_at
+                      cp.source_flag, cp.read_at, cp.important
                FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
                WHERE cp.collection_slug=? AND cp.paper_id=?""",
             (slug, paper_id),
@@ -722,7 +723,7 @@ def list_papers(slug: str) -> list[dict]:
             """
             SELECT p.id, p.title, p.authors, p.year, p.origin, p.sync_status,
                    p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id, p.added_at,
-                   cp.source_flag, cp.read_at
+                   cp.source_flag, cp.read_at, cp.important
             FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
             WHERE cp.collection_slug = ?
               AND NOT EXISTS (SELECT 1 FROM pending_removals pr
@@ -939,6 +940,29 @@ def mark_read(slug: str, paper_ids: list[int], read: bool = True) -> None:
         con.commit()
     finally:
         con.close()
+
+
+def set_important(slug: str, paper_id: int, important: bool) -> None:
+    """Flag/unflag a paper as a 'core focus' in this collection (the field model orbits
+    around flagged papers; they get full PDF excerpts + are named as core to the agent)."""
+    con = connect()
+    try:
+        con.execute("UPDATE collection_papers SET important=? WHERE collection_slug=? AND paper_id=?",
+                    (1 if important else 0, slug, paper_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def important_ids(slug: str) -> set:
+    """Paper ids flagged important in this collection."""
+    con = connect()
+    try:
+        rows = con.execute("SELECT paper_id FROM collection_papers WHERE collection_slug=? "
+                           "AND important=1", (slug,)).fetchall()
+    finally:
+        con.close()
+    return {r["paper_id"] for r in rows}
 
 
 def log_open(slug: str, paper_id: int, cap: int = 100) -> None:

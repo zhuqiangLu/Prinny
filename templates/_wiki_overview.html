@@ -958,6 +958,7 @@
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
                  class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
           <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
+          {% if p.important %}<span class="text-[10px]" title="Core focus — the wiki orbits around this paper">⭐</span>{% endif %}
           {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
           {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
           <form hx-post="/c/{{ slug }}/wiki/paper/{{ p.id }}/toggle-read" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
@@ -979,6 +980,10 @@
          :style="`top:${ctx.y}px; left:${Math.min(ctx.x, window.innerWidth-200)}px`"
          class="fixed z-50 w-48 rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-sm">
       <a :href="`/c/{{ slug }}/p/${ctx.pid}`" class="block px-3 py-1.5 hover:bg-slate-50 text-slate-700">▤ Open paper</a>
+      <form hx-post="/c/{{ slug }}/wiki/papers/important" hx-target="#left-panel" hx-swap="innerHTML" @submit="ctx.open=false">
+        <input type="hidden" name="paper_id" :value="ctx.pid">
+        <button class="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-slate-700">⭐ Toggle core focus</button>
+      </form>
       <button type="button" @click="editTags()" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700">◈ Edit tags…</button>
       <form hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML"
             @submit="ctx.open=false" onsubmit="return confirm('Remove this paper from the collection? (restorable from the graveyard)')">

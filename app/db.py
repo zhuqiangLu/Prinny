@@ -501,6 +501,8 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE collection_papers ADD COLUMN read_at TIMESTAMP")
         if "tags" not in cpcols:
             con.execute("ALTER TABLE collection_papers ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+        if "important" not in cpcols:        # researcher-flagged "core focus" papers
+            con.execute("ALTER TABLE collection_papers ADD COLUMN important INTEGER NOT NULL DEFAULT 0")
     if "papers" in tables:
         pcols = {r[1] for r in con.execute("PRAGMA table_info(papers)")}
         if "openreview_id" not in pcols:

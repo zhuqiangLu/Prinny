@@ -439,17 +439,24 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
     without a cached PDF are abstract-only. No paper is silently dropped (the count + total
     budget only bite on very large collections). Returns ``(digest, included_refs, pdf_refs)``;
     marked per-paper so the skill knows which cards must leave mechanism/evidence empty."""
-    ranked = sorted(papers, key=lambda p: (0 if p.get("pdf_excerpt") else 1))[:_OVERVIEW_MAX_PAPERS]
-    n_pdf = sum(1 for p in ranked if p.get("pdf_excerpt"))
-    # Adaptive per-paper excerpt: divide the PDF budget across PDF-equipped papers.
-    per_pdf = (max(_OVERVIEW_PDF_FLOOR, min(_OVERVIEW_PDF_CHARS, _OVERVIEW_PDF_BUDGET // n_pdf))
-               if n_pdf else _OVERVIEW_PDF_CHARS)
+    # Researcher-flagged 'core focus' papers sort first (so they survive the budget) and get
+    # the FULL excerpt; everyone else shares the remaining PDF budget adaptively.
+    ranked = sorted(papers, key=lambda p: (0 if p.get("important") else 1,
+                                           0 if p.get("pdf_excerpt") else 1))[:_OVERVIEW_MAX_PAPERS]
+    n_imp_pdf = sum(1 for p in ranked if p.get("important") and p.get("pdf_excerpt"))
+    n_oth_pdf = sum(1 for p in ranked if not p.get("important") and p.get("pdf_excerpt"))
+    rem = max(0, _OVERVIEW_PDF_BUDGET - n_imp_pdf * _OVERVIEW_PDF_CHARS)
+    per_other = (max(_OVERVIEW_PDF_FLOOR, min(_OVERVIEW_PDF_CHARS, rem // n_oth_pdf))
+                 if n_oth_pdf else _OVERVIEW_PDF_CHARS)
     blocks, used = [], 0
     included, pdf_refs = [], set()
     for p in ranked:
         ab = (p.get("abstract") or "").strip()[:_OVERVIEW_ABSTRACT_CHARS]
+        per_pdf = _OVERVIEW_PDF_CHARS if p.get("important") else per_other
         exc = (p.get("pdf_excerpt") or "")[:per_pdf]
-        parts = [f"[{p['ref']}] {p['title']}"]
+        core = "  (CORE — the researcher flagged this as central; orient the model around it)" \
+            if p.get("important") else ""
+        parts = [f"[{p['ref']}] {p['title']}{core}"]
         if ab:
             parts.append(f"Abstract: {ab}")
         if exc:
@@ -1636,6 +1643,11 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
     stage("gathering")
     papers = _collection_abstracts(slug)
     with_abs = [p for p in papers if p["abstract"]]
+    from . import library as _lib
+    _imp_ids = _lib.important_ids(slug)
+    for p in with_abs:
+        p["important"] = p["id"] in _imp_ids
+    _core_titles = [p["title"] for p in with_abs if p.get("important")]
 
     if incremental:
         # Fold ONLY papers added since the last draft into the EXISTING model — cheap, and it
@@ -1706,6 +1718,16 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
             "These are passages they highlighted / wrote. Make sure your concepts COVER these "
             "themes, and include the researcher's own wording (key noun phrases below) in the "
             "relevant concept's `synonyms` so their attention keeps matching:\n" + _att + "\n")
+    # Core-focus papers: the researcher flagged these as central, so the whole model should
+    # orbit them — the thesis is told to take its center of gravity from them, and the
+    # landscape to lead with what they establish.
+    if _core_titles:
+        user_content += (
+            "\n\n=== CORE-FOCUS PAPERS (researcher-flagged — the model must orbit these) ===\n"
+            "Treat these as the collection's center of gravity: anchor the Thesis on what they "
+            "argue, and let the Landscape lead with the problems/methods THEY establish. Don't "
+            "let abstract-only papers outweigh them; don't omit them:\n"
+            + "\n".join(f"- {t}" for t in _core_titles) + "\n")
     msgs = [{"role": "system", "content": system},
             {"role": "user", "content": user_content}]
     # The field-model agent is non-deterministic — a run occasionally returns prose
@@ -2508,11 +2530,12 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
             "is_hot": hot_threshold is not None and score >= hot_threshold,
             "is_new": pid in changed,
             "read": bool(p.get("read")),
+            "important": bool(p.get("important")),
             "tags": paper_tags.get(pid, []),
         })
-    # Stable sort: attended papers float to the top of the evidence row; zeros
-    # preserve DB order (which is title-sorted from library.list_papers).
-    papers.sort(key=lambda p: -p["attention_score"])
+    # Core-focus papers float to the very top, then attended papers; zeros preserve DB order
+    # (title-sorted from library.list_papers).
+    papers.sort(key=lambda p: (0 if p["important"] else 1, -p["attention_score"]))
 
     meta_out = {
         "generated_at": thesis_meta.get("generated_at"),
