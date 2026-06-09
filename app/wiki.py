@@ -425,31 +425,34 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
 # abstract-only papers get the smaller abstract slot. _OVERVIEW_TOTAL_BUDGET keeps
 # the whole prompt within a single Opus/Sonnet call.
 _OVERVIEW_MAX_PAPERS = 150       # only bites on very large collections
-_OVERVIEW_PDF_CHARS = 2000
+_OVERVIEW_PDF_CHARS = 2000       # max PDF excerpt per paper (also the fetch cap)
+_OVERVIEW_PDF_FLOOR = 700        # min PDF excerpt per paper before falling to abstract-only
 _OVERVIEW_ABSTRACT_CHARS = 900
-_OVERVIEW_PDF_BUDGET = 80000     # full PDF excerpts until this much input is used…
-_OVERVIEW_TOTAL_BUDGET = 150000  # …then EVERY remaining paper is included abstract-only
+_OVERVIEW_PDF_BUDGET = 80000     # PDF-excerpt chars shared across ALL PDF-equipped papers
+_OVERVIEW_TOTAL_BUDGET = 150000  # hard ceiling (huge collections only)
 
 
 def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
-    """Build the LLM input from the collection's papers. Tiered so NO paper is silently
-    dropped: PDF-equipped papers get full excerpts until the PDF sub-budget is spent, then
-    every remaining paper is included abstract-only (cheap) up to the total budget. Returns
-    ``(digest, included_refs, pdf_refs)``. Marked per-paper so the skill knows which cards
-    must leave mechanism/evidence/limitation empty."""
-    # PDF-equipped first (richer evidence), then abstract-only; the cap only bites on huge
-    # collections — the budgets, not the count, are the usual limiter.
+    """Build the LLM input from the collection's papers. EVERY PDF-equipped paper gets a PDF
+    excerpt — the PDF budget is split across them, so the per-paper size shrinks as the
+    collection grows (capped at _OVERVIEW_PDF_CHARS, floored at _OVERVIEW_PDF_FLOOR); papers
+    without a cached PDF are abstract-only. No paper is silently dropped (the count + total
+    budget only bite on very large collections). Returns ``(digest, included_refs, pdf_refs)``;
+    marked per-paper so the skill knows which cards must leave mechanism/evidence empty."""
     ranked = sorted(papers, key=lambda p: (0 if p.get("pdf_excerpt") else 1))[:_OVERVIEW_MAX_PAPERS]
+    n_pdf = sum(1 for p in ranked if p.get("pdf_excerpt"))
+    # Adaptive per-paper excerpt: divide the PDF budget across PDF-equipped papers.
+    per_pdf = (max(_OVERVIEW_PDF_FLOOR, min(_OVERVIEW_PDF_CHARS, _OVERVIEW_PDF_BUDGET // n_pdf))
+               if n_pdf else _OVERVIEW_PDF_CHARS)
     blocks, used = [], 0
     included, pdf_refs = [], set()
     for p in ranked:
         ab = (p.get("abstract") or "").strip()[:_OVERVIEW_ABSTRACT_CHARS]
-        exc = p.get("pdf_excerpt") or ""
-        use_pdf = bool(exc) and used < _OVERVIEW_PDF_BUDGET     # depth until the PDF budget
+        exc = (p.get("pdf_excerpt") or "")[:per_pdf]
         parts = [f"[{p['ref']}] {p['title']}"]
         if ab:
             parts.append(f"Abstract: {ab}")
-        if use_pdf:
+        if exc:
             parts.append(f"PDF excerpt:\n{exc}")
             parts.append("(HAS_PDF_EXCERPT — mechanism/evidence/limitation are fair game.)")
         else:
@@ -460,7 +463,7 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
         blocks.append(block)
         used += len(block)
         included.append(p["ref"])
-        if use_pdf:
+        if exc:
             pdf_refs.add(p["ref"])
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
