@@ -1756,6 +1756,26 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
     if field is None:
         return False
 
+    # Incremental: the fed-back model text carries landscape item NAMES but not their paper
+    # refs, so the agent can only re-cite the NEW papers — a kept problem/method would lose its
+    # old members (concepts survive via synonym match; methods/problems don't). Union the
+    # previous landscape's papers back into items kept by name, so a fold-in never drops papers.
+    if incremental:
+        _old_ls = _load_landscape(slug)
+
+        def _norm_item(it):
+            return (((it.get("name") or it.get("text") or "") if isinstance(it, dict)
+                     else str(it)).lower().strip())
+
+        for _col in ("problems", "methods"):
+            _old_by = {}
+            for _it in (_old_ls.get(_col) or []):
+                if isinstance(_it, dict) and _it.get("papers"):
+                    _old_by.setdefault(_norm_item(_it), set()).update(_it["papers"])
+            for _it in (field["landscape"].get(_col) or []):
+                if isinstance(_it, dict) and _old_by.get(_norm_item(_it)):
+                    _it["papers"] = sorted(set(_it.get("papers") or []) | _old_by[_norm_item(_it)])
+
     # --- Write the section files atomically ----------------------------------
     # Three files: thesis.md, landscape.md (+ landscape.json), concepts.json.
     stage("writing", pages_done=0, pages_total=3)
