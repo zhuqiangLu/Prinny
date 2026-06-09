@@ -424,40 +424,43 @@ def _validate_field_model(data: dict, valid_refs: set | None = None) -> dict:
 # Per-paper char caps for the digest. Papers with PDFs get the bigger excerpt slot;
 # abstract-only papers get the smaller abstract slot. _OVERVIEW_TOTAL_BUDGET keeps
 # the whole prompt within a single Opus/Sonnet call.
-_OVERVIEW_MAX_PAPERS = 40
+_OVERVIEW_MAX_PAPERS = 150       # only bites on very large collections
 _OVERVIEW_PDF_CHARS = 2000
 _OVERVIEW_ABSTRACT_CHARS = 900
-_OVERVIEW_TOTAL_BUDGET = 80000
+_OVERVIEW_PDF_BUDGET = 80000     # full PDF excerpts until this much input is used…
+_OVERVIEW_TOTAL_BUDGET = 150000  # …then EVERY remaining paper is included abstract-only
 
 
 def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
-    """Build the LLM input from the collection's papers. Always includes PDF excerpts
-    where cached (the user's accepted 'Always-Deepen-on-import' default, 2026-05-29).
-    Returns ``(digest, included_refs, pdf_refs)``. Papers with PDFs are preferred when
-    capping; abstract-only papers fill the remaining budget. Marked clearly per-paper
-    so the skill knows which cards must leave mechanism/evidence/limitation empty."""
-    # Score: PDF-equipped first (so the agent sees richer evidence), then abstract-only.
+    """Build the LLM input from the collection's papers. Tiered so NO paper is silently
+    dropped: PDF-equipped papers get full excerpts until the PDF sub-budget is spent, then
+    every remaining paper is included abstract-only (cheap) up to the total budget. Returns
+    ``(digest, included_refs, pdf_refs)``. Marked per-paper so the skill knows which cards
+    must leave mechanism/evidence/limitation empty."""
+    # PDF-equipped first (richer evidence), then abstract-only; the cap only bites on huge
+    # collections — the budgets, not the count, are the usual limiter.
     ranked = sorted(papers, key=lambda p: (0 if p.get("pdf_excerpt") else 1))[:_OVERVIEW_MAX_PAPERS]
     blocks, used = [], 0
     included, pdf_refs = [], set()
     for p in ranked:
         ab = (p.get("abstract") or "").strip()[:_OVERVIEW_ABSTRACT_CHARS]
         exc = p.get("pdf_excerpt") or ""
+        use_pdf = bool(exc) and used < _OVERVIEW_PDF_BUDGET     # depth until the PDF budget
         parts = [f"[{p['ref']}] {p['title']}"]
         if ab:
             parts.append(f"Abstract: {ab}")
-        if exc:
+        if use_pdf:
             parts.append(f"PDF excerpt:\n{exc}")
             parts.append("(HAS_PDF_EXCERPT — mechanism/evidence/limitation are fair game.)")
         else:
-            parts.append("(ABSTRACT_ONLY — no PDF was supplied; leave mechanism/evidence/limitation empty for this paper.)")
+            parts.append("(ABSTRACT_ONLY — no PDF excerpt here; leave mechanism/evidence/limitation empty for this paper.)")
         block = "\n".join(parts)
         if blocks and used + len(block) > _OVERVIEW_TOTAL_BUDGET:
-            break
+            break                        # truly out of room (very large collections only)
         blocks.append(block)
         used += len(block)
         included.append(p["ref"])
-        if exc:
+        if use_pdf:
             pdf_refs.add(p["ref"])
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
