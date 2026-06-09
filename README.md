@@ -10,9 +10,9 @@
 
 
 **Key Feature**
-* Automatically synthesize a paper reading note for each paper, based on your highlights, chat history
+* You read paper, agent organize your highlights
 * Continuously update your wiki based on your understanding
-* Paper search for similar topic, method, concept and etc.
+* Find the papers best match for your interest
   
 
 **TODO**  
