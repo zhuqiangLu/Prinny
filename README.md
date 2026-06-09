@@ -8,6 +8,13 @@
 > review and accept**. You do the reading; the tool helps you organize what you wrote and
 > surfaces gaps.
 
+
+**Key Feature**
+* Automatically synthesize a paper reading note for each paper, based on your highlights, chat history
+* Continuously update your wiki based on your understanding
+* Paper search for similar topic, method, concept and etc.
+  
+
 **TODO**  
 
  - [ ] link experiment to coding agent
