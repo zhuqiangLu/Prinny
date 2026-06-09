@@ -10,7 +10,7 @@
 
 
 **Key Feature**
-* You read paper, agent organize your highlights
+* You read papers, agents organize your highlights and ideas
 * Continuously update your wiki based on your understanding
 * Find the papers best match for your interest
   
