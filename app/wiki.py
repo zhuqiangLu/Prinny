@@ -3059,8 +3059,9 @@ def _entity_reviews_path(slug: str) -> Path:
 
 
 def update_available(slug: str) -> bool:
-    """True if there's attention signal (a highlight or note) newer than the field model —
-    so the Regenerate button can read 'Update wiki' (you have new signal to fold in)."""
+    """True when the field model is stale: either there's attention signal (a highlight or
+    note) newer than it, OR papers were added since it was drafted (live count > the
+    paper_count it was generated from). Drives the 'Update wiki' button label."""
     if not _thesis_path(slug).is_file():
         return False
     try:
@@ -3076,8 +3077,16 @@ def update_available(slug: str) -> bool:
                         (slug,)).fetchone()[0]
         n = con.execute("SELECT MAX(updated_at) FROM paper_notes WHERE collection_slug=?",
                         (slug,)).fetchone()[0]
+        live_papers = con.execute("SELECT COUNT(*) FROM collection_papers WHERE collection_slug=?",
+                                  (slug,)).fetchone()[0]
     finally:
         con.close()
+    try:
+        drafted_from = int(meta.get("paper_count") or 0)
+    except (TypeError, ValueError):
+        drafted_from = 0
+    if drafted_from and live_papers > drafted_from:   # papers added since the last draft
+        return True
     latest = max([str(x)[:19] for x in (a, n) if x] or [""])
     return bool(latest) and latest > gen
 

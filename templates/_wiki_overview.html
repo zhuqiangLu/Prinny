@@ -54,6 +54,8 @@
     <span>AI-drafted Field Model — the orientation layer of your wiki.
       {% if overview.meta and overview.meta.pdfs_read is defined and overview.meta.paper_count is defined %}
       <span class="text-violet-500">(from {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts.)</span>
+      {% set _added = (overview.papers|length) - (overview.meta.paper_count|int) %}
+      {% if _added > 0 %}<span class="text-amber-700 font-medium">· {{ _added }} paper{{ 's' if _added != 1 }} added since — Update wiki to fold them in.</span>{% endif %}
       {% endif %}
     </span>
     <div class="ml-auto flex items-center gap-2">
