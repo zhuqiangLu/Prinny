@@ -2784,14 +2784,13 @@ def wiki_panel(request: Request, slug: str) -> HTMLResponse:
 
 
 @app.post("/c/{slug}/wiki/draft", response_class=HTMLResponse)
-def wiki_draft_seed(request: Request, slug: str) -> HTMLResponse:
-    """Kick off the starter-wiki draft on a background daemon thread and re-render
-    the panel immediately. The new panel renders the in-progress overlay (because
-    wiki.get_draft_job(slug) now returns status='running'); the overlay's polling
-    script handles refresh on completion. Last-viewed isn't bumped here, so the
-    badge state survives this re-render."""
+def wiki_draft_seed(request: Request, slug: str, mode: str = Form("full")) -> HTMLResponse:
+    """Kick off the field-model draft on a background daemon thread and re-render the panel
+    immediately. mode='incremental' folds new papers/signal into the existing model;
+    'full' rebuilds from scratch. The new panel renders the in-progress overlay; the
+    overlay's polling refreshes on completion."""
     _require_collection(slug)
-    wiki.start_draft_async(slug, force=True)
+    wiki.start_draft_async(slug, force=True, mode=(mode if mode == "incremental" else "full"))
     return _wiki_panel(request, slug)
 
 
@@ -2840,6 +2839,7 @@ def _regen_gate(request: Request, slug: str) -> HTMLResponse:
         "candidates": wiki.list_belief_candidates(slug),
         "accepted": wiki.list_accepted_beliefs(slug),
         "can_suggest": wiki.can_suggest_beliefs(slug),
+        "has_model": wiki._has_field_model(slug),
     })
 
 

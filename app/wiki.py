@@ -465,6 +465,74 @@ def _overview_digest(papers: list[dict]) -> tuple[str, set[str], set[str]]:
     return "\n\n---\n\n".join(blocks), set(included), pdf_refs
 
 
+# --- Incremental ("Update wiki") helpers -----------------------------------
+_FIELD_MODEL_UPDATE_PREAMBLE = (
+    "UPDATE MODE. Below is the collection's CURRENT Field Model, followed by the NEW papers "
+    "added since it was drafted. Produce the UPDATED Field Model in the SAME JSON shape — do "
+    "NOT start over from the new papers alone. Rules:\n"
+    "- Keep existing thesis + landscape items unless the new papers genuinely change the "
+    "picture; fold new papers into existing problems/methods/debates/open_questions, and add "
+    "a new item only when it doesn't fit one. Respect the per-column cap (<=6): if a column is "
+    "full, MERGE or REPLACE the weakest item — re-cluster, don't just append.\n"
+    "- Preserve concept names already present; add a concept only for a genuinely new idea.\n"
+    "- The thesis must still read as one coherent paragraph over the WHOLE collection, not a "
+    "changelog of the new papers.")
+
+
+def _thesis_generated_at(slug: str) -> str:
+    """The field model's generated_at as a comparable 'YYYY-MM-DD HH:MM:SS' (or '')."""
+    try:
+        meta, _ = frontmatter.parse(_thesis_path(slug).read_text(encoding="utf-8"))
+    except OSError:
+        return ""
+    return str(meta.get("generated_at") or "").replace("T", " ")[:19]
+
+
+def _papers_added_since(slug: str, gen_at: str) -> set:
+    """Paper ids added to the collection after the field model was drafted."""
+    if not gen_at:
+        return set()
+    con = connect()
+    try:
+        rows = con.execute("SELECT paper_id FROM collection_papers WHERE collection_slug=? "
+                           "AND added_at > ?", (slug, gen_at)).fetchall()
+    finally:
+        con.close()
+    return {r["paper_id"] for r in rows}
+
+
+def _field_model_as_text(slug: str) -> str:
+    """Compact text of the current Field Model (thesis callouts + landscape columns + concept
+    names) — fed back to the agent so an incremental update extends it instead of restarting."""
+    parts = ["=== CURRENT FIELD MODEL (update this; don't restart) ==="]
+    try:
+        _, tb = frontmatter.parse(_thesis_path(slug).read_text(encoding="utf-8"))
+        th = _parse_thesis_body(tb)
+        if th.get("one_paragraph"):
+            parts.append("THESIS: " + th["one_paragraph"])
+        for k in ("core_tension", "key_intuition", "central_question"):
+            if th.get(k):
+                parts.append(f"{k}: {th[k]}")
+    except Exception:  # noqa: BLE001
+        pass
+    ls = _load_landscape(slug)
+    for col in ("problems", "methods", "debates", "open_questions"):
+        items = ls.get(col) or []
+        if not items:
+            continue
+        labels = [((it.get("name") or it.get("text") or "") if isinstance(it, dict) else str(it))
+                  for it in items]
+        parts.append(col.upper() + ":\n" + "\n".join(f"- {x}" for x in labels if x))
+    try:
+        cons = (json.loads(_concepts_path(slug).read_text(encoding="utf-8")).get("concepts") or [])
+        names = [c.get("name", "") for c in cons if c.get("name")]
+        if names:
+            parts.append("CONCEPTS: " + ", ".join(names))
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n\n".join(parts)
+
+
 def _wipe_sections_tree(slug: str) -> None:
     """Remove the previous Field Model tree before a regenerate. Only touches
     wiki/sections/ — legacy wiki/starter/ and wiki/<section>/* are not touched
@@ -1529,7 +1597,7 @@ def start_reading_async(slug: str, purpose: str = "related", target: str = "",
     return True
 
 
-def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
+def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str = "full") -> bool:
     """Generate the Field Model (Stage 0 of the cognitive-model wiki, 2026-05-31).
 
     One-shot pipeline:
@@ -1554,31 +1622,67 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
             except Exception:  # noqa: BLE001
                 pass
 
-    if _has_field_model(slug) and not force:
+    from . import agent_skills
+    incremental = mode == "incremental" and _has_field_model(slug)
+    if _has_field_model(slug) and not force and not incremental:
         return False
+    _skill = (agent_skills.skill_body("field-model")
+              or "Output JSON: {thesis:{one_paragraph,core_tension,key_intuition,central_question}, landscape:{problems[],methods[],debates[],open_questions[]}}.")
 
     # --- Gather + read PDFs (real progress) -----------------------------------
     stage("gathering")
     papers = _collection_abstracts(slug)
     with_abs = [p for p in papers if p["abstract"]]
-    total = len(with_abs)
-    for i, p in enumerate(with_abs):
-        stage("reading_pdfs", pdfs_done=i, pdfs_total=total)
-        p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
-    stage("reading_pdfs", pdfs_done=total, pdfs_total=total)
-    digest, included_refs, pdf_refs = _overview_digest(with_abs)
-    if not digest.strip():
-        return False
+
+    if incremental:
+        # Fold ONLY papers added since the last draft into the EXISTING model — cheap, and it
+        # preserves the structure the agent (and your edits) already shaped. The model still
+        # spans the whole collection, so validate against all refs.
+        new_ids = _papers_added_since(slug, _thesis_generated_at(slug))
+        targets = [p for p in with_abs if p["id"] in new_ids]
+        total = len(targets)
+        for i, p in enumerate(targets):
+            stage("reading_pdfs", pdfs_done=i, pdfs_total=total)
+            p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
+        stage("reading_pdfs", pdfs_done=total, pdfs_total=total)
+        new_digest, _new_refs, new_pdf_refs = _overview_digest(targets)
+        if not new_digest.strip() and not _attention_excerpts(slug):
+            return False                          # nothing new to fold in
+        valid_refs = set(_ref_map(slug).keys())   # the model may cite ANY paper (all refs)
+        con = connect()
+        try:                                       # paper_count = live distinct papers
+            n_papers = con.execute("SELECT COUNT(*) FROM collection_papers WHERE collection_slug=?",
+                                   (slug,)).fetchone()[0]
+        finally:
+            con.close()
+        system = _skill + "\n\n" + _FIELD_MODEL_UPDATE_PREAMBLE
+        user_content = (_field_model_as_text(slug)
+                        + "\n\n=== NEW PAPERS added since the model above ===\n\n" + new_digest)
+        try:                                      # banner: PDFs the model has seen ≈ prior + new
+            _pm, _ = frontmatter.parse(_thesis_path(slug).read_text(encoding="utf-8"))
+            pdf_read_count = int(_pm.get("pdfs_read") or 0) + len(new_pdf_refs)
+        except Exception:  # noqa: BLE001
+            pdf_read_count = len(new_pdf_refs)
+    else:
+        total = len(with_abs)
+        for i, p in enumerate(with_abs):
+            stage("reading_pdfs", pdfs_done=i, pdfs_total=total)
+            p["pdf_excerpt"] = _pdf_excerpt(p["id"], max_chars=_OVERVIEW_PDF_CHARS)
+        stage("reading_pdfs", pdfs_done=total, pdfs_total=total)
+        digest, included_refs, pdf_refs = _overview_digest(with_abs)
+        if not digest.strip():
+            return False
+        valid_refs = included_refs
+        n_papers = len(included_refs)
+        system = _skill
+        user_content = "Papers:\n\n" + digest
+        pdf_read_count = len(pdf_refs)
 
     # --- One LLM call for the whole Field Model ------------------------------
-    stage("drafting", paper_count=len(included_refs), pdfs_read=len(pdf_refs))
-    from . import agent_skills
-    system = (agent_skills.skill_body("field-model")
-              or "Output JSON: {thesis:{one_paragraph,core_tension,key_intuition,central_question}, landscape:{problems[],methods[],debates[],open_questions[]}}.")
+    stage("drafting", paper_count=n_papers, pdfs_read=pdf_read_count)
     # Fold in the researcher's accepted beliefs so a regenerate ORIENTS the thesis +
     # landscape around the user's stated focus (the wiki is their understanding, papers
     # are evidence). User-owned signal, so it's legitimate to foreground — not invent.
-    user_content = "Papers:\n\n" + digest
     _accepted = list_accepted_beliefs(slug)
     if _accepted:
         _focus = "\n".join(f"- {b['title']} (confidence: {b.get('confidence', 'emerging')})"
@@ -1617,7 +1721,7 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
             logger.warning("field-model output didn't parse to JSON (attempt %d) for %s; "
                            "raw len=%d, head=%r", attempt, slug, len(out or ""), (out or "")[:200])
             continue
-        cand = _validate_field_model(data, valid_refs=included_refs)
+        cand = _validate_field_model(data, valid_refs=valid_refs)
         # Accept once the thesis paragraph or any landscape column is populated.
         if cand["thesis"]["one_paragraph"] or any(cand["landscape"].values()):
             field = cand
@@ -1638,9 +1742,9 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
         _old_concepts = []
     _wipe_sections_tree(slug)
     _sections_dir(slug).mkdir(parents=True, exist_ok=True)
-    meta_extra = {"paper_count": len(included_refs),
-                  "pdfs_read": len(pdf_refs),
-                  "pdfs_missing": len(included_refs) - len(pdf_refs)}
+    meta_extra = {"paper_count": n_papers,
+                  "pdfs_read": pdf_read_count,
+                  "pdfs_missing": max(0, n_papers - pdf_read_count)}
     _write_thesis_page(slug, field["thesis"], meta_extra)
     stage("writing", pages_done=1, pages_total=3)
     _write_landscape_page(slug, field["landscape"], meta_extra)
@@ -1649,9 +1753,9 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None) -> bool:
     _carried = carry_concept_synonyms(_old_concepts, field["concepts"])
     _write_concepts_file(slug, merge_user_concepts(kept_concepts, _carried))
     stage("writing", pages_done=3, pages_total=3)
-    _append_log(slug, f"generated field model "
-                       f"({len(pdf_refs)}/{len(included_refs)} PDFs, "
-                       f"{len(field['concepts'])} concepts)", digest)
+    _append_log(slug, f"{'updated' if incremental else 'generated'} field model "
+                       f"({pdf_read_count}/{n_papers} PDFs, "
+                       f"{len(field['concepts'])} concepts)", user_content)
     # Name the structural themes now (one extra LLM call, folded into this
     # already-explicit regen) so they're labelled by default — no separate
     # "Name themes" button. Failure here doesn't fail the regen.
@@ -2001,10 +2105,10 @@ def _stage_progress(job: dict) -> int:
     return 0
 
 
-def start_draft_async(slug: str, force: bool = True) -> bool:
-    """Kick off the starter-wiki draft on a daemon thread. Returns True if a job was
-    started, False if one was already running for this slug. The thread updates
-    _DRAFT_JOBS as the pipeline advances; UI polls get_draft_job for the live state."""
+def start_draft_async(slug: str, force: bool = True, mode: str = "full") -> bool:
+    """Kick off the field-model draft on a daemon thread. ``mode='incremental'`` folds new
+    papers/signal into the existing model (cheap, structure-preserving); ``'full'`` rebuilds
+    from scratch. Returns True if a job was started, False if one was already running."""
     existing = get_draft_job(slug)
     if existing and existing.get("status") == "running":
         return False
@@ -2017,7 +2121,7 @@ def start_draft_async(slug: str, force: bool = True) -> bool:
 
     def runner():
         try:
-            ok = generate_overview(slug, force=force, stage_cb=cb)
+            ok = generate_overview(slug, force=force, stage_cb=cb, mode=mode)
             if ok:
                 # Refresh per-entity reviews against the regenerated entity set.
                 try:
@@ -3090,7 +3194,9 @@ def update_available(slug: str) -> bool:
         drafted_from = 0
     if drafted_from and live_papers > drafted_from:   # papers added since the last draft
         return True
-    latest = max([str(x)[:19] for x in (a, n) if x] or [""])
+    # Normalize separators: notes store 'YYYY-MM-DDTHH:MM:SS' (T) while annotations + `gen`
+    # use a space — and 'T' > ' ' in ASCII, so a naive string compare reads any note as newer.
+    latest = max([str(x)[:19].replace("T", " ") for x in (a, n) if x] or [""])
     return bool(latest) and latest > gen
 
 

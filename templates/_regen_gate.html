@@ -40,12 +40,29 @@
   <p class="text-xs text-slate-400 mb-4 italic">No accepted beliefs yet — the regen will draft from your notes, thoughts, and papers as usual.</p>
   {% endif %}
 
-  <div class="flex items-center gap-2 border-t border-slate-100 pt-3">
+  <div class="flex items-center gap-2 border-t border-slate-100 pt-3 flex-wrap">
+    {% if has_model %}
+    {# Incremental: fold new papers + signal into the existing model (keeps your edits) #}
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
-      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">↻ Regenerate now</button>
+      <input type="hidden" name="mode" value="incremental">
+      <button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700"
+              title="Fold the new papers and your recent highlights/notes into the current model — keeps its structure and your edits">✦ Update — fold in new</button>
     </form>
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" @submit="regenOpen = false">
+      <input type="hidden" name="mode" value="full">
+      <button class="rounded border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-sm hover:bg-slate-50"
+              title="Re-cluster the whole collection from scratch — discards the current structure">↻ Rebuild from scratch</button>
+    </form>
+    {% else %}
+    <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
+          hx-disabled-elt="find button" @submit="regenOpen = false">
+      <input type="hidden" name="mode" value="full">
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">✦ Generate Field Model</button>
+    </form>
+    {% endif %}
     <button type="button" @click="regenOpen = false" class="text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-    <span class="ml-auto text-[11px] text-slate-400">Regen runs in the background</span>
+    <span class="ml-auto text-[11px] text-slate-400">Runs in the background</span>
   </div>
 </div>
