@@ -517,6 +517,87 @@
     return null;
   }
 
+  // --- citation lookup: click an in-text reference → resolve + offer to add -------
+  const _esc = (s) => (s || "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const _CITE_RX = /(\[\d+(?:\s*[,–-]\s*\d+)*\])|([A-Z][A-Za-z'’.\-]+(?:\s+(?:et al\.?|and|&)\s*[A-Za-z'’.\-]*)*,?\s*\(?(?:19|20)\d{2}[a-z]?\)?)/g;
+  function extractCitation(clickedText, windowText) {
+    const matches = (windowText.match(_CITE_RX) || []).map((s) => s.trim());
+    if (!matches.length) return null;
+    const ct = (clickedText || "").trim();
+    const hit = matches.find((x) => ct && (x.includes(ct) || ct.includes(x) ||
+      (ct.length >= 3 && x.includes(ct.slice(0, 3)))));
+    return (hit || matches[0]).trim();
+  }
+
+  let citePop = null;
+  function ensureCitePop() {
+    if (citePop) return citePop;
+    citePop = document.createElement("div");
+    citePop.className = "hidden fixed z-[60] w-72 rounded-lg shadow-xl bg-white border border-slate-200 p-3";
+    document.body.appendChild(citePop);
+    document.addEventListener("click", (e) => { if (citePop && !citePop.contains(e.target)) citePop.classList.add("hidden"); }, true);
+    return citePop;
+  }
+  async function openCitePopup(cite, px, py) {
+    const p = ensureCitePop();
+    p.innerHTML = `<div class="text-xs text-slate-500">Looking up <b>${_esc(cite)}</b>…</div>`;
+    p.style.left = Math.min(px, window.innerWidth - 300) + "px";
+    p.style.top = Math.min(py + 8, window.innerHeight - 220) + "px";
+    p.classList.remove("hidden");
+    let d;
+    try {
+      const r = await fetch(`/c/${slug}/p/${key}/cite-lookup`, {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ cite }) });
+      d = await r.json();
+    } catch (e) { p.innerHTML = `<div class="text-xs text-rose-600">Lookup failed.</div>`; return; }
+    if (!d.found) { p.innerHTML = `<div class="text-xs text-slate-500">Couldn't resolve “${_esc(d.cite || cite)}” to a paper.</div>`; return; }
+    let html = `<div class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">Citation · ${_esc(d.cite)}</div>`
+      + `<div class="text-sm font-semibold text-slate-900 leading-snug">${_esc(d.title)}</div>`
+      + `<div class="text-xs text-slate-500 mt-0.5">${_esc(d.authors || "")}${d.year ? " · " + _esc(d.year) : ""}</div>`;
+    if (d.arxiv_id) {
+      html += `<div class="text-[11px] text-emerald-700 mt-1.5">✓ on arXiv: ${_esc(d.arxiv_id)}</div>`
+        + `<div class="mt-2 flex items-center gap-2"><button id="cite-add" class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">+ Add to collection</button>`
+        + `<a href="https://arxiv.org/abs/${encodeURIComponent(d.arxiv_id)}" target="_blank" class="text-[11px] text-slate-500 hover:underline">open ↗</a></div>`;
+    } else {
+      html += `<div class="text-[11px] text-slate-400 mt-1.5">Not found on arXiv.</div>`;
+    }
+    p.innerHTML = html;
+    const btn = p.querySelector("#cite-add");
+    if (btn) btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Adding…";
+      try {
+        const r = await fetch(`/c/${slug}/p/${key}/cite-add`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ arxiv_id: d.arxiv_id, title: d.arxiv_title || d.title,
+            authors: d.authors || "", year: d.year || "", abstract: d.abstract || "" }) });
+        const j = await r.json();
+        btn.textContent = j.ok ? "✓ Added" : "Failed";
+        btn.className = "rounded bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs";
+      } catch (e) { btn.textContent = "Failed"; }
+    });
+  }
+  function setupCiteClicks() {
+    win.document.addEventListener("click", (e) => {
+      if (citePop && citePop.contains && citePop.contains(e.target)) return;
+      let els = [];
+      try { els = win.document.elementsFromPoint(e.clientX, e.clientY) || []; } catch (_) { return; }
+      if (els.some((el) => el.dataset && el.dataset.annId)) return;     // a highlight — let its handler run
+      try { if (win.getSelection && String(win.getSelection()).trim()) return; } catch (_) {}  // selecting
+      const span = els.find((el) => el.tagName === "SPAN" && el.closest && el.closest(".textLayer"));
+      if (!span) return;
+      const sibs = [span.previousElementSibling, span, span.nextElementSibling,
+                    span.nextElementSibling && span.nextElementSibling.nextElementSibling];
+      const windowText = sibs.filter(Boolean).map((s) => s.textContent).join(" ");
+      const cite = extractCitation(span.textContent, windowText);
+      if (!cite) return;
+      e.preventDefault(); e.stopPropagation();                         // beat the internal-link jump
+      const fr = frame.getBoundingClientRect();
+      openCitePopup(cite, fr.left + e.clientX, fr.top + e.clientY);
+    }, true);
+  }
+
   frame.addEventListener("load", async () => {
     try { win = frame.contentWindow; void win.document; }
     catch (e) { console.warn("beta viewer not same-origin", e); return; }
@@ -531,6 +612,7 @@
     eventBus.on("pagesloaded", redrawAll);
     win.document.addEventListener("mouseup", () => setTimeout(onMouseUp, 0));
     win.document.addEventListener("scroll", hideToolbar, true);
+    setupCiteClicks();
     redrawAll();
   });
 

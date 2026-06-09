@@ -32,6 +32,7 @@ from . import (
     library,
     live_session,
     llm,
+    citations as citations_mod,
     note_drafts,
     notes as notes_mod,
     paper_chat,
@@ -2093,6 +2094,28 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
 
     threading.Thread(target=runner, daemon=True).start()
     return Response(status_code=204)
+
+
+@app.post("/c/{slug}/p/{paper_id}/cite-lookup", response_class=JSONResponse)
+def paper_cite_lookup(slug: str, paper_id: int, cite: str = Form("")) -> JSONResponse:
+    """Resolve an in-text citation clicked in the PDF to a paper (via this paper's own
+    reference list + arXiv). Returns JSON for the in-PDF popup; never adds."""
+    _require_collection(slug)
+    return JSONResponse(citations_mod.resolve_citation(slug, paper_id, cite))
+
+
+@app.post("/c/{slug}/p/{paper_id}/cite-add", response_class=JSONResponse)
+def paper_cite_add(slug: str, paper_id: int, arxiv_id: str = Form(""), title: str = Form(""),
+                   authors: str = Form(""), year: str = Form(""),
+                   abstract: str = Form("")) -> JSONResponse:
+    """Add a citation's resolved arXiv paper to the collection (from the citation popup)."""
+    _require_collection(slug)
+    aid = (arxiv_id or "").strip()
+    if not aid:
+        return JSONResponse({"ok": False, "error": "no arxiv id"}, status_code=400)
+    ids = triage_mod.add_entries(slug, [{"kind": "arxiv", "id": aid, "title": title,
+                                         "authors": authors, "year": year, "abstract": abstract}])
+    return JSONResponse({"ok": bool(ids), "added": len(ids)})
 
 
 @app.post("/c/{slug}/p/{paper_id}/autodraft/discard", response_class=HTMLResponse)
