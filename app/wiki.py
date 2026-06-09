@@ -2675,6 +2675,36 @@ def load_overview(slug: str, attention_since: str | None = None) -> dict | None:
 
 # --- knowledge graph: assembly + render view (2026-05-31) ---------------------
 
+def _paper_entity_overrides(slug: str) -> dict:
+    """{entity_key: {"add": set(paper_ids), "remove": set(paper_ids)}} of the user's tag edits."""
+    con = connect()
+    try:
+        rows = con.execute("SELECT paper_id, entity_key, action FROM paper_entity_overrides "
+                           "WHERE collection_slug=?", (slug,)).fetchall()
+    finally:
+        con.close()
+    out: dict = defaultdict(lambda: {"add": set(), "remove": set()})
+    for r in rows:
+        out[r["entity_key"]][r["action"]].add(r["paper_id"])
+    return out
+
+
+def toggle_paper_entity(slug: str, paper_id: int, entity_key: str, present: bool) -> None:
+    """Toggle a paper's membership of an entity. ``present`` = it currently shows the pill, so
+    toggling REMOVES it (and vice-versa). Stores the override; build_collection_graph applies it."""
+    action = "remove" if present else "add"
+    con = connect()
+    try:
+        # A new override supersedes any prior one for this (paper, entity).
+        con.execute("DELETE FROM paper_entity_overrides WHERE collection_slug=? AND paper_id=? "
+                    "AND entity_key=?", (slug, paper_id, entity_key))
+        con.execute("INSERT INTO paper_entity_overrides (collection_slug, paper_id, entity_key, "
+                    "action) VALUES (?,?,?,?)", (slug, paper_id, entity_key, action))
+        con.commit()
+    finally:
+        con.close()
+
+
 def build_collection_graph(slug: str) -> dict:
     """Assemble the structural knowledge graph for a collection: nodes are
     papers + concepts + problems + methods + accepted beliefs; edges are the
@@ -2726,6 +2756,16 @@ def build_collection_graph(slug: str) -> dict:
             entities.append({"key": key, "kind": kind,
                              "label": item.get("name") or item["text"],
                              "gist": item["text"], "paper_ids": pids})
+
+    # User tag overrides (right-click → Edit tags on a Papers card): add/remove a paper from a
+    # concept/method/problem. Applied to the entity → paper_ids sets here so it propagates
+    # consistently to the pills, the Papers filter, the entity popups, and the themes.
+    _ov = _paper_entity_overrides(slug)
+    if _ov:
+        for e in entities:
+            ov = _ov.get(e["key"])
+            if ov:
+                e["paper_ids"] = (set(e.get("paper_ids") or set()) | ov["add"]) - ov["remove"]
 
     # Accepted beliefs → papers (supporting) + concept links (related). Belief
     # dicts from list_accepted_beliefs key on "id" (not "slug").

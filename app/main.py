@@ -1378,6 +1378,40 @@ def wiki_papers_remove(request: Request, slug: str, paper_ids: list[int] = Form(
     return _wiki_panel(request, slug)
 
 
+def _tags_editor(request: Request, slug: str, paper_id: int) -> HTMLResponse:
+    """The per-paper tag editor body: concept/method/problem entities with the paper's current
+    membership checked. Toggling persists an override (build_collection_graph applies it)."""
+    cv = wiki.connection_view(slug) or {}
+    ents = cv.get("entities", {}) or {}
+    current = set((cv.get("paper_entities", {}) or {}).get(paper_id, []))
+    paper = library.get_collection_paper(slug, paper_id) or {}
+    groups = [("concept", "Concepts"), ("method", "Methods"), ("problem", "Problems")]
+    tags = {k: [{"key": e["key"], "label": e["label"], "on": e["key"] in current}
+                for e in ents.get(k, [])] for k, _ in groups}
+    return templates.TemplateResponse(request, "_tags_editor.html",
+                                      {"slug": slug, "paper_id": paper_id,
+                                       "title": paper.get("title", ""), "groups": groups, "tags": tags})
+
+
+@app.get("/c/{slug}/wiki/paper/{paper_id}/tags", response_class=HTMLResponse)
+def wiki_paper_tags(request: Request, slug: str, paper_id: int) -> HTMLResponse:
+    _require_collection(slug)
+    return _tags_editor(request, slug, paper_id)
+
+
+@app.post("/c/{slug}/wiki/paper/{paper_id}/tags/toggle", response_class=HTMLResponse)
+def wiki_paper_tag_toggle(request: Request, slug: str, paper_id: int,
+                          entity_key: str = Form("")) -> HTMLResponse:
+    """Toggle the paper's membership of an entity (concept/method/problem) and re-render the
+    editor. `present` is read live from the graph so the override flips the real state."""
+    _require_collection(slug)
+    cv = wiki.connection_view(slug) or {}
+    present = entity_key in set((cv.get("paper_entities", {}) or {}).get(paper_id, []))
+    if entity_key:
+        wiki.toggle_paper_entity(slug, paper_id, entity_key, present)
+    return _tags_editor(request, slug, paper_id)
+
+
 @app.get("/c/{slug}/graveyard", response_class=HTMLResponse)
 def graveyard_panel(request: Request, slug: str) -> HTMLResponse:
     _require_collection(slug)

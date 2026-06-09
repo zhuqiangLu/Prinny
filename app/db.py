@@ -183,6 +183,17 @@ CREATE TABLE IF NOT EXISTS annotations (
 );
 CREATE INDEX IF NOT EXISTS idx_annotations_paper ON annotations(paper_id);
 
+-- User overrides on a paper's concept/method/problem tags (right-click → Edit tags on a
+-- Papers card). Applied on top of the computed membership in build_collection_graph.
+CREATE TABLE IF NOT EXISTS paper_entity_overrides (
+  collection_slug TEXT NOT NULL,
+  paper_id INTEGER NOT NULL,
+  entity_key TEXT NOT NULL,                    -- concept:slug / method:slug / problem:slug
+  action TEXT NOT NULL CHECK(action IN ('add','remove')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (collection_slug, paper_id, entity_key)
+);
+
 -- Reading-debt queue (AGENTIC_PLAN P7): clusters of seed fragments the user hasn't
 -- reasoned over yet, surfaced as questions. id = stable hash of the source fragment
 -- ids so re-runs dedupe; status tracks the user's choice (fill/ignore/brainstorm).

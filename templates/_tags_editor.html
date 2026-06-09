@@ -1,0 +1,29 @@
+{# Per-paper tag editor (HTMX-loaded into #tags-editor-body). Toggle which concept/method/
+   problem the paper belongs to; each toggle re-renders this fragment with updated state.
+   Changes reflect in the Map/filter/popups on the next panel render. #}
+{% set KS = {'concept':('bg-slate-100 text-slate-700 border-slate-300','ring-slate-400'),
+             'method':('bg-sky-50 text-sky-700 border-sky-200','ring-sky-400'),
+             'problem':('bg-rose-50 text-rose-700 border-rose-200','ring-rose-400')} %}
+<div>
+  <p class="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 mb-0.5">{{ title }}</p>
+  <p class="text-[11px] text-slate-400 mb-3">Click a tag to add/remove it for this paper. Reflects in the Map, filter, and entity cards.</p>
+  {% for key, label in groups %}
+  <div class="mb-3">
+    <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ label }}</div>
+    {% if tags[key] %}
+    <div class="flex flex-wrap gap-1.5">
+      {% for t in tags[key] %}
+      <button type="button" hx-post="/c/{{ slug }}/wiki/paper/{{ paper_id }}/tags/toggle"
+              hx-target="#tags-editor-body" hx-swap="innerHTML"
+              name="entity_key" value="{{ t.key }}"
+              class="rounded-full border px-2.5 py-0.5 text-[12px] transition {% if t.on %}ring-2 {{ KS[key][1] }} {{ KS[key][0] }}{% else %}bg-white border-slate-200 text-slate-400 hover:bg-slate-50{% endif %}">
+        {% if t.on %}✓ {% endif %}{{ t.label }}
+      </button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-[11px] text-slate-400 italic">No {{ label.lower() }} in this collection yet.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>

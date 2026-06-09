@@ -898,7 +898,8 @@
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
   {% set cxe = (overview.connections.entities if overview.connections else {}) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5"
-           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter(x => x !== k) : [...this.selKeys, k] }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) }, init(){ try{ this.selKeys = JSON.parse(sessionStorage.getItem('pa.pf.keys.{{ slug }}') || '[]'); this.filterDim = sessionStorage.getItem('pa.pf.dim.{{ slug }}') || 'all'; }catch(e){} this.$watch('selKeys', v => { try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(v)); }catch(e){} }); this.$watch('filterDim', v => { try{ sessionStorage.setItem('pa.pf.dim.{{ slug }}', v); }catch(e){} }); } }"
+           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter(x => x !== k) : [...this.selKeys, k] }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) }, ctx: { open: false, x: 0, y: 0, pid: null }, tagsOpen: false, openCtx(id, ev){ this.ctx = { open: true, x: ev.clientX, y: ev.clientY, pid: id }; }, editTags(){ const pid = this.ctx.pid; this.ctx.open = false; this.tagsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/paper/' + pid + '/tags', { target: '#tags-editor-body', swap: 'innerHTML' }); }, init(){ try{ this.selKeys = JSON.parse(sessionStorage.getItem('pa.pf.keys.{{ slug }}') || '[]'); this.filterDim = sessionStorage.getItem('pa.pf.dim.{{ slug }}') || 'all'; }catch(e){} this.$watch('selKeys', v => { try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(v)); }catch(e){} }); this.$watch('filterDim', v => { try{ sessionStorage.setItem('pa.pf.dim.{{ slug }}', v); }catch(e){} }); } }"
+           @click.away="ctx.open = false"
            @pa-filter-papers.window="selKeys = [$event.detail.key]; filterDim = $event.detail.dim">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
@@ -950,6 +951,7 @@
     <div class="flex flex-wrap gap-3">
       {% for p in overview.papers %}
       <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
+           @contextmenu.prevent="openCtx({{ p.id }}, $event)"
            data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}"
            x-show="(selKeys.length === 0 || selKeys.every(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
         <div class="flex items-center gap-1 mb-2">
@@ -970,6 +972,31 @@
         </div>
       </div>
       {% endfor %}
+    </div>
+
+    {# right-click context menu (positioned at the cursor) #}
+    <div x-show="ctx.open" x-cloak @click="ctx.open=false"
+         :style="`top:${ctx.y}px; left:${Math.min(ctx.x, window.innerWidth-200)}px`"
+         class="fixed z-50 w-48 rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-sm">
+      <a :href="`/c/{{ slug }}/p/${ctx.pid}`" class="block px-3 py-1.5 hover:bg-slate-50 text-slate-700">▤ Open paper</a>
+      <button type="button" @click="editTags()" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700">◈ Edit tags…</button>
+      <form hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML"
+            @submit="ctx.open=false" onsubmit="return confirm('Remove this paper from the collection? (restorable from the graveyard)')">
+        <input type="hidden" name="paper_ids" :value="ctx.pid">
+        <button class="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600">🗑 Remove from collection</button>
+      </form>
+    </div>
+
+    {# per-paper tag editor popover #}
+    <div x-show="tagsOpen" x-cloak @keydown.escape.window="tagsOpen=false" @click.self="tagsOpen=false"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16">
+      <div class="bg-white rounded-2xl shadow-2xl w-[min(440px,92vw)] max-h-[80vh] overflow-auto p-5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold text-slate-900">Edit tags</h3>
+          <button type="button" @click="tagsOpen=false" class="grid place-items-center w-7 h-7 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+        <div id="tags-editor-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      </div>
     </div>
   </section>
   {% else %}
