@@ -1380,16 +1380,18 @@ def _add_seed(slug: str) -> str:
 
 
 # Collection "Suggested reading" purposes → (seed, intent) for the arXiv search.
-COLLECTION_PURPOSES = ("related", "gaps", "concept", "method", "problem", "thesis", "adjacent", "custom", "similar")
+COLLECTION_PURPOSES = ("related", "gaps", "concept", "method", "problem", "thesis", "adjacent", "custom", "similar", "approach")
 
 # Suggested-reading grouping: source → (display order, label template). "" = ungrouped (old).
-_READING_SOURCE_ORDER = ["similar", "custom", "concept", "method", "problem", "related", "thesis", "adjacent", "gaps", ""]
+_READING_SOURCE_ORDER = ["approach", "similar", "custom", "concept", "method", "problem", "related", "thesis", "adjacent", "gaps", ""]
 
 
 def _reading_group_label(source: str, detail: str) -> str:
     detail = (detail or "").strip()
     if source == "similar":
         return f"Similar to: “{detail}”" if detail else "Similar to a paper"
+    if source == "approach":
+        return f"Methodology like: “{detail}”" if detail else "Methodology like my idea"
     if source == "custom":
         return f"Custom search: “{detail}”" if detail else "Custom search"
     if source == "concept":
@@ -1475,6 +1477,16 @@ def _purpose_seed(slug: str, purpose: str, target: str = "", custom: str = "") -
         intent = ("be closely similar in topic and method to the paper above"
                   + (f", and connect to this collection's themes ({foc})" if foc else ""))
         return (seed, intent)
+    if purpose == "approach":
+        # The user's OWN idea/method is the anchor (FOCUS); intent fixes the match to
+        # methodology rather than topic. Don't pull back to the collection — the idea may
+        # sit off to the side of it. Empty box falls back to the collection seed.
+        idea = custom.strip()
+        seed = f"My idea / approach:\n{idea}" if idea else _add_seed(slug)
+        intent = ("use a methodology or technical approach closely similar to the idea above — "
+                  "match on *how* the work is done (the technique, formulation, or "
+                  "training/inference recipe), not merely the application topic")
+        return (seed, intent)
     if purpose == "custom":
         return (_add_seed(slug), custom.strip() or "be worth reading next for this collection")
     return (_add_seed(slug), "")        # default: original 'extend/fill gaps' framing
@@ -1494,7 +1506,7 @@ def suggest_papers_to_add(slug: str, purpose: str = "gaps", target: str = "",
     seed, intent = _purpose_seed(slug, purpose, target, custom)
     # how this batch was found → stored on each candidate for grouped display.
     src_detail = ""
-    if purpose == "custom":
+    if purpose in ("custom", "approach"):
         src_detail = custom.strip()
     elif purpose in ("concept", "method", "problem"):
         src_detail = target.strip()

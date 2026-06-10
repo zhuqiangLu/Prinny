@@ -27,36 +27,51 @@
     </label>
 
     {# Custom search #}
-    <label class="block rounded-xl border p-3 cursor-pointer {% if reading_running %}opacity-60 pointer-events-none{% endif %}" :class="mode==='custom' ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200 hover:border-slate-300'">
-      <span class="flex items-start gap-3">
-        <input type="radio" class="mt-1.5" :checked="mode==='custom'" @change="mode='custom'" {% if reading_running %}disabled{% endif %}>
-        <span class="grid place-items-center w-9 h-9 rounded-lg bg-slate-100 text-slate-600 shrink-0">✎</span>
-        <span class="min-w-0 flex-1">
-          <b class="text-slate-900">Custom search</b>
-          <span class="block text-xs text-slate-600 mt-0.5">Search for papers based on a specific question, hypothesis, or research focus — best for targeted searches.</span>
-        </span>
+    <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer {% if reading_running %}opacity-60 pointer-events-none{% endif %}" :class="mode==='custom' ? 'border-violet-300 bg-violet-50/30' : 'border-slate-200 hover:border-slate-300'">
+      <input type="radio" class="mt-1.5" :checked="mode==='custom'" @change="mode='custom'" {% if reading_running %}disabled{% endif %}>
+      <span class="grid place-items-center w-9 h-9 rounded-lg bg-slate-100 text-slate-600 shrink-0">✎</span>
+      <span class="min-w-0 flex-1">
+        <b class="text-slate-900">Custom search</b>
+        <span class="block text-xs text-slate-600 mt-0.5">Search for papers based on a specific question, hypothesis, or research focus — best for targeted searches.</span>
       </span>
-      <div x-show="mode==='custom'" x-cloak class="mt-2.5 pl-12">
-        <label class="block text-xs font-medium text-slate-500 mb-1">Describe what you're looking for <span class="text-slate-400">(optional)</span></label>
-        <textarea name="custom" x-model="q" maxlength="500" rows="3" @focus="mode='custom'" {% if reading_running %}disabled{% endif %}
-                  placeholder="e.g., {{ launcher_placeholder }}"
-                  class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
-        <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-          <span>💡 Be specific for better results</span>
-          <span class="tabular-nums" x-text="q.length + '/500'"></span>
-        </div>
-        {% if examples %}
-        <div x-data="{ ex: false }" class="mt-1">
-          <button type="button" @click="ex = !ex" class="text-[11px] text-violet-600 hover:underline"><span x-text="ex ? 'Hide examples ▴' : 'Examples ▾'"></span></button>
-          <ul x-show="ex" x-cloak class="mt-1 space-y-1">
-            {% for e in examples %}
-            <li><button type="button" data-ex="{{ e }}" @click="q = $el.dataset.ex; mode='custom'" class="text-left text-[11px] text-slate-600 hover:text-violet-700">“{{ e }}”</button></li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-      </div>
     </label>
+
+    {% if launcher_approach %}
+    {# Methodology like mine — the user's idea becomes the search anchor (FOCUS) #}
+    <label class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer {% if reading_running %}opacity-60 pointer-events-none{% endif %}" :class="mode==='approach' ? 'border-emerald-300 bg-emerald-50/40' : 'border-slate-200 hover:border-slate-300'">
+      <input type="radio" class="mt-1.5" :checked="mode==='approach'" @change="mode='approach'" {% if reading_running %}disabled{% endif %}>
+      <span class="grid place-items-center w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 shrink-0">🧬</span>
+      <span class="min-w-0 flex-1">
+        <b class="text-slate-900">Methodology like mine</b>
+        <span class="block text-xs text-slate-600 mt-0.5">Describe an idea or method you have in mind — finds papers that share a similar <i>approach</i> (the how), not just the same topic.</span>
+      </span>
+    </label>
+    {% endif %}
+
+    {# Shared input box for Custom search and Methodology-match #}
+    <div x-show="mode==='custom' || mode==='approach'" x-cloak class="pl-12">
+      <label class="block text-xs font-medium text-slate-500 mb-1">
+        <span x-show="mode==='approach'">Describe your idea / methodology</span>
+        <span x-show="mode==='custom'">Describe what you're looking for <span class="text-slate-400">(optional)</span></span>
+      </label>
+      <textarea name="custom" x-model="q" maxlength="500" rows="3" {% if reading_running %}disabled{% endif %}
+                :placeholder="mode==='approach' ? 'e.g., We contrast frame-difference signals with a learned memory to localize events in long video' : 'e.g., {{ launcher_placeholder }}'"
+                class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
+      <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+        <span x-text="mode==='approach' ? '🧬 Match on how it\'s done — be concrete about the technique' : '💡 Be specific for better results'"></span>
+        <span class="tabular-nums" x-text="q.length + '/500'"></span>
+      </div>
+      {% if examples %}
+      <div x-data="{ ex: false }" x-show="mode==='custom'" class="mt-1">
+        <button type="button" @click="ex = !ex" class="text-[11px] text-violet-600 hover:underline"><span x-text="ex ? 'Hide examples ▴' : 'Examples ▾'"></span></button>
+        <ul x-show="ex" x-cloak class="mt-1 space-y-1">
+          {% for e in examples %}
+          <li><button type="button" data-ex="{{ e }}" @click="q = $el.dataset.ex; mode='custom'" class="text-left text-[11px] text-slate-600 hover:text-violet-700">“{{ e }}”</button></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
 
     {# recency window — exclude papers older than this #}
     <label class="flex items-center gap-2 text-[11px] text-slate-500">
