@@ -205,9 +205,9 @@
             <h2 class="font-semibold">Add papers</h2>
             <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
           </div>
-          <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids) — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
+          <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids), or a direct <b>.pdf</b> link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
           <textarea x-model="raw" rows="3" spellcheck="false" x-ref="urls"
-                    placeholder="https://arxiv.org/abs/2409.14485&#10;https://openreview.net/forum?id=lh3Aa1u7kU, 2401.12345"
+                    placeholder="https://arxiv.org/abs/2409.14485&#10;https://openreview.net/forum?id=lh3Aa1u7kU&#10;https://example.org/papers/great-paper.pdf"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"></textarea>
           <div class="mt-2 flex items-center gap-2">
             <button type="button" @click="parse()" :disabled="parsing || !raw.trim()"
@@ -235,8 +235,9 @@
                     <span class="min-w-0">
                       <span class="text-slate-800" x-text="e.ok ? e.title : e.input"></span>
                       <template x-if="e.ok">
-                        <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : '')"></span>
+                        <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : e.kind === 'pdf' ? ' · PDF' : '')"></span>
                       </template>
+                      <template x-if="e.ok && e.note"><span class="ml-1 text-xs text-amber-600" x-text="e.note"></span></template>
                       <template x-if="e.dup"><span class="ml-1 text-xs text-amber-600">already in collection</span></template>
                       <template x-if="e.removed === 'graveyard'"><span class="ml-1 text-xs text-sky-600">in graveyard — adding restores it</span></template>
                       <template x-if="e.removed === 'deleted'"><span class="ml-1 text-xs text-sky-600">permanently deleted — adding restores it</span></template>

@@ -224,6 +224,93 @@ def normalize_arxiv_id(raw: str) -> str:
     return (m.group(1) or m.group(2)) if m else ""
 
 
+_PDF_FETCH_MAX_BYTES = 30 * 1024 * 1024     # cap the parse-time download
+
+
+def is_pdf_url(tok: str) -> bool:
+    """True for an http(s) URL whose path ends in '.pdf' (query/fragment ignored).
+    arXiv/OpenReview links are matched earlier, so this only catches direct-PDF links."""
+    t = (tok or "").strip()
+    if not re.match(r"^https?://", t, re.IGNORECASE):
+        return False
+    path = re.split(r"[?#]", t, 1)[0]
+    return path.lower().endswith(".pdf")
+
+
+def _title_from_pdf_url(url: str) -> str:
+    """Provisional title from a PDF URL's filename (fallback when extraction fails)."""
+    path = re.split(r"[?#]", url or "", 1)[0]
+    name = path.rsplit("/", 1)[-1]
+    name = re.sub(r"\.pdf$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"[._\-]+", " ", name).strip()
+    return name or "(untitled)"
+
+
+def fetch_pdf_url_metadata(url: str):
+    """Download a direct PDF link and best-effort extract title/author from it.
+    Three outcomes:
+      * dict  — a real PDF; {pdf_url, title, authors, year, abstract} (title from the
+                PDF's /Title metadata, then a first-page heuristic, then the URL filename).
+      * "notpdf"   — the link returned content that isn't a PDF (e.g. an HTML page).
+      * "notfound" — a dead link (HTTP 404/410).
+      * None  — a transient failure (timeout, 403/429/5xx, connection); caller may still
+                add it with a filename title since the PDF is (re)downloaded later."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    from . import pdf_text
+    buf = bytearray()
+    try:
+        with httpx.Client(timeout=20.0, follow_redirects=True, headers=_HEADERS) as client:
+            with client.stream("GET", url) as r:
+                r.raise_for_status()
+                for chunk in r.iter_bytes(64 * 1024):
+                    buf.extend(chunk)
+                    if len(buf) > _PDF_FETCH_MAX_BYTES:
+                        break
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (404, 410):
+            return "notfound"
+        logger.warning("PDF link fetch failed for %s: %s", url, exc)
+        return None
+    except (httpx.HTTPError, OSError) as exc:
+        logger.warning("PDF link fetch failed for %s: %s", url, exc)
+        return None
+    if bytes(buf[:5]) != b"%PDF-":
+        return "notpdf"
+    title = authors = None
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+            tf.write(buf)
+            tmp = tf.name
+        # The PDF's embedded /Title is usually cleaner than a first-page heuristic
+        # (which can swallow an author line) — prefer it when it looks like a real
+        # title, not a filename/tool artefact ("Microsoft Word - …", "untitled", ".tex").
+        doc_title = None
+        try:
+            from pypdf import PdfReader
+            info = PdfReader(tmp).metadata or {}
+            dt = str(info.get("/Title") or "").strip()
+            if (8 <= len(dt) <= 250 and re.search(r"[A-Za-z]", dt)
+                    and not re.search(r"(microsoft word|\.(docx?|tex|dvi)\b|^untitled)", dt, re.IGNORECASE)):
+                doc_title = " ".join(dt.split())
+            if info.get("/Author"):
+                authors = str(info.get("/Author")).strip()
+        except Exception as exc:  # noqa: BLE001 - docinfo is best-effort
+            logger.debug("pdf docinfo read failed for %s: %s", url, exc)
+        title = doc_title or pdf_text.extract_title(Path(tmp))
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return {"pdf_url": url, "title": title or _title_from_pdf_url(url),
+            "authors": authors or "", "year": "", "abstract": ""}
+
+
 def parse_add_input(raw: str) -> list[dict]:
     """Parse a chunk of arXiv / OpenReview URLs (newline- or comma-separated) into entries
     with fetched metadata. Each entry: {input, kind, id, title, authors, year, ok, error}.
@@ -253,8 +340,27 @@ def parse_add_input(raw: str) -> list[dict]:
                         "abstract": meta["abstract"] if meta else "",
                         "ok": bool(meta), "error": None if meta else "OpenReview lookup failed"})
             continue
+        if is_pdf_url(tok):
+            meta = fetch_pdf_url_metadata(tok)
+            if meta in ("notpdf", "notfound"):
+                out.append({"input": tok, "kind": None, "id": None, "title": None,
+                            "authors": "", "year": "", "abstract": "", "ok": False,
+                            "error": "PDF not found (404)" if meta == "notfound"
+                                     else "Link didn't return a PDF"})
+            else:
+                # dict → metadata read; None → couldn't fetch now (still addable; the
+                # PDF is downloaded later) with a filename title and a soft note.
+                m = meta or {"pdf_url": tok, "title": _title_from_pdf_url(tok),
+                             "authors": "", "year": "", "abstract": ""}
+                out.append({"input": tok, "kind": "pdf", "id": tok, "pdf_url": tok,
+                            "title": m["title"], "authors": m["authors"],
+                            "year": m["year"], "abstract": m["abstract"], "ok": True,
+                            "note": None if meta else "couldn't read metadata — title from filename",
+                            "error": None})
+            continue
         out.append({"input": tok, "kind": None, "id": None, "title": None, "authors": "",
-                    "year": "", "abstract": "", "ok": False, "error": "Not an arXiv or OpenReview URL"})
+                    "year": "", "abstract": "", "ok": False,
+                    "error": "Not an arXiv, OpenReview, or .pdf URL"})
     return out
 
 

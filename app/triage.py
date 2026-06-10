@@ -248,21 +248,26 @@ def accept_arxiv_into_collection(
 
 
 def add_entries(slug: str, entries: list[dict]) -> list[int]:
-    """Add parsed arXiv/OpenReview entries (the Add-paper wizard) as user-curated
-    (app-created) members and kick off a background PDF download for each. ``entries`` are
-    the parsed dicts {kind, id, title, authors, year, abstract}. Returns the created ids."""
+    """Add parsed arXiv/OpenReview/direct-PDF entries (the Add-paper wizard) as
+    user-curated (app-created) members and kick off a background PDF download for each.
+    ``entries`` are the parsed dicts {kind, id, title, authors, year, abstract}; for a
+    'pdf' entry ``id`` is the direct PDF URL. Returns the created ids."""
     col = library.get_collection(slug)
     eager = bool(col and col["copy_mode"] == "eager")
     pids = []
     for e in entries:
         kind, rid = e.get("kind"), (e.get("id") or "").strip()
-        if not rid or kind not in ("arxiv", "openreview"):
+        if not rid or kind not in ("arxiv", "openreview", "pdf"):
             continue
         kw = {"title": e.get("title") or "(untitled)", "authors": e.get("authors") or "",
               "year": e.get("year") or "", "abstract": e.get("abstract") or "",
               "origin": "app-created"}
         if kind == "arxiv":
             pid = library.upsert_paper(arxiv_id=rid, **kw)
+        elif kind == "pdf":
+            # No arXiv/OpenReview/DOI key to dedup on — match an existing row by URL so a
+            # re-add doesn't create a duplicate; otherwise insert with pdf_url set.
+            pid = library.paper_id_by_pdf_url(rid) or library.upsert_paper(pdf_url=rid, **kw)
         else:
             pid = library.upsert_paper(openreview_id=rid, **kw)
         library.add_membership(slug, pid, "local")

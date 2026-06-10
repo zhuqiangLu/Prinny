@@ -1275,15 +1275,18 @@ def collection_download_all(slug: str) -> RedirectResponse:
 
 @app.post("/c/{slug}/papers/parse")
 def papers_parse(slug: str, urls: str = Form("")) -> dict:
-    """Parse a chunk of arXiv/OpenReview URLs (newline/comma separated) into entries with
-    fetched metadata, for the Add-paper wizard. Flags ones already in this collection."""
+    """Parse a chunk of arXiv/OpenReview/direct-PDF URLs (newline/comma separated) into
+    entries with fetched metadata, for the Add-paper wizard. Flags ones already in this
+    collection."""
     _require_collection(slug)
     entries = discover.parse_add_input(urls)
     have_arxiv = {p["arxiv_id"] for p in library.list_papers(slug) if p.get("arxiv_id")}
     have_or = {p.get("openreview_id") for p in library.list_papers(slug) if p.get("openreview_id")}
+    have_pdf = library.collection_pdf_urls(slug)
     for e in entries:
         e["dup"] = (e["kind"] == "arxiv" and e["id"] in have_arxiv) or \
-                   (e["kind"] == "openreview" and e["id"] in have_or)
+                   (e["kind"] == "openreview" and e["id"] in have_or) or \
+                   (e["kind"] == "pdf" and e["id"] in have_pdf)
         # If it's currently removed (graveyard/permanently-deleted), adding restores it.
         e["removed"] = None if e["dup"] or not e.get("ok") else library.removal_tier(
             slug, arxiv_id=e["id"] if e["kind"] == "arxiv" else None,

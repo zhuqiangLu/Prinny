@@ -678,6 +678,36 @@ def get_paper(paper_id: int) -> dict | None:
         con.close()
 
 
+def paper_id_by_pdf_url(pdf_url: str) -> int | None:
+    """The id of the paper with this exact pdf_url, or None. Dedups direct-PDF adds
+    (which have no arXiv/OpenReview/DOI natural key to dedup on)."""
+    url = (pdf_url or "").strip()
+    if not url:
+        return None
+    con = connect()
+    try:
+        row = con.execute("SELECT id FROM papers WHERE pdf_url=?", (url,)).fetchone()
+        return int(row["id"]) if row else None
+    finally:
+        con.close()
+
+
+def collection_pdf_urls(slug: str) -> set[str]:
+    """The pdf_url of every (non-removed) member of this collection — for the
+    Add-paper wizard's 'already in collection' flag on direct-PDF links."""
+    con = connect()
+    try:
+        rows = con.execute(
+            """SELECT p.pdf_url FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
+               WHERE cp.collection_slug = ? AND COALESCE(p.pdf_url,'') <> ''
+                 AND NOT EXISTS (SELECT 1 FROM pending_removals pr
+                     WHERE pr.collection_slug = cp.collection_slug AND pr.paper_id = cp.paper_id)""",
+            (slug,)).fetchall()
+        return {r["pdf_url"] for r in rows}
+    finally:
+        con.close()
+
+
 def _decorate_paper(d: dict) -> dict:
     """Add the derived UI fields a paper row needs (PDF availability + live download state)."""
     d["has_pdf"] = _has_pdf(d)
