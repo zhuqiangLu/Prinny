@@ -56,3 +56,38 @@ def test_deep_find_parses_dedupes_and_fetches(monkeypatch, tmp_path):
     c = out[0]
     assert c["arxiv_id"] == "2501.01234" and c["summary"] == "the real abstract"
     assert c["note"] == "fits the purpose"                # the agent's "why" carries through
+
+
+def test_deep_find_resolves_scholar_picks(monkeypatch, tmp_path):
+    """A pick cited by s2_id (scholar_search) is resolved via the S2 batch API and
+    carries venue/pdf_url through — peer-reviewed venues reachable in deep search."""
+    import app.paper_finder as pf, app.engine as engine_mod, app.discover as discover
+    import app.agent_skills as ag, app.semantic_scholar as s2
+
+    class FakeRes:
+        text = json.dumps({"papers": [
+            {"s2_id": "649def34f8be52c8b66281af98ae884c09aef38b", "title": "CVPR work", "why": "peer-reviewed fit"},
+            {"arxiv_id": "2501.55555", "title": "Preprint", "why": "fresh"},
+        ]})
+
+    class FakeEng:
+        name = "fake"
+        def available(self): return (True, "")
+        def run_once(self, *a, **k): return FakeRes()
+
+    monkeypatch.setattr(engine_mod, "build_engine", lambda cfg: FakeEng())
+    monkeypatch.setattr(ag, "ensure_skills_home", lambda home=None: tmp_path)
+    monkeypatch.setattr(pf.agents, "effective_tools", lambda k, d: d)
+    monkeypatch.setattr(pf.mcp_server, "stdio_mcp_config", lambda *a, **k: {})
+    monkeypatch.setattr(discover, "fetch_arxiv_batch",
+                        lambda ids: {aid: {"arxiv_id": aid, "title": "Pre", "authors": "A",
+                                           "year": "2025", "abstract": "preprint abstract"} for aid in ids})
+    monkeypatch.setattr(s2, "fetch_batch", lambda ids: {
+        ids[0]: {"arxiv_id": None, "doi": "10.1/cvpr", "s2_id": ids[0], "title": "CVPR work",
+                 "summary": "the venue abstract", "authors": "B", "year": "2024",
+                 "venue": "CVPR", "citation_count": 30, "pdf_url": "https://x/cvpr.pdf"}})
+    out = pf.deep_find("vlms", "focus", "most relevant", limit=5)
+    by_venue = {c.get("venue", "") for c in out}
+    assert len(out) == 2 and "CVPR" in by_venue           # both an arXiv and an S2 pick resolved
+    cvpr = next(c for c in out if c.get("venue") == "CVPR")
+    assert cvpr["doi"] == "10.1/cvpr" and cvpr["pdf_url"] and cvpr["note"] == "peer-reviewed fit"

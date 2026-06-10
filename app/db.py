@@ -458,6 +458,10 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE triage_items ADD COLUMN source TEXT NOT NULL DEFAULT ''")
         if "source_detail" not in tcols:    # the query/paper-title/concept behind it
             con.execute("ALTER TABLE triage_items ADD COLUMN source_detail TEXT NOT NULL DEFAULT ''")
+        if "venue" not in tcols:            # peer-reviewed venue (Semantic Scholar) — trust signal
+            con.execute("ALTER TABLE triage_items ADD COLUMN venue TEXT NOT NULL DEFAULT ''")
+        if "citation_count" not in tcols:
+            con.execute("ALTER TABLE triage_items ADD COLUMN citation_count INTEGER NOT NULL DEFAULT 0")
     if "topic_experiments" in _tables:
         xcols = {r[1] for r in con.execute("PRAGMA table_info(topic_experiments)")}
         if "result" not in xcols:
@@ -530,6 +534,16 @@ def _migrate(con: sqlite3.Connection) -> None:
             con.execute("ALTER TABLE topic_suggestions ADD COLUMN verdict TEXT NOT NULL DEFAULT ''")
         if "confidence" not in tscols:
             con.execute("ALTER TABLE topic_suggestions ADD COLUMN confidence REAL NOT NULL DEFAULT 0")
+        # Non-arXiv (Semantic Scholar) suggestions: DOI + open-access PDF so Accept can
+        # store & download them, plus venue/citation as a trust signal.
+        if "doi" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN doi TEXT")
+        if "pdf_url" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN pdf_url TEXT")
+        if "venue" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN venue TEXT NOT NULL DEFAULT ''")
+        if "citation_count" not in tscols:
+            con.execute("ALTER TABLE topic_suggestions ADD COLUMN citation_count INTEGER NOT NULL DEFAULT 0")
     if "topic_evidence" in tables:
         tecols = {r[1] for r in con.execute("PRAGMA table_info(topic_evidence)")}
         if "unverified" not in tecols:

@@ -270,6 +270,26 @@ def arxiv_search(slug: str, query: str, max_results=10) -> dict:
                          "summary": _preview(h.get("summary") or "")} for h in hits]}
 
 
+def scholar_search(slug: str, query: str, max_results=10) -> dict:
+    """Search Semantic Scholar — reaches peer-reviewed top venues (CVPR/ICCV/NeurIPS/
+    ICLR/ACL…) that arXiv alone misses, with venue + citation count. Returns hits with
+    a stable ``s2_id`` to cite back. Read-only."""
+    from . import semantic_scholar
+    try:
+        n = max(1, min(25, int(max_results)))
+    except (TypeError, ValueError):
+        n = 10
+    try:
+        hits = semantic_scholar.search(query, max_results=n)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"semantic scholar search failed: {exc}"}
+    return {"query": query, "count": len(hits),
+            "results": [{"s2_id": h.get("s2_id"), "title": h.get("title"),
+                         "venue": h.get("venue") or "", "year": h.get("year") or "",
+                         "citations": h.get("citation_count") or 0,
+                         "summary": _preview(h.get("summary") or "")} for h in hits]}
+
+
 def recommendation_history(slug: str) -> dict:
     """What the user previously KEPT vs PASSED ON for this collection's suggested
     reading — the finder uses it to bias toward accepted-like and away from
@@ -339,7 +359,10 @@ _TOOLS = [
      "description": "Read one current wiki page, e.g. 'problems/efficiency' or 'index'.",
      "inputSchema": {"type": "object", "properties": {"page": {"type": "string"}}, "required": ["page"]}},
     {"name": "arxiv_search",
-     "description": "Search arXiv for papers (keywords query). Your ONLY way to reach external papers — issue several focused queries and read the summaries before picking. max_results caps the hits (default 10).",
+     "description": "Search arXiv for papers (keywords query) — best for the freshest preprints. Issue several focused queries and read the summaries before picking. Pair it with scholar_search for peer-reviewed venue coverage. max_results caps the hits (default 10).",
+     "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["query"]}},
+    {"name": "scholar_search",
+     "description": "Search Semantic Scholar (keywords query) — reaches peer-reviewed top venues (CVPR/ICCV/ECCV/NeurIPS/ICLR/ICML/ACL/EMNLP…) with venue + citation count that arXiv alone misses. Each hit has a stable `s2_id` — cite it back in your picks' `s2_id` field. Use alongside arxiv_search. max_results caps the hits (default 10).",
      "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}}, "required": ["query"]}},
     {"name": "recommendation_history",
      "description": "What the user previously KEPT vs PASSED ON for suggested reading in this collection. Use it to prefer accepted-like papers, deprioritise rejected-like ones, and avoid re-pitching.",
@@ -387,6 +410,8 @@ def _call_tool(slug: str, name: str, args: dict):
         return read_wiki_page(slug, args.get("page", ""))
     if name == "arxiv_search":
         return arxiv_search(slug, args.get("query", ""), args.get("max_results", 10))
+    if name == "scholar_search":
+        return scholar_search(slug, args.get("query", ""), args.get("max_results", 10))
     if name == "recommendation_history":
         return recommendation_history(slug)
     if name == "list_papers":

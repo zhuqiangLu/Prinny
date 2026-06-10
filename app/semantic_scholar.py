@@ -20,6 +20,7 @@ from .config import load_config
 logger = logging.getLogger("paper_agent.semantic_scholar")
 
 _SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search"
+_BATCH = "https://api.semanticscholar.org/graph/v1/paper/batch"
 _FIELDS = "title,abstract,year,venue,citationCount,externalIds,openAccessPdf,authors"
 _UA = {"User-Agent": "prinny/0.1 (local research wiki)"}
 
@@ -79,4 +80,33 @@ def search(query: str, max_results: int = 20) -> list[dict]:
         c = _to_candidate(p)
         if c:
             out.append(c)
+    return out
+
+
+def fetch_batch(ids: list[str]) -> dict[str, dict]:
+    """Resolve S2 paper ids (the deep-search agent's scholar picks) to candidates in
+    ONE request. ``ids`` are S2 paperIds (also accepts 'DOI:…' / 'ARXIV:…' forms).
+    Returns ``{requested_id: candidate}`` for those that resolved with an abstract.
+    Best-effort: returns {} on rate-limit / network failure (caller drops those picks)."""
+    ids = [i for i in (ids or []) if i]
+    if not ids:
+        return {}
+    try:
+        r = httpx.post(_BATCH, headers=_headers(), timeout=30.0, follow_redirects=True,
+                       params={"fields": _FIELDS}, json={"ids": ids})
+        if r.status_code == 429:
+            raise S2Error("Semantic Scholar is rate-limiting (HTTP 429).")
+        r.raise_for_status()
+        data = r.json()
+    except (S2Error, httpx.HTTPError, ValueError) as exc:
+        logger.warning("Semantic Scholar batch fetch failed: %s", exc)
+        return {}
+    out: dict[str, dict] = {}
+    # The batch endpoint returns a list aligned to the input ids (null for misses).
+    for rid, p in zip(ids, data if isinstance(data, list) else []):
+        if not p:
+            continue
+        c = _to_candidate(p)
+        if c:
+            out[rid] = c
     return out

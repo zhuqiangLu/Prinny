@@ -589,7 +589,9 @@ def _delete_row(slug: str, table: str, rid: int) -> bool:
 def add_suggestion(slug: str, *, arxiv_id: str, title: str, authors: str = "",
                    abstract: str = "", note: str = "", purpose: str = "broaden",
                    target_kind: str = "", target_id=None, target_label: str = "",
-                   stance: str = "", verdict: str = "", confidence: float = 0) -> int | None:
+                   stance: str = "", verdict: str = "", confidence: float = 0,
+                   doi: str = "", pdf_url: str = "", venue: str = "",
+                   citation_count: int = 0) -> int | None:
     con = connect()
     try:
         tid = _topic_id(con, slug)
@@ -598,9 +600,12 @@ def add_suggestion(slug: str, *, arxiv_id: str, title: str, authors: str = "",
         cur = con.execute(
             "INSERT INTO topic_suggestions(topic_id, arxiv_id, title, authors, abstract, "
             "note, purpose, target_kind, target_id, target_label, stance, verdict, "
-            "confidence, status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')",
+            "confidence, doi, pdf_url, venue, citation_count, status) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')",
             (tid, arxiv_id, title, authors, abstract, note, purpose, target_kind,
-             target_id, target_label, stance, verdict, float(confidence or 0)))
+             target_id, target_label, stance, verdict, float(confidence or 0),
+             doi or None, pdf_url or None, (venue or "").strip(),
+             int(citation_count or 0)))
         _touch(con, slug)
         con.commit()
         return cur.lastrowid
@@ -748,7 +753,8 @@ def accept_suggestion(slug: str, sid: int, collection_slug: str = "",
             return {"ok": False, "error": "Choose which collection to add it to."}
     try:
         pid = triage.accept_arxiv_into_collection(
-            coll, s["arxiv_id"], s.get("title", ""), s.get("authors", ""), s.get("abstract", ""))
+            coll, s["arxiv_id"], s.get("title", ""), s.get("authors", ""), s.get("abstract", ""),
+            doi=s.get("doi") or "", pdf_url=s.get("pdf_url") or "")
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": f"Import failed: {exc}"}
     linked_ev = False

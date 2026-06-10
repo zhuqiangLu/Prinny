@@ -238,12 +238,16 @@ def defer(slug: str, triage_id: int) -> tuple[bool, str]:
 
 
 def accept_arxiv_into_collection(
-    slug: str, arxiv_id: str, title: str = "", authors: str = "", abstract: str = "", note: str = ""
+    slug: str, arxiv_id: str, title: str = "", authors: str = "", abstract: str = "",
+    note: str = "", doi: str = "", pdf_url: str = ""
 ) -> int:
-    """Send a discovered arXiv paper straight into the collection as a local
-    (arxiv-suggested) member. Used by the 'send to collection' gap action."""
+    """Send a discovered paper straight into the collection as a local
+    (arxiv-suggested) member. ``doi``/``pdf_url`` carry a non-arXiv (Semantic Scholar)
+    paper + its open-access PDF source. Used by the 'send to collection' gap action and
+    topic suggested-reading Accept."""
     return _import_candidate(
-        slug, zotero_key=None, arxiv_id=arxiv_id, title=title, authors=authors, abstract=abstract
+        slug, zotero_key=None, arxiv_id=arxiv_id or None, title=title, authors=authors,
+        abstract=abstract, doi=doi or None, pdf_url=pdf_url or None,
     )
 
 
@@ -306,11 +310,13 @@ def add_candidate(slug: str, cand: dict, note: str,
     try:
         cur = con.execute(
             "INSERT INTO triage_items (collection_slug, arxiv_id, doi, pdf_url, title, "
-            "abstract, authors, llm_relevance_note, status, source, source_detail) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+            "abstract, authors, llm_relevance_note, status, source, source_detail, "
+            "venue, citation_count) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
             (slug, cand.get("arxiv_id"), cand.get("doi"), cand.get("pdf_url"),
              cand.get("title", ""), cand.get("summary", "") or cand.get("abstract", ""),
-             cand.get("authors", ""), note, source or "", source_detail or ""),
+             cand.get("authors", ""), note, source or "", source_detail or "",
+             (cand.get("venue") or "").strip(), int(cand.get("citation_count") or 0)),
         )
         con.commit()
         return cur.lastrowid

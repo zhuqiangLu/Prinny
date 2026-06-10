@@ -711,10 +711,12 @@ def test_suggest_papers_to_add_passes_configured_limit(tmp_path, monkeypatch):
 def test_find_related_papers_caps_picks_at_limit(monkeypatch):
     """find_related_papers fetches a wider pool but returns at most `limit` picks."""
     import app.discover as discover
+    import app.semantic_scholar as s2
     # 5 fake arXiv results; LLM picks all 5; limit=3 → only 3 returned.
     monkeypatch.setattr(discover, "_arxiv_search",
                         lambda q, max_results=10: [{"arxiv_id": f"id{i}", "title": f"T{i}",
                                                     "summary": "s", "authors": "a"} for i in range(5)])
+    monkeypatch.setattr(s2, "search", lambda q, max_results=20: [])   # keep the test off the network
     calls = iter([
         "kv cache compression",   # step 1: query string
         '{"picks": [{"index":0,"note":"r0"},{"index":1,"note":"r1"},{"index":2,"note":"r2"},'

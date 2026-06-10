@@ -282,7 +282,9 @@
       <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
         <div class="flex items-baseline gap-2 flex-wrap">
           <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title|default('(untitled)') }}</p>
-          {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }} ↗</a>{% endif %}
+          {% if c.venue %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700" title="Peer-reviewed venue">{{ c.venue }}</span>{% endif %}
+          {% if c.citation_count and c.citation_count > 0 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500" title="Citations (Semantic Scholar)">{{ c.citation_count }} cites</span>{% endif %}
+          {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }} ↗</a>{% elif c.doi %}<a href="https://doi.org/{{ c.doi }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">DOI ↗</a>{% endif %}
         </div>
         {% if c.llm_relevance_note %}
         <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}</p>

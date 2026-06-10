@@ -783,9 +783,13 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
         return {"added": 0, "error": f"arXiv discovery failed: {exc}"}
     pending = topics.pending_suggestion_arxiv(slug) | hist["accepted_arxiv"]
     added = 0
+    batch_seen: set = set()
     for c in cands:
         aid = c.get("arxiv_id")
-        if not aid or aid in pending:
+        # A Semantic Scholar (peer-reviewed venue) candidate may have no arXiv id — key
+        # dedup on arXiv id, then DOI, then S2 id so those aren't dropped.
+        key = aid or c.get("doi") or c.get("s2_id")
+        if not key or (aid and aid in pending) or key in batch_seen:
             continue
         # validator-grounded justification becomes the note when it passed
         note = c.get("note", "")
@@ -793,12 +797,16 @@ def suggest_reading(slug: str, purpose: str = "broaden", target_id=None,
             note = c["justification"]
         if c.get("seen_before"):
             note = f"↩ seen before · {note}"
-        if topics.add_suggestion(slug, arxiv_id=aid, title=c.get("title", ""),
+        if topics.add_suggestion(slug, arxiv_id=aid or "", title=c.get("title", ""),
                                  authors=c.get("authors", ""), abstract=c.get("summary", ""),
                                  note=note, purpose=purpose, target_kind=target_kind,
                                  target_id=tid_out, target_label=target_label, stance=stance,
-                                 verdict=c.get("verdict", ""), confidence=c.get("confidence", 0)):
-            pending.add(aid)
+                                 verdict=c.get("verdict", ""), confidence=c.get("confidence", 0),
+                                 doi=c.get("doi") or "", pdf_url=c.get("pdf_url") or "",
+                                 venue=c.get("venue") or "", citation_count=c.get("citation_count") or 0):
+            if aid:
+                pending.add(aid)
+            batch_seen.add(key)
             added += 1
     topics.log_event(slug, "suggested_reading", f"{purpose}: {added} paper(s)")
     return {"added": added, "error": None}

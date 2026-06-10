@@ -224,6 +224,56 @@ def normalize_arxiv_id(raw: str) -> str:
     return (m.group(1) or m.group(2)) if m else ""
 
 
+def _venue_label(c: dict) -> str:
+    """A short source tag for the LLM listing / UI: the peer-reviewed venue (with year)
+    when known, else the arXiv id, else 'preprint'. Lets the picker prefer published work."""
+    venue = (c.get("venue") or "").strip()
+    if venue:
+        year = str(c.get("year") or "").strip()
+        return f"{venue} {year}".strip()
+    if c.get("arxiv_id"):
+        return f"arXiv:{c['arxiv_id']}"
+    return "preprint"
+
+
+def _cand_key(c: dict):
+    """Dedup key across sources: arXiv id, then DOI, then lowercased title."""
+    aid = normalize_arxiv_id(c.get("arxiv_id") or "")
+    if aid:
+        return ("arxiv", aid)
+    doi = (c.get("doi") or "").strip().lower()
+    if doi:
+        return ("doi", doi)
+    title = (c.get("title") or "").strip().lower()
+    return ("title", title) if title else None
+
+
+def _merge_candidates(*lists: list[dict]) -> list[dict]:
+    """Union candidate lists from multiple sources, deduped by _cand_key. When the same
+    paper appears in more than one source, fields are unioned (the longer abstract wins;
+    Semantic Scholar's venue/citation/pdf_url/doi enrich an arXiv hit). Source order is
+    preserved (first list's hits lead)."""
+    by_key: dict = {}
+    order: list = []
+    for lst in lists:
+        for c in (lst or []):
+            key = _cand_key(c)
+            if not key or not key[1]:
+                continue
+            if key in by_key:
+                dst = by_key[key]
+                for k, v in c.items():
+                    if k == "summary":
+                        if len(str(v or "")) > len(str(dst.get("summary") or "")):
+                            dst["summary"] = v
+                    elif v and not dst.get(k):
+                        dst[k] = v
+            else:
+                by_key[key] = dict(c)
+                order.append(key)
+    return [by_key[k] for k in order]
+
+
 _PDF_FETCH_MAX_BYTES = 30 * 1024 * 1024     # cap the parse-time download
 
 
@@ -566,33 +616,45 @@ def find_related_papers(seed: str, exclude_titles: set[str] | None = None,
     # recency) so the pool is on-topic, not just "newest that loosely matches".
     # A `since` cutoff drops older papers, so widen the pool to keep enough.
     pool = max(limit * 3, 30) if since else max(limit * 2, 20)
+    # Query BOTH arXiv and Semantic Scholar and merge — S2 reaches peer-reviewed top
+    # venues (CVPR/ICCV/NeurIPS/ICLR/ACL…) with open-access PDFs that arXiv alone
+    # misses, while arXiv covers the freshest preprints. Each is best-effort: a source
+    # that errors (e.g. the shared-IP 429) is skipped; only if BOTH fail do we surface
+    # the rate-limit hint.
+    from . import semantic_scholar
+    arxiv_hits: list[dict] = []
+    s2_hits: list[dict] = []
+    arxiv_err = s2_err = None
     try:
-        raw = _arxiv_search(query, max_results=pool)
+        arxiv_hits = _arxiv_search(query, max_results=pool)
     except ArxivError as exc:
-        # arXiv is unreachable (e.g. the shared-IP 429) — fall back to Semantic
-        # Scholar (different provider; a Settings API key bypasses shared-IP limits).
-        logger.warning("arxiv unreachable (%s); falling back to Semantic Scholar", exc)
-        from . import semantic_scholar
-        try:
-            raw = semantic_scholar.search(query_resp or query, max_results=pool)
-        except semantic_scholar.S2Error:
-            # Both providers refused — almost always the shared/NAT-IP 429. Lead with
-            # the actionable explanation, not a raw stack of two errors.
-            raise ArxivError(_RATE_LIMIT_HINT)
+        arxiv_err = exc
+        logger.warning("arxiv search failed (%s) — using Semantic Scholar only", exc)
+    try:
+        s2_hits = semantic_scholar.search(query_resp or query, max_results=pool)
+    except semantic_scholar.S2Error as exc:
+        s2_err = exc
+        logger.info("semantic scholar search skipped (%s)", exc)
+    if arxiv_err and s2_err:                  # both providers refused — actionable hint
+        raise ArxivError(_RATE_LIMIT_HINT)
+    raw = _merge_candidates(arxiv_hits, s2_hits)
     results = [r for r in raw if r["title"].lower() not in exclude and passes_since(r, since)]
     if not results:
         return []
-    listing = "\n".join(f"{i}. [{r['arxiv_id']}] {r['title']}: {r['summary'][:300]}"
+    listing = "\n".join(f"{i}. {r['title']} [{_venue_label(r)}]: {(r.get('summary') or '')[:300]}"
                         for i, r in enumerate(results))
     try:
         pick = llm.complete([
             {"role": "system", "content": "You output only valid JSON."},
             {"role": "user", "content": (
-                f"FOCUS:\n{seed}{bias}\n\nCANDIDATES:\n{listing}\n\n"
+                f"FOCUS:\n{seed}{bias}\n\nCANDIDATES (the [bracketed] tag is the venue, "
+                f"or 'preprint'):\n{listing}\n\n"
                 f"Pick up to {limit} candidates that {pick_goal}. For EACH, give a "
                 "concrete one-sentence reason it fits this goal (what it adds / which "
                 "gap, concept, hypothesis or unknown it speaks to) — not a generic "
-                'summary. Respond JSON: {"picks": [{"index": 0, "note": "why it fits"}]}')},
+                "summary. When two candidates are comparably relevant, prefer the one "
+                "published at a peer-reviewed venue over a bare preprint. "
+                'Respond JSON: {"picks": [{"index": 0, "note": "why it fits"}]}')},
         ])
         import json
         data = json.loads(pick[pick.find("{"): pick.rfind("}") + 1])
@@ -706,7 +768,10 @@ def rerank_by_profile(candidates: list[dict], profile: dict,
         # learned preference score; then finder order. So the on-topic, verified
         # suggestions are at the top and borderline ones don't bury them.
         verdict_rank = 0 if c.get("verdict") == "pass" else 1
-        score = len(toks & boost) - len(toks & penalise) - (2 if seen else 0)
+        # Lightly prefer peer-reviewed venues over bare preprints (a gentle +1 tiebreaker;
+        # relevance/verdict still dominate).
+        venue_bonus = 1 if (c.get("venue") or "").strip() else 0
+        score = len(toks & boost) - len(toks & penalise) - (2 if seen else 0) + venue_bonus
         scored.append((verdict_rank, -score, i, {**c, "seen_before": seen}))
     scored.sort(key=lambda x: (x[0], x[1], x[2]))   # pass>weak, score desc, finder order
     return [c for _v, _s, _i, c in scored]
