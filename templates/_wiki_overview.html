@@ -901,12 +901,19 @@
   {% set themelist = (overview.connections.themes if overview.connections else []) %}
   {% set cxe = (overview.connections.entities if overview.connections else {}) %}
   <section class="rounded-xl border border-slate-200 bg-white p-5"
-           x-data="{ filterDim: 'all', selKeys: [], toggleKey(k){ this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter(x => x !== k) : [...this.selKeys, k] }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) }, ctx: { open: false, x: 0, y: 0, pid: null }, tagsOpen: false, openCtx(id, ev){ this.ctx = { open: true, x: ev.clientX, y: ev.clientY, pid: id }; }, editTags(){ const pid = this.ctx.pid; this.ctx.open = false; this.tagsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/paper/' + pid + '/tags', { target: '#tags-editor-body', swap: 'innerHTML' }); }, init(){ const valid = new Set(['unmapped']); this.$el.querySelectorAll('[data-ents]').forEach(c => (c.dataset.ents || '').split(' ').filter(Boolean).forEach(k => valid.add(k))); try{ const r = JSON.parse(sessionStorage.getItem('pa.pf.keys.{{ slug }}') || '[]'); this.selKeys = r.filter(k => valid.has(k)); this.filterDim = sessionStorage.getItem('pa.pf.dim.{{ slug }}') || 'all'; }catch(e){} if(!this.selKeys.length && this.filterDim !== 'all'){ this.filterDim = 'all'; } try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(this.selKeys)); sessionStorage.setItem('pa.pf.dim.{{ slug }}', this.filterDim); }catch(e){} this.$watch('selKeys', v => { try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(v)); }catch(e){} }); this.$watch('filterDim', v => { try{ sessionStorage.setItem('pa.pf.dim.{{ slug }}', v); }catch(e){} }); } }"
+           x-data="{ filterDim: 'all', unreadOnly: false, selKeys: [], toggleKey(k){ this.selKeys = this.selKeys.includes(k) ? this.selKeys.filter(x => x !== k) : [...this.selKeys, k] }, sel: [], toggleSel(id){ this.sel.includes(id) ? (this.sel = this.sel.filter(x => x !== id)) : this.sel.push(id) }, ctx: { open: false, x: 0, y: 0, pid: null }, tagsOpen: false, openCtx(id, ev){ this.ctx = { open: true, x: ev.clientX, y: ev.clientY, pid: id }; }, editTags(){ const pid = this.ctx.pid; this.ctx.open = false; this.tagsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/wiki/paper/' + pid + '/tags', { target: '#tags-editor-body', swap: 'innerHTML' }); }, init(){ const valid = new Set(['unmapped']); this.$el.querySelectorAll('[data-ents]').forEach(c => (c.dataset.ents || '').split(' ').filter(Boolean).forEach(k => valid.add(k))); try{ const r = JSON.parse(sessionStorage.getItem('pa.pf.keys.{{ slug }}') || '[]'); this.selKeys = r.filter(k => valid.has(k)); this.filterDim = sessionStorage.getItem('pa.pf.dim.{{ slug }}') || 'all'; this.unreadOnly = sessionStorage.getItem('pa.pf.unread.{{ slug }}') === '1'; }catch(e){} if(!this.selKeys.length && this.filterDim !== 'all'){ this.filterDim = 'all'; } try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(this.selKeys)); sessionStorage.setItem('pa.pf.dim.{{ slug }}', this.filterDim); }catch(e){} this.$watch('selKeys', v => { try{ sessionStorage.setItem('pa.pf.keys.{{ slug }}', JSON.stringify(v)); }catch(e){} }); this.$watch('filterDim', v => { try{ sessionStorage.setItem('pa.pf.dim.{{ slug }}', v); }catch(e){} }); this.$watch('unreadOnly', v => { try{ sessionStorage.setItem('pa.pf.unread.{{ slug }}', v ? '1' : '0'); }catch(e){} }); } }"
            @click.away="ctx.open = false"
            @pa-filter-papers.window="selKeys = [$event.detail.key]; filterDim = $event.detail.dim">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
       <span class="text-xs text-slate-500">(Evidence)</span>
+      {# Unread quick-filter — always available (orthogonal to the entity filters below). #}
+      {% set _unread = overview.papers | rejectattr('read') | list | length %}
+      <button type="button" @click="unreadOnly = !unreadOnly"
+              :class="unreadOnly ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'"
+              class="rounded-full px-2 py-0.5 text-[11px] font-medium" title="Show only unread papers">
+        ○ Unread <span class="tabular-nums">{{ _unread }}</span>
+      </button>
       {# multi-select removal: tick papers → Remove (→ Graveyard, restorable; syncs to Zotero) #}
       <form x-show="sel.length" x-cloak hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
             hx-confirm="Remove the selected paper(s) from this collection? They go to the Graveyard (restorable) and are removed from Zotero on the next Sync.">
@@ -927,7 +934,7 @@
     <div class="mb-3 text-[11px]">
       <div class="flex flex-wrap items-center gap-1.5">
         <span class="text-slate-400 mr-0.5">Filter:</span>
-        <button type="button" @click="selKeys=[]; filterDim='all'" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
+        <button type="button" @click="selKeys=[]; filterDim='all'; unreadOnly=false" :class="selKeys.length===0 && !unreadOnly ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
         {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
         {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
         {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>{% endif %}
@@ -955,8 +962,8 @@
       {% for p in overview.papers %}
       <div class="group flex-1 min-w-[180px] max-w-[240px] rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm p-3 transition {% if p.read %}opacity-75{% endif %}"
            @contextmenu.prevent="openCtx({{ p.id }}, $event)"
-           data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}"
-           x-show="(selKeys.length === 0 || selKeys.every(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase()))">
+           data-s="{{ (p.title ~ ' ' ~ (p.authors or ''))|lower }}" data-ents="{{ p.ent_keys|join(' ') }}" data-read="{{ 1 if p.read else 0 }}"
+           x-show="(selKeys.length === 0 || selKeys.every(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase())) && (!unreadOnly || $el.dataset.read === '0')">
         <div class="flex items-center gap-1 mb-2">
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
                  class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
