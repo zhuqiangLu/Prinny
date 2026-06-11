@@ -1,0 +1,47 @@
+{# Pending suggested-reading list for a research topic. Swapped in place by the
+   Accept/Dismiss forms (hx-target="#topic-suggestions") so acting on a suggestion
+   updates the list without a full-page reload (no scroll jump, no tab reset). #}
+<div id="topic-suggestions">
+  {% if not suggestions %}
+  <p class="text-sm text-slate-400">No pending suggestions. Use the search above, or 🔎 on an entity.</p>
+  {% else %}
+  {% set PLABEL = {'missing':'fill missing evidence','challenge':'challenge','support':'support','unknown':'address unknown','broaden':'broaden','custom':'custom'} %}
+  <ul class="space-y-2">
+    {% for s in suggestions %}
+    <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+      <div class="flex items-baseline gap-2 flex-wrap">
+        <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ s.title|default('(untitled)') }}</p>
+        {% if s.venue %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700" title="Peer-reviewed venue">{{ s.venue }}</span>{% endif %}
+        {% if s.citation_count and s.citation_count > 0 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500" title="Citations (Semantic Scholar)">{{ s.citation_count }} cites</span>{% endif %}
+        {% if s.arxiv_id %}<a href="https://arxiv.org/abs/{{ s.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ s.arxiv_id }} ↗</a>{% elif s.doi %}<a href="https://doi.org/{{ s.doi }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">DOI ↗</a>{% endif %}
+      </div>
+      <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+        <span class="rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">{{ PLABEL.get(s.purpose, s.purpose) }}</span>
+        {% if s.target_label %}<span class="rounded px-1.5 py-0.5 bg-slate-100 text-slate-600">→ {{ s.target_label|truncate(46) }}</span>{% endif %}
+        {% if s.verdict == 'pass' %}<span class="rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700" title="Validator confirmed against the abstract">✓ verified{% if s.confidence %} {{ (s.confidence * 100)|round|int }}%{% endif %}</span>
+        {% elif s.verdict == 'weak' %}<span class="rounded px-1.5 py-0.5 bg-amber-100 text-amber-800" title="Borderline — verify before relying on it">~ weak match</span>{% endif %}
+      </div>
+      {% if s.note %}<p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why:</span> {{ s.note }}</p>{% endif %}
+      <div class="mt-2 flex items-center gap-1.5">
+        <form hx-post="/t/{{ t.slug }}/reading/{{ s.id }}/accept" hx-target="#topic-suggestions" hx-swap="outerHTML"
+              hx-disabled-elt="this button" class="flex items-center gap-1.5 flex-wrap"
+              x-data="{ coll: '{{ s.recommended or (linked[0].slug if linked else '__new__') }}' }">
+          <select name="collection" x-model="coll" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+            {% for c in linked %}<option value="{{ c.slug }}">{{ c.name }}{% if c.slug == s.recommended %} · best fit{% endif %}</option>{% endfor %}
+            <option value="__new__">+ New collection…</option>
+          </select>
+          <template x-if="coll === '__new__'">
+            <input name="new_name" required placeholder="New collection name" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+          </template>
+          <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700 disabled:opacity-50">Add{% if s.target_kind == 'hypothesis' %} + link{% endif %}</button>
+        </form>
+        <form hx-post="/t/{{ t.slug }}/reading/{{ s.id }}/dismiss" hx-target="#topic-suggestions" hx-swap="outerHTML"
+              hx-disabled-elt="this button">
+          <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs disabled:opacity-50">Dismiss</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>

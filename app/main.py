@@ -611,17 +611,28 @@ def topic_reading_status(slug: str) -> JSONResponse:
                          "added": job.get("added", 0), "error": job.get("error")})
 
 
-@app.post("/t/{slug}/reading/{sid}/accept")
-def topic_reading_accept(slug: str, sid: int, collection: str = Form(""),
-                         new_name: str = Form("")) -> RedirectResponse:
+def _topic_reading_fragment(request: Request, slug: str) -> HTMLResponse:
+    """Re-render just the pending-suggestions list (for an in-place HTMX swap after
+    Accept/Dismiss — no full-page reload, so the scroll position and tab are kept)."""
+    t = topics_mod.get_topic(slug)
+    allc = {c["slug"]: c for c in library.list_collections(with_activity=True)}
+    linked = [{"slug": cs, "name": allc.get(cs, {}).get("name", cs)} for cs in (t["collections"] if t else [])]
+    return templates.TemplateResponse(request, "_topic_reading_list.html", {
+        "t": t, "linked": linked,
+        "suggestions": _annotate_recommended(slug, topics_mod.list_suggestions(slug, "pending"))})
+
+
+@app.post("/t/{slug}/reading/{sid}/accept", response_class=HTMLResponse)
+def topic_reading_accept(request: Request, slug: str, sid: int, collection: str = Form(""),
+                         new_name: str = Form("")) -> HTMLResponse:
     topics_mod.accept_suggestion(slug, sid, collection, new_name)
-    return RedirectResponse(f"/t/{slug}", status_code=303)
+    return _topic_reading_fragment(request, slug)
 
 
-@app.post("/t/{slug}/reading/{sid}/dismiss")
-def topic_reading_dismiss(slug: str, sid: int) -> RedirectResponse:
+@app.post("/t/{slug}/reading/{sid}/dismiss", response_class=HTMLResponse)
+def topic_reading_dismiss(request: Request, slug: str, sid: int) -> HTMLResponse:
     topics_mod.dismiss_suggestion(slug, sid)
-    return RedirectResponse(f"/t/{slug}", status_code=303)
+    return _topic_reading_fragment(request, slug)
 
 
 @app.post("/t/{slug}/evidence/{eid}/verify")
