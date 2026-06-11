@@ -111,6 +111,28 @@ def test_generate_overview_writes_field_model_files(tmp_path, monkeypatch):
     assert thesis_meta["type"] == "thesis"
 
 
+def test_generate_overview_threads_editorial_steer(tmp_path, monkeypatch):
+    """An optional steer is appended as a bounded EDITORIAL block to the field-model
+    prompt, capped at _STEER_MAX, and recorded in the log — and absent when not given."""
+    calls = []                                                  # generate_overview also makes a
+    def stub(messages, model=None):                             # theme-naming call — capture ALL
+        calls.append(messages[-1]["content"])
+        return json.dumps(_FIELD_MODEL_JSON)
+    _seed_three_papers(tmp_path, monkeypatch, stub)
+    long_steer = "Lead with the long-context angle. " * 20      # > _STEER_MAX chars
+    assert wiki.generate_overview("vlms", steer=long_steer) is True
+    fm = next(m for m in calls if "USER STEER" in m)            # the field-model prompt
+    assert "EDITORIAL ONLY" in fm
+    assert long_steer[:wiki._STEER_MAX] in fm                   # capped prefix present
+    assert long_steer not in fm                                 # full (uncapped) text is not
+    log = (tmp_path / "collections" / "vlms" / "wiki" / "log.md").read_text()
+    assert "steered" in log                                     # provenance recorded
+
+    calls.clear()                                               # no steer => no steer block
+    assert wiki.generate_overview("vlms", force=True) is True
+    assert not any("USER STEER" in m for m in calls)
+
+
 def test_thesis_agent_edit_propose_apply_undo(tmp_path, monkeypatch):
     """The section editor: propose returns a diff without writing; apply writes +
     snapshots; undo restores. Validators clamp the round-trip."""

@@ -40,18 +40,32 @@
   <p class="text-xs text-slate-400 mb-4 italic">No accepted beliefs yet — the regen will draft from your notes, thoughts, and papers as usual.</p>
   {% endif %}
 
+  {# Optional one-shot EDITORIAL steer for this regeneration. Held in the parent
+     collectionView() scope (regenSteer) so triaging beliefs above doesn't clear it.
+     Each form below carries it as a hidden `steer` input. #}
+  <div class="border-t border-slate-100 pt-3 mb-2">
+    <label class="block text-[11px] font-medium text-slate-600 mb-1">Optional steer for this regen
+      <span class="font-normal text-slate-400">— editorial only (emphasis / clustering / framing). Ignored if the papers don't support it; not saved.</span></label>
+    <textarea x-model="regenSteer" maxlength="300" rows="2"
+              placeholder="e.g. Lead the thesis with the long-context angle; keep retrieval and memory as separate method families."
+              class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
+    <div class="text-right text-[10px] text-slate-400"><span x-text="(regenSteer||'').length"></span>/300</div>
+  </div>
+
   <div class="flex items-center gap-2 border-t border-slate-100 pt-3 flex-wrap">
     {% if has_model %}
     {# Incremental: fold new papers + signal into the existing model (keeps your edits) #}
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
       <input type="hidden" name="mode" value="incremental">
+      <input type="hidden" name="steer" :value="regenSteer">
       <button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700"
               title="Fold the new papers and your recent highlights/notes into the current model — keeps its structure and your edits">✦ Update — fold in new</button>
     </form>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
       <input type="hidden" name="mode" value="full">
+      <input type="hidden" name="steer" :value="regenSteer">
       <button class="rounded border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-sm hover:bg-slate-50"
               title="Re-cluster the whole collection from scratch — discards the current structure">↻ Rebuild from scratch</button>
     </form>
@@ -59,6 +73,7 @@
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
       <input type="hidden" name="mode" value="full">
+      <input type="hidden" name="steer" :value="regenSteer">
       <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">✦ Generate Field Model</button>
     </form>
     {% endif %}

@@ -2865,13 +2865,16 @@ def wiki_panel(request: Request, slug: str) -> HTMLResponse:
 
 
 @app.post("/c/{slug}/wiki/draft", response_class=HTMLResponse)
-def wiki_draft_seed(request: Request, slug: str, mode: str = Form("full")) -> HTMLResponse:
+def wiki_draft_seed(request: Request, slug: str, mode: str = Form("full"),
+                    steer: str = Form("")) -> HTMLResponse:
     """Kick off the field-model draft on a background daemon thread and re-render the panel
     immediately. mode='incremental' folds new papers/signal into the existing model;
-    'full' rebuilds from scratch. The new panel renders the in-progress overlay; the
-    overlay's polling refreshes on completion."""
+    'full' rebuilds from scratch. ``steer`` is an optional one-shot EDITORIAL instruction
+    for this run (emphasis/clustering/framing — subordinate to the evidence). The new panel
+    renders the in-progress overlay; the overlay's polling refreshes on completion."""
     _require_collection(slug)
-    wiki.start_draft_async(slug, force=True, mode=(mode if mode == "incremental" else "full"))
+    wiki.start_draft_async(slug, force=True, mode=(mode if mode == "incremental" else "full"),
+                           steer=steer)
     return _wiki_panel(request, slug)
 
 

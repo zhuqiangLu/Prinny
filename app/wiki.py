@@ -1619,7 +1619,11 @@ def start_reading_async(slug: str, purpose: str = "related", target: str = "",
     return True
 
 
-def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str = "full") -> bool:
+_STEER_MAX = 300        # an optional regen steer is a *nudge*, not a rewritten prompt — cap it
+
+
+def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str = "full",
+                      steer: str = "") -> bool:
     """Generate the Field Model (Stage 0 of the cognitive-model wiki, 2026-05-31).
 
     One-shot pipeline:
@@ -1740,6 +1744,19 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
             "argue, and let the Landscape lead with the problems/methods THEY establish. Don't "
             "let abstract-only papers outweigh them; don't omit them:\n"
             + "\n".join(f"- {t}" for t in _core_titles) + "\n")
+    # One-shot EDITORIAL steer (optional, not stored). Subordinate to the evidence: it may
+    # reshape emphasis / clustering / ordering / framing over the SAME papers — never licence
+    # to add problems/methods/concepts the papers don't support. Fenced + length-capped so it
+    # stays a nudge and can't override the JSON schema or the validator's caps.
+    steer = (steer or "").strip()[:_STEER_MAX]
+    if steer:
+        user_content += (
+            "\n\n=== USER STEER for THIS regeneration (EDITORIAL ONLY) ===\n"
+            "The researcher asked you to shape this draft as follows. Treat it strictly as "
+            "guidance on emphasis, clustering, ordering, and framing over the SAME evidence — "
+            "NOT permission to invent problems/methods/concepts the papers don't support. If the "
+            "evidence doesn't support the steer, IGNORE it; never fabricate to satisfy it:\n"
+            f"“{steer}”\n")
     msgs = [{"role": "system", "content": system},
             {"role": "user", "content": user_content}]
     # The field-model agent is non-deterministic — a run occasionally returns prose
@@ -1812,7 +1829,8 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
     stage("writing", pages_done=3, pages_total=3)
     _append_log(slug, f"{'updated' if incremental else 'generated'} field model "
                        f"({pdf_read_count}/{n_papers} PDFs, "
-                       f"{len(field['concepts'])} concepts)", user_content)
+                       f"{len(field['concepts'])} concepts)"
+                       + (f" · steered: “{steer}”" if steer else ""), user_content)
     # Name the structural themes now (one extra LLM call, folded into this
     # already-explicit regen) so they're labelled by default — no separate
     # "Name themes" button. Failure here doesn't fail the regen.
@@ -2162,10 +2180,11 @@ def _stage_progress(job: dict) -> int:
     return 0
 
 
-def start_draft_async(slug: str, force: bool = True, mode: str = "full") -> bool:
+def start_draft_async(slug: str, force: bool = True, mode: str = "full", steer: str = "") -> bool:
     """Kick off the field-model draft on a daemon thread. ``mode='incremental'`` folds new
     papers/signal into the existing model (cheap, structure-preserving); ``'full'`` rebuilds
-    from scratch. Returns True if a job was started, False if one was already running."""
+    from scratch. ``steer`` is an optional one-shot EDITORIAL instruction for this run.
+    Returns True if a job was started, False if one was already running."""
     existing = get_draft_job(slug)
     if existing and existing.get("status") == "running":
         return False
@@ -2178,7 +2197,7 @@ def start_draft_async(slug: str, force: bool = True, mode: str = "full") -> bool
 
     def runner():
         try:
-            ok = generate_overview(slug, force=force, stage_cb=cb, mode=mode)
+            ok = generate_overview(slug, force=force, stage_cb=cb, mode=mode, steer=steer)
             if ok:
                 # Refresh per-entity reviews against the regenerated entity set.
                 try:
