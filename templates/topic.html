@@ -101,6 +101,38 @@
       <b>Find reading failed.</b> {{ reading_error }} — try again.
     </div>
     {% endif %}
+    {% if has_content and collection_changes and collection_changes.stale %}
+    {# A linked collection moved on since the investigation was generated. Non-destructive
+       signal: dismissible per-session, re-appears when the change-signature grows. #}
+    <div x-data="{ sig: '{{ collection_changes.new_papers }}n{{ collection_changes.collections|length }}c', dismissed: '', init(){ this.dismissed = (window.sessionStorage && sessionStorage.getItem('pa.tstale.{{ t.slug }}')) || ''; } }"
+         x-show="dismissed !== sig" x-cloak
+         class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+      <div class="flex items-start gap-2">
+        <span class="mt-0.5">📚</span>
+        <div class="min-w-0 flex-1">
+          <p><b>A linked collection changed since this investigation was generated.</b></p>
+          <ul class="mt-1 text-[13px] text-amber-800 space-y-0.5">
+            {% for c in collection_changes.collections %}
+            <li>· <b>{{ c.name }}</b> — {{ c.reasons|join(', ') }}</li>
+            {% endfor %}
+          </ul>
+          <div class="mt-2 flex items-center gap-2 flex-wrap">
+            {% if collection_changes.new_papers %}
+            <form method="post" action="/t/{{ t.slug }}/scan-new"
+                  @submit="window.localStorage && localStorage.setItem('pa.ttab','reading')">
+              <button class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-amber-700">⌕ Scan {{ collection_changes.new_papers }} new paper{{ '' if collection_changes.new_papers == 1 else 's' }} for evidence</button>
+            </form>
+            <span class="text-[11px] text-amber-700">non-destructive — evidence candidates land in the Reading tab to accept</span>
+            {% else %}
+            <span class="text-[12px] text-amber-800">Use <b>↻ Regenerate investigation</b> (⋯ menu) to fold the changes in — it rebuilds hypotheses &amp; unknowns (your logged experiment results are kept).</span>
+            {% endif %}
+            <button type="button" @click="dismissed = sig; window.sessionStorage && sessionStorage.setItem('pa.tstale.{{ t.slug }}', sig)"
+                    class="ml-auto text-[11px] text-amber-700 hover:text-amber-900 underline">Dismiss</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
     {% if not has_content %}
     {# Empty investigation — prominent generate CTA #}
     <div class="rounded-xl border border-violet-200 bg-violet-50/40 p-6 text-center max-w-2xl mx-auto">

@@ -484,6 +484,150 @@ def start_reading_async(slug: str, purpose: str = "related", target_id=None,
     return True
 
 
+def linked_collection_changes(slug: str) -> dict:
+    """Non-destructive staleness check: which linked collections changed since this topic's
+    investigation was last generated. Returns ``{stale, new_papers, collections:[{slug, name,
+    new_papers, reasons}]}``. Cheap; empty when the topic was never generated."""
+    from . import wiki, library
+    t = topics.get_topic(slug)
+    if not t:
+        return {"stale": False, "new_papers": 0, "collections": []}
+    gen_at = str((t.get("generated") or {}).get("generated_at") or "").replace("T", " ")[:19]
+    if not gen_at:                       # never generated → nothing to be stale against yet
+        return {"stale": False, "new_papers": 0, "collections": []}
+    out, total_new = [], 0
+    con = library.connect()
+    try:
+        for cs in t["collections"]:
+            n_new = len(wiki._papers_added_since(cs, gen_at))
+            thesis_at = (wiki._thesis_generated_at(cs) or "")[:19]
+            a = con.execute("SELECT MAX(created_at) FROM annotations WHERE collection_slug=?", (cs,)).fetchone()[0]
+            nt = con.execute("SELECT MAX(updated_at) FROM paper_notes WHERE collection_slug=?", (cs,)).fetchone()[0]
+            sig = max([str(x)[:19].replace("T", " ") for x in (a, nt) if x] or [""])
+            reasons = []
+            if n_new:
+                reasons.append(f"{n_new} new paper" + ("" if n_new == 1 else "s"))
+            if thesis_at and thesis_at > gen_at:
+                reasons.append("field model updated")
+            if sig and sig > gen_at:
+                reasons.append("new highlights/notes")
+            if reasons:
+                c = library.get_collection(cs)
+                out.append({"slug": cs, "name": (c or {}).get("name", cs),
+                            "new_papers": n_new, "reasons": reasons})
+                total_new += n_new
+    finally:
+        con.close()
+    return {"stale": bool(out), "new_papers": total_new, "collections": out}
+
+
+def scan_new_papers_for_evidence(slug: str) -> dict:
+    """Scan the linked collections' NEW papers (added since the investigation was generated)
+    for evidence bearing on the CURRENT hypotheses, landing each as a pending suggestion the
+    user accepts → unverified evidence. Non-destructive: hypotheses/experiments/results are
+    untouched. One LLM call. Returns ``{added, scanned, error}``."""
+    from . import wiki, library
+    t = topics.get_topic(slug)
+    if not t:
+        return {"added": 0, "scanned": 0, "error": "Topic not found."}
+    hyps = t["hypotheses"]
+    if not hyps:
+        return {"added": 0, "scanned": 0, "error": "No hypotheses yet — generate the investigation first."}
+    gen_at = str((t.get("generated") or {}).get("generated_at") or "").replace("T", " ")[:19]
+    if not gen_at:
+        return {"added": 0, "scanned": 0, "error": "Generate the investigation first."}
+    # New internal papers we can dedup cleanly on Accept (need an arXiv id or DOI so the
+    # re-import resolves to the existing row instead of double-adding).
+    papers = []
+    for cs in t["collections"]:
+        for pid in wiki._papers_added_since(cs, gen_at):
+            p = library.get_paper(pid)
+            if not p or not (p.get("abstract") or "").strip():
+                continue
+            if not (p.get("arxiv_id") or p.get("doi")):
+                continue
+            papers.append({"cs": cs, "title": p.get("title", ""), "abstract": p["abstract"],
+                           "arxiv_id": p.get("arxiv_id") or "", "doi": p.get("doi") or "",
+                           "authors": p.get("authors") or "", "pdf_url": p.get("pdf_url") or ""})
+            if len(papers) >= 30:
+                break
+    if not papers:
+        return {"added": 0, "scanned": 0, "error": None}
+    hyp_lines = "\n".join(f"H{i}: {h['text']}" for i, h in enumerate(hyps))
+    pap_lines = "\n\n".join(f"P{i} [{p['title']}]: {p['abstract'][:600]}" for i, p in enumerate(papers))
+    system = ("You match new papers to a researcher's hypotheses. For each paper that CLEARLY "
+              "bears on a hypothesis (from its abstract alone), emit a link; default to omitting "
+              "a paper rather than forcing a weak one. STRICT JSON: "
+              '{"links":[{"paper":0,"hyp":0,"stance":"supporting|counter",'
+              '"claim":"one sentence, grounded in the abstract"}]}.')
+    user = (f"HYPOTHESES:\n{hyp_lines}\n\nNEW PAPERS:\n{pap_lines}\n\n"
+            "Emit a link only where the abstract genuinely supports or counters a hypothesis.")
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}])) or {}
+    except Exception as exc:  # noqa: BLE001
+        return {"added": 0, "scanned": len(papers), "error": f"scan failed: {exc}"}
+    pending = topics.pending_suggestion_arxiv(slug)
+    seen, added = set(), 0
+    for ln in (data.get("links") or []):
+        pi, hi = ln.get("paper"), ln.get("hyp")
+        if not (isinstance(pi, int) and isinstance(hi, int)):
+            continue
+        if not (0 <= pi < len(papers) and 0 <= hi < len(hyps)):
+            continue
+        claim = (ln.get("claim") or "").strip()
+        if not claim:
+            continue
+        stance = ln.get("stance") if ln.get("stance") in ("supporting", "counter") else "supporting"
+        p, h = papers[pi], hyps[hi]
+        key = (p["arxiv_id"] or p["doi"], hi)
+        if key in seen:
+            continue
+        seen.add(key)
+        if p["arxiv_id"] and p["arxiv_id"] in pending:
+            continue
+        if topics.add_suggestion(slug, arxiv_id=p["arxiv_id"], title=p["title"],
+                                 authors=p["authors"], abstract=p["abstract"], note=claim,
+                                 purpose="evidence", target_kind="hypothesis", target_id=h["id"],
+                                 target_label=h["text"], stance=stance,
+                                 doi=p["doi"], pdf_url=p["pdf_url"]):
+            added += 1
+    topics.log_event(slug, "scanned_new_papers",
+                     f"{added} evidence candidate(s) from {len(papers)} new paper(s)")
+    return {"added": added, "scanned": len(papers), "error": None}
+
+
+def start_scan_async(slug: str) -> bool:
+    """Run scan_new_papers_for_evidence on a daemon thread, sharing the reading job slot so
+    the reading-tab overlay + suggestions tray render the result."""
+    existing = get_reading_job(slug)
+    if existing and existing.get("status") == "running":
+        return False
+    with _READING_LOCK:
+        _READING_JOBS[slug] = {"status": "running", "started_at": _now(), "added": 0, "error": None}
+
+    def runner():
+        try:
+            res = scan_new_papers_for_evidence(slug)
+            err = res.get("error")
+            with _READING_LOCK:
+                _READING_JOBS[slug] = {"status": "failed" if err else "done",
+                                       "added": res.get("added", 0), "error": err,
+                                       "finished_at": _now()}
+            from . import notify
+            if err:
+                notify.add(f"Topic scan failed ({slug})", f"/t/{slug}", slug, ok=False)
+            else:
+                notify.add(f"Topic scan: {res.get('added', 0)} evidence candidate(s) from new papers ({slug})",
+                           f"/t/{slug}", slug)
+        except Exception as exc:  # noqa: BLE001
+            with _READING_LOCK:
+                _READING_JOBS[slug] = {"status": "failed", "error": str(exc), "finished_at": _now()}
+
+    threading.Thread(target=runner, daemon=True, name=f"topicscan-{slug}").start()
+    return True
+
+
 def analyze_experiment(slug: str, eid: int) -> dict:
     """One LLM call → reason whether the logged result supports/refutes the experiment's
     hypothesis, and suggest the next step / a revised plan. Stores the analysis on the

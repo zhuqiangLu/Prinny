@@ -804,6 +804,13 @@ def replace_investigation(slug: str, *, assumptions: list, hypotheses: list,
             "SELECT id, text FROM topic_hypotheses WHERE topic_id=?", (tid,))}
         kept = [dict(r) for r in con.execute(
             "SELECT id, hypothesis_id FROM topic_evidence WHERE topic_id=? AND unverified=1", (tid,))]
+        # Preserve user-logged experiment RESULTS/ANALYSIS across a regenerate — these are
+        # the researcher's own work (not agent-generated) and would otherwise be wiped with
+        # the rest of the experiments. Re-attach by title after the rebuild (best-effort).
+        old_exp = {}
+        for r in con.execute("SELECT title, result, analysis FROM topic_experiments WHERE topic_id=?", (tid,)):
+            if (r["result"] or "").strip() or (r["analysis"] or "").strip():
+                old_exp[(r["title"] or "").strip()] = (r["result"], r["analysis"])
         for table in ("topic_assumptions", "topic_unknowns",
                       "topic_experiments", "topic_hypotheses"):
             con.execute(f"DELETE FROM {table} WHERE topic_id=?", (tid,))
@@ -847,11 +854,15 @@ def replace_investigation(slug: str, *, assumptions: list, hypotheses: list,
                 (tid, u["text"], u.get("priority", "medium"), hyp_id(u.get("hyp_index")), i))
 
         for i, x in enumerate(experiments):
-            con.execute(
+            cur = con.execute(
                 "INSERT INTO topic_experiments(topic_id, title, method, metric, status, "
                 "hypothesis_id, position) VALUES(?,?,?,?,?,?,?)",
                 (tid, x["title"], x.get("method", ""), x.get("metric", ""),
                  x.get("status", "planned"), hyp_id(x.get("hyp_index")), i))
+            preserved = old_exp.get((x.get("title") or "").strip())
+            if preserved:                     # re-attach the researcher's logged result/analysis
+                con.execute("UPDATE topic_experiments SET result=?, analysis=? WHERE id=?",
+                            (preserved[0], preserved[1], cur.lastrowid))
 
         con.execute("UPDATE research_topics SET generated=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                     (json.dumps(generated), tid))

@@ -366,6 +366,7 @@ def topic_page(request: Request, slug: str) -> HTMLResponse:
         "gen_error": gen_error,
         "reading_running": reading_running,
         "reading_error": reading_error,
+        "collection_changes": topic_view.linked_collection_changes(slug),
         "chat": chat,
         "topic_artifact_html": render_md(topic_artifact, "") if topic_artifact else "",
         "model": load_config().get("model", ""),
@@ -620,6 +621,16 @@ def _topic_reading_fragment(request: Request, slug: str) -> HTMLResponse:
     return templates.TemplateResponse(request, "_topic_reading_list.html", {
         "t": t, "linked": linked,
         "suggestions": _annotate_recommended(slug, topics_mod.list_suggestions(slug, "pending"))})
+
+
+@app.post("/t/{slug}/scan-new")
+def topic_scan_new(slug: str) -> RedirectResponse:
+    """Scan the linked collections' newly-added papers for evidence on the current
+    hypotheses (non-destructive — lands candidates in the reading tray to accept).
+    Runs in the background, sharing the reading job slot/overlay."""
+    if topics_mod.get_topic(slug):
+        topic_view.start_scan_async(slug)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.post("/t/{slug}/reading/{sid}/accept", response_class=HTMLResponse)

@@ -5,7 +5,7 @@
   {% if not suggestions %}
   <p class="text-sm text-slate-400">No pending suggestions. Use the search above, or 🔎 on an entity.</p>
   {% else %}
-  {% set PLABEL = {'missing':'fill missing evidence','challenge':'challenge','support':'support','unknown':'address unknown','broaden':'broaden','custom':'custom'} %}
+  {% set PLABEL = {'missing':'fill missing evidence','challenge':'challenge','support':'support','unknown':'address unknown','broaden':'broaden','custom':'custom','evidence':'new-paper evidence'} %}
   <ul class="space-y-2">
     {% for s in suggestions %}
     <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">

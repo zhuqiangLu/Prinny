@@ -63,6 +63,61 @@ def test_suggested_reading_is_grounded(topicdb):
         assert isinstance(r["id"], int)
 
 
+def test_linked_collection_changes_detects_new_papers(topicdb):
+    slug = topics.create_topic("T", "Can compression preserve reasoning?", collections=["vlms"])
+    # A generated investigation dated in the past; the vlms papers were added after it.
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "Compression preserves reasoning", "status": "unknown",
+                     "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[],
+        generated={"generated_at": "2020-01-01 00:00:00"})
+    ch = topic_view.linked_collection_changes(slug)
+    assert ch["stale"] is True and ch["new_papers"] >= 1
+    assert ch["collections"][0]["slug"] == "vlms"
+    # A topic never generated is not 'stale' (nothing to compare against).
+    fresh = topics.create_topic("T2", "Q?", collections=["vlms"])
+    assert topic_view.linked_collection_changes(fresh)["stale"] is False
+
+
+def test_scan_new_papers_lands_evidence_candidates(topicdb, monkeypatch):
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "Compression preserves reasoning", "status": "unknown",
+                     "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[],
+        generated={"generated_at": "2020-01-01 00:00:00"})
+    monkeypatch.setattr("app.llm.complete", lambda m, model=None: json.dumps({"links": [
+        {"paper": 0, "hyp": 0, "stance": "supporting", "claim": "Shows compression keeps accuracy."}]}))
+    res = topic_view.scan_new_papers_for_evidence(slug)
+    assert res["error"] is None and res["added"] >= 1
+    sugg = topics.list_suggestions(slug, "pending")
+    hit = next(s for s in sugg if s["target_kind"] == "hypothesis")
+    assert hit["stance"] == "supporting" and hit["purpose"] == "evidence" and hit["note"]
+
+
+def test_regenerate_preserves_logged_experiment_results(topicdb):
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "H1", "status": "unknown", "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[],
+        experiments=[{"title": "Ablate KV cache", "method": "m", "metric": "acc", "hyp_index": 0}],
+        generated={"generated_at": "2026-01-01 00:00:00"})
+    eid = topics.get_topic(slug)["experiments"][0]["id"]
+    topics.set_experiment(slug, eid, result="acc dropped 2%", analysis="supports H1")
+    # Regenerate (full rebuild) with the SAME experiment title.
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "H1", "status": "unknown", "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[],
+        experiments=[{"title": "Ablate KV cache", "method": "m2", "metric": "acc", "hyp_index": 0}],
+        generated={"generated_at": "2026-02-01 00:00:00"})
+    ex = topics.get_topic(slug)["experiments"][0]
+    assert ex["result"] == "acc dropped 2%" and ex["analysis"] == "supports H1"   # preserved
+
+
 def test_topic_graph_is_question_centered(topicdb):
     slug = topics.create_topic("T", "Q?", collections=["vlms"])
     topic_view.analyze(slug)
