@@ -435,6 +435,7 @@
           {% if s.note %}<p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why:</span> {{ s.note }}</p>{% endif %}
           <div class="mt-2 flex items-center gap-1.5">
             <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/accept" class="flex items-center gap-1.5 flex-wrap"
+                  @submit="window.localStorage && localStorage.setItem('pa.ttab','reading')"
                   x-data="{ coll: '{{ s.recommended or (linked[0].slug if linked else '__new__') }}' }">
               <select name="collection" x-model="coll" class="rounded border border-slate-300 px-1.5 py-0.5 text-xs">
                 {% for c in linked %}<option value="{{ c.slug }}">{{ c.name }}{% if c.slug == s.recommended %} · best fit{% endif %}</option>{% endfor %}
@@ -445,7 +446,8 @@
               </template>
               <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add{% if s.target_kind == 'hypothesis' %} + link{% endif %}</button>
             </form>
-            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/dismiss">
+            <form method="post" action="/t/{{ t.slug }}/reading/{{ s.id }}/dismiss"
+                  @submit="window.localStorage && localStorage.setItem('pa.ttab','reading')">
               <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
             </form>
           </div>
