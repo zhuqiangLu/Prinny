@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from . import agent_skills, graph as _graph, llm, topics
+from . import agent_skills, graph as _graph, i18n, llm, topics
 from .wiki import _extract_json
 
 # ---- cross-collection union graph -------------------------------------------
@@ -560,6 +560,7 @@ def scan_new_papers_for_evidence(slug: str) -> dict:
               "a paper rather than forcing a weak one. STRICT JSON: "
               '{"links":[{"paper":0,"hyp":0,"stance":"supporting|counter",'
               '"claim":"one sentence, grounded in the abstract"}]}.')
+    system += i18n.output_directive()
     user = (f"HYPOTHESES:\n{hyp_lines}\n\nNEW PAPERS:\n{pap_lines}\n\n"
             "Emit a link only where the abstract genuinely supports or counters a hypothesis.")
     try:
@@ -649,6 +650,7 @@ def analyze_experiment(slug: str, eid: int) -> dict:
                   "hypothesis. Give: a one-line **Verdict**, brief **Reasoning** grounded in the "
                   "result, and a **Next step** (a revised experiment or follow-up). Markdown only; "
                   "no invented numbers."))
+    system += i18n.output_directive()
     try:
         out = llm.complete([{"role": "system", "content": system},
                             {"role": "user", "content": user}])
@@ -701,6 +703,7 @@ def generate_investigation(slug: str, stage_cb=None) -> dict:
                  'counter_evidence:[{claim,paper,hypothesis}], missing_evidence:[{claim,hypothesis}],'
                  'unknowns:[{question,priority,hypothesis}], experiments:[{title,method,metric,'
                  'hypothesis}], next_steps:[{title,detail}], key_terms:[".."]}.')
+    system += i18n.output_directive()
     from .config import agent_model
     try:
         data = _extract_json(llm.complete([{"role": "system", "content": system},
@@ -974,6 +977,7 @@ def suggest_questions(slug: str) -> dict:
             "answer. STRICT JSON: {questions: [\"...\", ...]}.")
     system = ("You generate open research sub-questions. Concrete and answerable, "
               "grounded in the topic. STRICT JSON only: {questions:[\"...\"]}.")
+    system += i18n.output_directive()
     try:
         data = _extract_json(llm.complete([{"role": "system", "content": system},
                                            {"role": "user", "content": user}]))
@@ -1032,5 +1036,5 @@ def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
                  "for greetings or meta questions. ONLY use the read tools when the "
                  "question genuinely needs specifics from the linked collections; prefer "
                  "the fewest tool calls (often zero).")
-    return ([{"role": "system", "content": "\n\n".join(parts)}]
+    return ([{"role": "system", "content": "\n\n".join(parts) + i18n.output_directive()}]
             + history + [{"role": "user", "content": user_msg}])

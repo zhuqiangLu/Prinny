@@ -178,7 +178,7 @@
     {% set NAV_MAX = 6 %}
     <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">
       <div x-data="{ more: (function(){ try { return localStorage.getItem('pa.moreCol') === '1'; } catch(e){ return false; } })() }">
-        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Collections</div>
+        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{{ tr("Collections") }}</div>
         {% for c in nav.collections %}
         <div {% if loop.index > NAV_MAX %}x-show="more" x-cloak{% endif %}
              class="group flex items-center rounded-md hover:bg-slate-100 {% if request.url.path == '/c/' ~ c.slug %}bg-slate-100{% endif %}">
@@ -198,10 +198,10 @@
           <span x-text="more ? 'Show less' : 'Show {{ nav.collections|length - NAV_MAX }} more'"></span>
         </button>
         {% endif %}
-        <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New collection</a>
+        <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> {{ tr("New collection") }}</a>
       </div>
       <div x-data="{ more: (function(){ try { return localStorage.getItem('pa.moreTop') === '1'; } catch(e){ return false; } })() }">
-        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Research Topics</div>
+        <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{{ tr("Research Topics") }}</div>
         {% for t in nav.topics %}
         <div {% if loop.index > NAV_MAX %}x-show="more" x-cloak{% endif %}
              class="group flex items-center rounded-md hover:bg-slate-100 {% if request.url.path == '/t/' ~ t.slug %}bg-slate-100{% endif %}">
@@ -220,7 +220,7 @@
           <span x-text="more ? 'Show less' : 'Show {{ nav.topics|length - NAV_MAX }} more'"></span>
         </button>
         {% endif %}
-        <a href="/topics" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> New topic</a>
+        <a href="/topics" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> {{ tr("New topic") }}</a>
       </div>
     </nav>
     <div class="shrink-0 border-t border-slate-100 px-2 py-2 space-y-0.5 text-sm">

@@ -29,6 +29,7 @@ from . import (
     discover,
     export_dir as export_mod,
     frontmatter,
+    i18n,
     library,
     live_session,
     llm,
@@ -78,6 +79,11 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # without each route having to pass it in. Evaluated per render.
 templates.env.globals["pa_theme"] = theme_mod.load_theme
 templates.env.globals["pa_branding"] = theme_mod.branding
+# UI string translation: {{ tr("English source") }} → active-language string (or the
+# English source itself when untranslated). Named `tr` (not `t`) because `t` is already
+# the topic object in topic.html and a loop var in base.html. Global setting; see app/i18n.py.
+templates.env.globals["tr"] = i18n.t
+templates.env.globals["pa_lang"] = i18n.current_lang
 
 
 def _asset_v(name: str) -> int:
@@ -987,6 +993,7 @@ def settings_post(
     app_name: str = Form("Prinny"),
     workspace_title: str = Form("Research Workspace"),
     workspace_subtitle: str = Form("A calm space to read, understand, and connect ideas."),
+    language: str = Form("en"),
 ) -> HTMLResponse:
     # Normalize the highlight scheme; remap existing highlights only if the colors changed.
     old_colors = [c["color"] for c in config_highlight_scheme()]
@@ -1013,8 +1020,10 @@ def settings_post(
             "workspace_title": workspace_title.strip() or "Research Workspace",
             "workspace_subtitle": workspace_subtitle.strip()
             or "A calm space to read, understand, and connect ideas.",
+            "language": language if language in i18n.SUPPORTED else "en",
         }
     )
+    i18n.refresh()                 # drop the cached language so the new choice takes effect now
     if set(new_colors) != set(old_colors):
         ann_mod.remap_to_scheme(new_colors)
     # HTMX submit (page or modal) swaps just the form wrapper; a plain POST gets the page.

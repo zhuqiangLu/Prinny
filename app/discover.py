@@ -735,8 +735,14 @@ _STOPWORDS = {
 
 
 def _tokens(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9][a-z0-9\-]{2,}", (text or "").lower())
+    toks = {w for w in re.findall(r"[a-z0-9][a-z0-9\-]{2,}", (text or "").lower())
             if w not in _STOPWORDS}
+    # CJK text has no spaces, so the ASCII word regex extracts nothing — approximate
+    # tokens with overlapping Han-character bigrams so preference learning (accept/reject
+    # keyword profile) also works on Chinese titles instead of silently no-op'ing.
+    for run in re.findall(r"[一-鿿]{2,}", text or ""):
+        toks |= {run[i:i + 2] for i in range(len(run) - 1)}
+    return toks
 
 
 def preference_profile(accepted_titles: list[str], dismissed_titles: list[str]) -> dict:

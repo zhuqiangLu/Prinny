@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from . import agent_skills, agents, engine as engine_mod, llm, mcp_server
+from . import agent_skills, agents, engine as engine_mod, i18n, llm, mcp_server
 from .config import load_config
 
 logger = logging.getLogger("paper_agent.agentic_chat")
@@ -189,7 +189,7 @@ def answer(slug: str, history: list[dict], user_text: str, images: list[str] | N
     messages.append({"role": "user", "content": user_text})
     try:
         res = eng.run_once(
-            messages, system=_SYSTEM, allowed_tools=agents.effective_tools("chat", tools),
+            messages, system=_SYSTEM + i18n.output_directive(), allowed_tools=agents.effective_tools("chat", tools),
             mcp_config=mcp_server.stdio_mcp_config(slug), cwd=str(home),
         )
     except engine_mod.EngineError as exc:

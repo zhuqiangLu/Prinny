@@ -97,6 +97,9 @@ DEFAULTS: dict[str, str] = {
     # Display preferences (stored as "true"/"false" strings).
     "pdf_dark": "true",            # invert the PDF in dark mode (per-paper toggle still wins)
     "debug": "false",              # developer: surface internals (e.g. chat session id)
+    # UI + agent-output language (Settings → Appearance). 'en' | 'zh'. Drives both the
+    # translated UI chrome and the language the agent writes its prose in.
+    "language": "en",
     # Branding / appearance (editable in Settings → Appearance).
     "app_name": "Prinny",
     "workspace_title": "Research Workspace",

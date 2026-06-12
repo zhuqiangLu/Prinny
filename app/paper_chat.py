@@ -23,7 +23,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from . import agent_skills, agents, engine as engine_mod, live_session, llm, mcp_server, pdf_store
+from . import agent_skills, agents, engine as engine_mod, i18n, live_session, llm, mcp_server, pdf_store
 from .config import load_config
 from .repo import thread_message_count, get_session_id, set_session_id
 
@@ -167,7 +167,7 @@ class ClaudeCodePaperAgent(PaperChatAgent):
         stored history) so the agent reads it via get_chat_history rather than re-feeding it."""
         pdf = pdf_store.ensure_cached(paper_id)
         return {
-            "system": _system(collection, title, paper_id, str(pdf) if pdf else "", n_prior),
+            "system": _system(collection, title, paper_id, str(pdf) if pdf else "", n_prior) + i18n.output_directive(),
             "allowed_tools": _TOOLS,
             # read_only=True: the server itself refuses write tools (belt + suspenders
             # with the read-only --allowedTools above).
@@ -267,7 +267,7 @@ class LivePaperAgent(PaperChatAgent):
     def stream(self, slug, collection, thread_id, paper_id, title, user_text, images=None):
         pdf = pdf_store.ensure_cached(paper_id)
         argv = self.eng.live_argv(
-            system=_system(collection, title, paper_id, str(pdf) if pdf else ""),
+            system=_system(collection, title, paper_id, str(pdf) if pdf else "") + i18n.output_directive(),
             allowed_tools=agents.effective_tools("paper", _TOOLS),
             mcp_config=mcp_server.stdio_mcp_config(slug, read_only=True))
         sess = live_session.get_or_spawn(thread_id, argv, str(agent_skills.ensure_skills_home()))
@@ -335,7 +335,7 @@ class CodexPaperAgent(PaperChatAgent):
         paths, cleanup = _materialize_images(images)     # Codex attaches images natively (-i)
         try:
             for ev in self.eng.paper_stream(
-                slug=slug, system=_codex_system(collection, title, paper_id, n_prior),
+                slug=slug, system=_codex_system(collection, title, paper_id, n_prior) + i18n.output_directive(),
                 read_tools=self.READ_TOOLS, cwd=str(agent_skills.ensure_skills_home()),
                 session_id=sid, user_text=user_text, image_paths=paths,
             ):

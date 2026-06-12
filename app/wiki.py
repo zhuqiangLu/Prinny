@@ -31,7 +31,7 @@ from pathlib import Path
 import logging
 import threading as _threading
 
-from . import frontmatter, llm
+from . import frontmatter, i18n, llm
 from .config import COLLECTIONS_DIR
 from .db import connect
 
@@ -957,6 +957,7 @@ def suggest_beliefs(slug: str) -> dict:
     from . import agent_skills
     system = (agent_skills.skill_body("belief-draft")
               or "Output JSON: {candidates:[{title, confidence, supporting_papers, related_concepts}]}.")
+    system += i18n.output_directive()
     try:
         out = llm.complete([{"role": "system", "content": system},
                             {"role": "user", "content": user}])
@@ -1070,6 +1071,7 @@ def propose_thesis_edit(slug: str, instruction: str) -> dict:
     system = (agent_skills.skill_body("section-edit")
               or "Revise the section's JSON per the instruction; same keys; change only "
                  "what's asked; invent nothing. Output JSON only.")
+    system += i18n.output_directive()
     concepts = _concept_names(slug)
     user = (
         "SECTION: Collection Thesis\n"
@@ -1757,6 +1759,7 @@ def generate_overview(slug: str, force: bool = False, stage_cb=None, mode: str =
             "NOT permission to invent problems/methods/concepts the papers don't support. If the "
             "evidence doesn't support the steer, IGNORE it; never fabricate to satisfy it:\n"
             f"“{steer}”\n")
+    system += i18n.output_directive()        # agent writes the thesis/landscape in the chosen language
     msgs = [{"role": "system", "content": system},
             {"role": "user", "content": user_content}]
     # The field-model agent is non-deterministic — a run occasionally returns prose
@@ -1959,6 +1962,7 @@ def suggest_review(slug: str) -> dict:
                   "and `## Gaps`. Lead with the user's own takes (their notes/thoughts) as the "
                   "voice; cite papers as [[ref]]. Clearly mark anything summarized only from an "
                   "abstract with '(not yet reviewed by you)'. Do not invent findings."))
+    system += i18n.output_directive()
     try:
         out = llm.complete([{"role": "system", "content": system},
                             {"role": "user", "content": _build_review_prompt(slug, ctx)}])
@@ -2281,6 +2285,21 @@ def attention_scores(slug: str) -> dict[int, int]:
     return dict(scores)
 
 
+def _synonym_regex(raw_syns: list) -> "re.Pattern | None":
+    """OR a concept's synonyms into one case-insensitive pattern for attention matching.
+    ASCII terms get \\b word boundaries (so 'gap' doesn't match 'agape'); CJK / non-ASCII
+    terms match as plain substrings — CJK text has no spaces or word boundaries, so a
+    \\b-guarded pattern would NEVER fire on a Chinese synonym."""
+    parts = []
+    for s in raw_syns:
+        s = (s or "").strip()
+        if not s:
+            continue
+        esc = re.escape(s)
+        parts.append(esc if re.search(r"[^\x00-\x7f]", s) else r"\b" + esc + r"\b")
+    return re.compile("(?:" + "|".join(parts) + ")", flags=re.IGNORECASE) if parts else None
+
+
 def attention_per_concept(slug: str, concepts: list[dict]) -> dict[str, int]:
     """Per-concept attention score (Phase B). Deterministic regex over highlight
     selected_text and per-paper note bodies — no LLM. A concept gets +1 per
@@ -2297,11 +2316,9 @@ def attention_per_concept(slug: str, concepts: list[dict]) -> dict[str, int]:
     # boundaries so 'gap' doesn't match 'agape'. Synonyms are lowercase already.
     patterns: dict[str, re.Pattern] = {}
     for c in concepts:
-        syns = [re.escape(s) for s in (c.get("synonyms") or []) if s]
-        if not syns:
-            continue
-        patterns[c["slug"]] = re.compile(r"\b(?:" + "|".join(syns) + r")\b",
-                                          flags=re.IGNORECASE)
+        pat = _synonym_regex(c.get("synonyms") or [])
+        if pat is not None:
+            patterns[c["slug"]] = pat
     if not patterns:
         return {}
     con = connect()
@@ -2366,9 +2383,9 @@ def papers_to_concepts(slug: str, concepts: list[dict], max_tags: int = 2) -> di
     name_by_slug = {c["slug"]: c.get("name", c["slug"]) for c in concepts}
     patterns: dict[str, re.Pattern] = {}
     for c in concepts:
-        syns = [re.escape(s) for s in (c.get("synonyms") or []) if s]
-        if syns:
-            patterns[c["slug"]] = re.compile(r"\b(?:" + "|".join(syns) + r")\b", flags=re.IGNORECASE)
+        pat = _synonym_regex(c.get("synonyms") or [])
+        if pat is not None:
+            patterns[c["slug"]] = pat
 
     # Invert LLM membership (concept.papers refs) → {ref: [concept_slug, ...]}.
     llm_by_ref: dict[str, list[str]] = defaultdict(list)

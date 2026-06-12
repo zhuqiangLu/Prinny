@@ -354,8 +354,9 @@ CREATE INDEX IF NOT EXISTS idx_wiki_proposals ON wiki_proposals(collection_slug,
 -- is an INTEGER PRIMARY KEY so it *is* the rowid (content_rowid='rowid' stays correct).
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
   paper_id, collection_slug, summary, thoughts, key_quotes,
-  content='paper_notes', content_rowid='rowid'
-);
+  content='paper_notes', content_rowid='rowid',
+  tokenize = 'trigram'      -- CJK-safe: the default tokenizer can't segment spaceless
+);                          -- Chinese, so phrase search would fail; trigram matches substrings
 
 -- Keep the external-content FTS index in sync with paper_notes.
 CREATE TRIGGER IF NOT EXISTS paper_notes_ai AFTER INSERT ON paper_notes BEGIN
@@ -499,6 +500,18 @@ def _migrate(con: sqlite3.Connection) -> None:
     # also count as an "attention" signal in duplicate merge). Guarded so _migrate is safe
     # on a partial DB (the table exists after SCHEMA in init_db).
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    # notes_fts tokenizer upgrade → trigram (CJK-safe). A pre-existing index built with the
+    # default tokenizer can't match Chinese phrases; recreate it with trigram and rebuild
+    # from the content table. Idempotent: skipped once the SQL already says 'trigram'.
+    if "notes_fts" in tables:
+        _fts = con.execute("SELECT sql FROM sqlite_master WHERE name='notes_fts'").fetchone()
+        if _fts and "trigram" not in (_fts[0] or "").lower():
+            con.execute("DROP TABLE notes_fts")
+            con.execute(
+                "CREATE VIRTUAL TABLE notes_fts USING fts5("
+                "paper_id, collection_slug, summary, thoughts, key_quotes, "
+                "content='paper_notes', content_rowid='rowid', tokenize='trigram')")
+            con.execute("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')")
     if "collection_papers" in tables:
         cpcols = {r[1] for r in con.execute("PRAGMA table_info(collection_papers)")}
         if "read_at" not in cpcols:

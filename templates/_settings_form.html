@@ -93,6 +93,18 @@
         <!-- Appearance -->
         <div x-show="cat === 'appearance'" x-cloak class="space-y-4">
           <div class="{{ sect }} space-y-3">
+            <h3 class="text-sm font-semibold text-slate-700">{{ tr("Language") }}</h3>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">{{ tr("Language") }}
+                <span class="font-normal text-slate-400">· {{ tr("UI text + the language the agent writes in") }}</span></label>
+              <select name="language" class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
+                <option value="en" {% if config.language != "zh" %}selected{% endif %}>English</option>
+                <option value="zh" {% if config.language == "zh" %}selected{% endif %}>中文 (Chinese)</option>
+              </select>
+              <p class="text-xs text-slate-400 mt-1">{{ tr("Saved with the Save button below.") }}</p>
+            </div>
+          </div>
+          <div class="{{ sect }} space-y-3">
             <h3 class="text-sm font-semibold text-slate-700">Names</h3>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Workspace title
