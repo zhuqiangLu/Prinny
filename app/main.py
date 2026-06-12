@@ -2858,6 +2858,7 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "review_error": review_error,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
+         "paper_count": len(library.list_papers(slug)),   # empty → prompt to add, not draft
          "dup_count": len(library.find_duplicate_groups(slug)),
          "graveyard_count": library.graveyard_count(slug),
          "thesis_undo": wiki.has_thesis_undo(slug),
@@ -2893,6 +2894,10 @@ def wiki_draft_seed(request: Request, slug: str, mode: str = Form("full"),
     for this run (emphasis/clustering/framing — subordinate to the evidence). The new panel
     renders the in-progress overlay; the overlay's polling refreshes on completion."""
     _require_collection(slug)
+    # Nothing to draft from in an empty collection — don't kick off a doomed job that
+    # fails with "no usable output"; the panel renders an Add-papers prompt instead.
+    if not library.list_papers(slug):
+        return _wiki_panel(request, slug)
     wiki.start_draft_async(slug, force=True, mode=(mode if mode == "incremental" else "full"),
                            steer=steer)
     return _wiki_panel(request, slug)
