@@ -575,6 +575,8 @@
         const j = await r.json();
         btn.textContent = j.ok ? "✓ Added" : "Failed";
         btn.className = "rounded bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs";
+        // Confirm briefly, then dismiss — the popup was sitting open after "Added".
+        if (j.ok) setTimeout(() => { if (citePop) citePop.classList.add("hidden"); }, 1200);
       } catch (e) { btn.textContent = "Failed"; }
     });
   }
@@ -586,12 +588,14 @@
       if (els.some((el) => el.dataset && el.dataset.annId)) return;     // a highlight — let its handler run
       try { if (win.getSelection && String(win.getSelection()).trim()) return; } catch (_) {}  // selecting
       const span = els.find((el) => el.tagName === "SPAN" && el.closest && el.closest(".textLayer"));
-      if (!span) return;
+      // A click in the PDF that isn't on a citation should dismiss an open popup
+      // (the parent-document outside-click handler can't see clicks inside the iframe).
+      if (!span) { if (citePop) citePop.classList.add("hidden"); return; }
       const sibs = [span.previousElementSibling, span, span.nextElementSibling,
                     span.nextElementSibling && span.nextElementSibling.nextElementSibling];
       const windowText = sibs.filter(Boolean).map((s) => s.textContent).join(" ");
       const cite = extractCitation(span.textContent, windowText);
-      if (!cite) return;
+      if (!cite) { if (citePop) citePop.classList.add("hidden"); return; }
       e.preventDefault(); e.stopPropagation();                         // beat the internal-link jump
       const fr = frame.getBoundingClientRect();
       openCitePopup(cite, fr.left + e.clientX, fr.top + e.clientY);
