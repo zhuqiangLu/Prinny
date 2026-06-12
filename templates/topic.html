@@ -21,7 +21,7 @@
     {# ===== HEADER (purple-tinted workspace header) ===== #}
     <div class="bg-gradient-to-b from-violet-50 to-white border-b border-violet-100 px-6 pt-5">
       <div class="text-sm text-slate-500 mb-2">
-        <a href="/topics" class="hover:text-slate-900">Research Topics</a>
+        <a href="/topics" class="hover:text-slate-900">{{ tr("Research Topics") }}</a>
         <span class="text-slate-300 mx-1">›</span>
         <span class="text-slate-700">{{ t.title }}</span>
       </div>
@@ -34,7 +34,7 @@
               <select name="lifecycle" onchange="this.form.submit()"
                       class="rounded-full border border-violet-200 bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
                 {% for s, label in [('exploration','Exploration'),('investigation','Investigation'),('active','Active Project'),('archived','Archived')] %}
-                <option value="{{ s }}" {{ 'selected' if t.lifecycle == s }}>{{ label }}</option>
+                <option value="{{ s }}" {{ 'selected' if t.lifecycle == s }}>{{ tr(label) }}</option>
                 {% endfor %}
               </select>
             </form>
@@ -44,19 +44,19 @@
         <div class="flex items-center gap-2 shrink-0">
           <form method="post" action="/t/{{ t.slug }}/generate" id="fe-form">
             <button class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              <span class="fe-idle">⌕ Find evidence</span>
-              <span class="fe-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> Investigating…</span>
+              <span class="fe-idle">⌕ {{ tr("Find evidence") }}</span>
+              <span class="fe-busy items-center gap-1"><span class="inline-block animate-spin">⟳</span> {{ tr("Investigating…") }}</span>
             </button>
           </form>
           <style>#fe-form .fe-busy{display:none}#fe-form.htmx-request .fe-busy,#fe-form:has(button:active) .fe-busy{display:inline-flex}#fe-form:has(button:active) .fe-idle{display:none}</style>
-          <button @click="addHyp = true" class="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button>
+          <button @click="addHyp = true" class="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ {{ tr("Add hypothesis") }}</button>
           <div class="relative" x-data="{ open: false }" @click.outside="open = false">
             <button @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50">⋯</button>
             <div x-show="open" x-cloak class="absolute right-0 mt-1 w-52 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
               {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
-              <form method="post" action="/t/{{ t.slug }}/generate" @submit="open=false"><button class="{{ mi }}">↻ Regenerate investigation</button></form>
-              <button @click="open=false; manage=true" class="{{ mi }}">⛓ Manage collections</button>
-              <form method="post" action="/t/{{ t.slug }}/delete" onsubmit="return confirm('Delete this research topic? (collections and papers are untouched)')"><button class="{{ mi }} text-rose-600 hover:bg-rose-50">🗑 Delete topic</button></form>
+              <form method="post" action="/t/{{ t.slug }}/generate" @submit="open=false"><button class="{{ mi }}">↻ {{ tr("Regenerate investigation") }}</button></form>
+              <button @click="open=false; manage=true" class="{{ mi }}">⛓ {{ tr("Manage collections") }}</button>
+              <form method="post" action="/t/{{ t.slug }}/delete" onsubmit="return confirm('Delete this research topic? (collections and papers are untouched)')"><button class="{{ mi }} text-rose-600 hover:bg-rose-50">🗑 {{ tr("Delete topic") }}</button></form>
             </div>
           </div>
         </div>
@@ -66,7 +66,7 @@
       <div class="flex items-center gap-6 text-sm flex-wrap pb-1">
         {% for n, label, icon in [
           (stats.collections,'Collections','⛓'), (stats.evidence,'Evidence papers','📄')] %}
-        <div><span class="font-semibold text-slate-900 tabular-nums">{{ n }}</span> <span class="text-slate-400">{{ icon }} {{ label }}</span></div>
+        <div><span class="font-semibold text-slate-900 tabular-nums">{{ n }}</span> <span class="text-slate-400">{{ icon }} {{ tr(label) }}</span></div>
         {% endfor %}
       </div>
 
@@ -76,7 +76,7 @@
         {% for key, label in TABS %}
         <button @click="go('{{ key }}')"
                 :class="tab === '{{ key }}' ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-800'"
-                class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ label }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
+                class="whitespace-nowrap px-3 py-2 border-b-2 text-sm font-medium">{{ tr(label) }}{% if key == 'reading' and reading_running %} <span class="inline-block animate-spin text-violet-500">⟳</span>{% endif %}</button>
         {% endfor %}
       </div>
     </div>{# /header #}
@@ -86,19 +86,19 @@
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12 overflow-auto">
       <div class="relative bg-white rounded-2xl shadow-2xl w-[min(680px,95vw)] max-h-[88vh] overflow-auto p-6">
         <button type="button" @click="hypOpen = false" class="absolute right-4 top-4 grid place-items-center w-8 h-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50">✕</button>
-        <div id="hyp-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+        <div id="hyp-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
       </div>
     </div>
 
     <div class="px-6 py-6">
     {% if gen_error %}
     <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-      <b>Generation failed.</b> {{ gen_error }} — try <b>Find evidence</b> again.
+      <b>{{ tr("Generation failed.") }}</b> {{ gen_error }} — {{ tr("try") }} <b>{{ tr("Find evidence") }}</b> {{ tr("again.") }}
     </div>
     {% endif %}
     {% if reading_error %}
     <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-      <b>Find reading failed.</b> {{ reading_error }} — try again.
+      <b>{{ tr("Find reading failed.") }}</b> {{ reading_error }} — {{ tr("try again.") }}
     </div>
     {% endif %}
     {% if has_content and collection_changes and collection_changes.stale %}
@@ -110,7 +110,7 @@
       <div class="flex items-start gap-2">
         <span class="mt-0.5">📚</span>
         <div class="min-w-0 flex-1">
-          <p><b>A linked collection changed since this investigation was generated.</b></p>
+          <p><b>{{ tr("A linked collection changed since this investigation was generated.") }}</b></p>
           <ul class="mt-1 text-[13px] text-amber-800 space-y-0.5">
             {% for c in collection_changes.collections %}
             <li>· <b>{{ c.name }}</b> — {{ c.reasons|join(', ') }}</li>
@@ -120,14 +120,14 @@
             {% if collection_changes.new_papers %}
             <form method="post" action="/t/{{ t.slug }}/scan-new"
                   @submit="window.localStorage && localStorage.setItem('pa.ttab','reading')">
-              <button class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-amber-700">⌕ Scan {{ collection_changes.new_papers }} new paper{{ '' if collection_changes.new_papers == 1 else 's' }} for evidence</button>
+              <button class="rounded-lg bg-amber-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-amber-700">⌕ {{ tr("Scan") }} {{ collection_changes.new_papers }} {{ tr("new paper") }}{{ '' if collection_changes.new_papers == 1 else 's' }} {{ tr("for evidence") }}</button>
             </form>
-            <span class="text-[11px] text-amber-700">non-destructive — evidence candidates land in the Reading tab to accept</span>
+            <span class="text-[11px] text-amber-700">{{ tr("non-destructive — evidence candidates land in the Reading tab to accept") }}</span>
             {% else %}
-            <span class="text-[12px] text-amber-800">Use <b>↻ Regenerate investigation</b> (⋯ menu) to fold the changes in — it rebuilds hypotheses &amp; unknowns (your logged experiment results are kept).</span>
+            <span class="text-[12px] text-amber-800">{{ tr("Use") }} <b>↻ {{ tr("Regenerate investigation") }}</b> {{ tr("(⋯ menu) to fold the changes in — it rebuilds hypotheses & unknowns (your logged experiment results are kept).") }}</span>
             {% endif %}
             <button type="button" @click="dismissed = sig; window.sessionStorage && sessionStorage.setItem('pa.tstale.{{ t.slug }}', sig)"
-                    class="ml-auto text-[11px] text-amber-700 hover:text-amber-900 underline">Dismiss</button>
+                    class="ml-auto text-[11px] text-amber-700 hover:text-amber-900 underline">{{ tr("Dismiss") }}</button>
           </div>
         </div>
       </div>
@@ -136,12 +136,12 @@
     {% if not has_content %}
     {# Empty investigation — prominent generate CTA #}
     <div class="rounded-xl border border-violet-200 bg-violet-50/40 p-6 text-center max-w-2xl mx-auto">
-      <p class="text-base font-semibold text-slate-900">No investigation yet</p>
-      <p class="text-sm text-slate-600 mt-1">{% if t.collections %}Generate the scientific argument for this question — the agent reads your linked collections and drafts assumptions, hypotheses, evidence (for &amp; against), unknowns and candidate experiments.{% else %}Link at least one collection first, then generate. <button @click="manage=true" class="text-violet-700 underline">Manage collections</button>.{% endif %}</p>
+      <p class="text-base font-semibold text-slate-900">{{ tr("No investigation yet") }}</p>
+      <p class="text-sm text-slate-600 mt-1">{% if t.collections %}{{ tr("Generate the scientific argument for this question — the agent reads your linked collections and drafts assumptions, hypotheses, evidence (for & against), unknowns and candidate experiments.") }}{% else %}{{ tr("Link at least one collection first, then generate.") }} <button @click="manage=true" class="text-violet-700 underline">{{ tr("Manage collections") }}</button>.{% endif %}</p>
       {% if t.collections %}
       <form method="post" action="/t/{{ t.slug }}/generate" class="mt-3">
-        <button class="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-medium hover:bg-violet-700">✦ Generate investigation</button>
-        <span class="ml-1 text-xs text-slate-400">one LLM pass over {{ t.collections|length }} collection{{ 's' if t.collections|length != 1 }}</span>
+        <button class="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm font-medium hover:bg-violet-700">✦ {{ tr("Generate investigation") }}</button>
+        <span class="ml-1 text-xs text-slate-400">{{ tr("one LLM pass over") }} {{ t.collections|length }} {{ tr("collection") }}{{ 's' if t.collections|length != 1 }}</span>
       </form>
       {% endif %}
     </div>
@@ -161,23 +161,23 @@
             <span class="grid place-items-center w-14 h-14 rounded-xl bg-violet-100 text-violet-600 text-2xl shrink-0">◎</span>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">Research Question</span>
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">{{ tr("Research Question") }}</span>
                 <div class="ml-auto flex items-center gap-2">
-                  <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'research question', icon:'💬'})" class="text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
+                  <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'research question', icon:'💬'})" class="text-slate-300 hover:text-violet-600" title="{{ tr('Ask in chat') }}">💬</button>
                   {% if basics_undo %}
-                  <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="Revert the last agent edit">↩ Undo</button></form>
+                  <form method="post" action="/t/{{ t.slug }}/question/undo"><button class="text-xs text-slate-400 hover:text-violet-600" title="{{ tr('Revert the last agent edit') }}">↩ {{ tr("Undo") }}</button></form>
                   {% endif %}
-                  <button @click="aeditOpen=true; $nextTick(() => { var i=document.getElementById('t-aedit-instr'); if(i)i.value=''; var d=document.getElementById('t-aedit-diff'); if(d)d.innerHTML=''; })" class="text-xs text-violet-600 hover:underline">✎ with agent</button>
-                  <button @click="edit=!edit" class="text-xs text-slate-400 hover:text-violet-600">Edit</button>
+                  <button @click="aeditOpen=true; $nextTick(() => { var i=document.getElementById('t-aedit-instr'); if(i)i.value=''; var d=document.getElementById('t-aedit-diff'); if(d)d.innerHTML=''; })" class="text-xs text-violet-600 hover:underline">✎ {{ tr("with agent") }}</button>
+                  <button @click="edit=!edit" class="text-xs text-slate-400 hover:text-violet-600">{{ tr("Edit") }}</button>
                 </div>
               </div>
               <p x-show="!edit" class="text-xl font-bold text-slate-900 leading-snug mt-1">{{ t.question }}</p>
               {% if t.description %}<p x-show="!edit" class="text-xs text-slate-500 mt-2">{{ t.description }}</p>{% endif %}
               <form x-show="edit" x-cloak method="post" action="/t/{{ t.slug }}/edit" class="space-y-2 mt-2">
                 <textarea name="question" rows="3" required class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm">{{ t.question }}</textarea>
-                <textarea name="description" rows="2" placeholder="Description (optional)" class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs">{{ t.description }}</textarea>
-                <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">Save</button>
-                  <button type="button" @click="edit=false" class="text-xs text-slate-400">Cancel</button></div>
+                <textarea name="description" rows="2" placeholder="{{ tr('Description (optional)') }}" class="w-full rounded border border-slate-300 px-2 py-1.5 text-xs">{{ t.description }}</textarea>
+                <div class="flex gap-2"><button class="rounded bg-violet-600 text-white px-3 py-1 text-xs hover:bg-violet-700">{{ tr("Save") }}</button>
+                  <button type="button" @click="edit=false" class="text-xs text-slate-400">{{ tr("Cancel") }}</button></div>
               </form>
             </div>
           </div>
@@ -187,9 +187,9 @@
         <section class="min-w-0 rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex items-center gap-2 mb-3">
             <span class="text-violet-600">📊</span>
-            <h2 class="text-sm font-semibold text-slate-900">Evidence Summary</h2>
-            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence summary', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
-            <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">Details →</button>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Evidence Summary") }}</h2>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence summary', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="{{ tr('Ask in chat') }}">💬</button>
+            <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">{{ tr("Details →") }}</button>
           </div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {% for icon, ic, n, big, lbl, sub in [
@@ -198,19 +198,19 @@
                 ('?','text-amber-500', n_mis, n_mis, 'Missing', 'gaps')] %}
             <button @click="go('evidence')" class="text-left rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
               <div class="flex items-center gap-1.5"><span class="{{ ic }}">{{ icon }}</span><span class="text-2xl font-semibold text-slate-900 tabular-nums">{{ big }}</span></div>
-              <div class="text-[11px] text-slate-500 mt-0.5">{{ lbl }}</div>
-              <div class="text-[10px] text-slate-400">{{ sub }}</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">{{ tr(lbl) }}</div>
+              <div class="text-[10px] text-slate-400">{{ tr(sub) }}</div>
             </button>
             {% endfor %}
             <div class="rounded-lg border border-slate-200 p-3">
               <div class="flex items-center gap-1.5"><span class="text-violet-600">🛡</span>
                 {% if gen.confidence %}<span class="text-2xl font-semibold text-violet-600">{{ gen.confidence.label }}</span>
                 {% else %}<span class="text-2xl font-semibold text-slate-300">—</span>{% endif %}</div>
-              <div class="text-[11px] text-slate-500 mt-0.5">Confidence</div>
-              <div class="text-[10px] text-slate-400 tabular-nums">{% if gen.confidence %}{{ '%.2f'|format(gen.confidence.score) }}{% else %}no hypotheses{% endif %}</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">{{ tr("Confidence") }}</div>
+              <div class="text-[10px] text-slate-400 tabular-nums">{% if gen.confidence %}{{ '%.2f'|format(gen.confidence.score) }}{% else %}{{ tr("no hypotheses") }}{% endif %}</div>
             </div>
           </div>
-          <p class="mt-3 text-[10px] text-slate-400">Confidence is computed from hypothesis statuses (supported=1, mixed=.5, challenged=.15).</p>
+          <p class="mt-3 text-[10px] text-slate-400">{{ tr("Confidence is computed from hypothesis statuses (supported=1, mixed=.5, challenged=.15).") }}</p>
         </section>
       </div>
 
@@ -219,9 +219,9 @@
         {# 1 — Assumptions #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col" x-data="{ add: false }">
           <div class="flex items-center gap-2 mb-2">
-            <h2 class="text-sm font-semibold text-slate-900">Assumptions</h2>
-            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'assumptions', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
-            <button @click="viewAll='assumptions'" class="text-xs text-violet-600 hover:underline">View all</button>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Assumptions") }}</h2>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'assumptions', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="{{ tr('Ask in chat') }}">💬</button>
+            <button @click="viewAll='assumptions'" class="text-xs text-violet-600 hover:underline">{{ tr("View all") }}</button>
           </div>
           <div class="space-y-1.5">
             {% for a in t.assumptions[:3] %}
@@ -229,21 +229,21 @@
               <span class="text-[11px] font-semibold text-violet-500 mt-0.5 shrink-0">A{{ loop.index }}</span>
               <p class="text-[13px] text-slate-700 leading-snug line-clamp-2" title="{{ a.text }}">{{ a.text }}</p>
             </div>
-            {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+            {% else %}<p class="text-sm text-slate-400">{{ tr("None yet.") }}</p>{% endfor %}
           </div>
-          <button @click="add=!add" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add assumption</button>
+          <button @click="add=!add" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ {{ tr("Add assumption") }}</button>
           <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/assumptions" class="mt-2 flex gap-2">
-            <input name="text" required placeholder="A premise you're accepting" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
-            <button class="rounded bg-slate-900 text-white px-2 py-1 text-xs hover:bg-slate-700">Add</button>
+            <input name="text" required placeholder="{{ tr('A premise you\'re accepting') }}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
+            <button class="rounded bg-slate-900 text-white px-2 py-1 text-xs hover:bg-slate-700">{{ tr("Add") }}</button>
           </form>
         </section>
 
         {# 2 — Hypotheses #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
-            <h2 class="text-sm font-semibold text-slate-900">Hypotheses</h2>
-            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'hypotheses', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
-            <button @click="go('hypotheses')" class="text-xs text-violet-600 hover:underline">View all</button>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Hypotheses") }}</h2>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'hypotheses', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="{{ tr('Ask in chat') }}">💬</button>
+            <button @click="go('hypotheses')" class="text-xs text-violet-600 hover:underline">{{ tr("View all") }}</button>
           </div>
           <div class="space-y-1.5">
             {% for h in t.hypotheses[:4] %}
@@ -253,17 +253,17 @@
               <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HSTAT.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
               <span class="shrink-0 text-[11px] text-slate-400 tabular-nums" title="{{ h.support_count }} support · {{ h.counter_count }} counter">👍{{ h.support_count }}</span>
             </div>
-            {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+            {% else %}<p class="text-sm text-slate-400">{{ tr("None yet.") }}</p>{% endfor %}
           </div>
-          <button @click="addHyp=true" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add hypothesis</button>
+          <button @click="addHyp=true" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ {{ tr("Add hypothesis") }}</button>
         </section>
 
         {# 3 — Evidence (paper list) #}
         <section class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
           <div class="flex items-center gap-2 mb-2">
-            <h2 class="text-sm font-semibold text-slate-900">Evidence</h2>
-            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="Ask in chat">💬</button>
-            <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">View all</button>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Evidence") }}</h2>
+            <button type="button" @click="$dispatch('pa-ask', {kind:'topic', label:'evidence', icon:'💬'})" class="ml-auto text-slate-300 hover:text-violet-600" title="{{ tr('Ask in chat') }}">💬</button>
+            <button @click="go('evidence')" class="text-xs text-violet-600 hover:underline">{{ tr("View all") }}</button>
           </div>
           <div class="space-y-2">
             {% for e in t.evidence[:4] %}
@@ -271,20 +271,20 @@
               <span class="text-slate-300 shrink-0 mt-0.5">📄</span>
               <p class="flex-1 text-[13px] text-slate-700 leading-snug line-clamp-2" title="{{ e.paper_title or e.claim }}">{{ e.paper_title or e.claim }}</p>
               {% if e.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == e.hypothesis_id %}
-              <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ 'bg-emerald-100 text-emerald-700' if e.kind=='supporting' else 'bg-rose-100 text-rose-700' if e.kind=='counter' else 'bg-amber-100 text-amber-700' }}">{{ 'supports' if e.kind=='supporting' else 'counters' if e.kind=='counter' else 'gap' }} H{{ loop.index }}</span>
+              <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ 'bg-emerald-100 text-emerald-700' if e.kind=='supporting' else 'bg-rose-100 text-rose-700' if e.kind=='counter' else 'bg-amber-100 text-amber-700' }}">{{ tr('supports') if e.kind=='supporting' else tr('counters') if e.kind=='counter' else tr('gap') }} H{{ loop.index }}</span>
               {% endif %}{% endfor %}{% endif %}
-              {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="shrink-0 text-slate-300 hover:text-violet-600" title="Open paper">↗</a>{% endif %}
+              {% if e.paper_id %}<a href="/c/{{ e.collection }}/p/{{ e.paper_id }}" class="shrink-0 text-slate-300 hover:text-violet-600" title="{{ tr('Open paper') }}">↗</a>{% endif %}
             </div>
-            {% else %}<p class="text-sm text-slate-400">No evidence yet.</p>{% endfor %}
+            {% else %}<p class="text-sm text-slate-400">{{ tr("No evidence yet.") }}</p>{% endfor %}
           </div>
-          <button @click="go('evidence')" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ Add evidence</button>
+          <button @click="go('evidence')" class="mt-auto pt-2 border-t border-slate-100 w-full text-left text-xs text-violet-600 hover:underline">＋ {{ tr("Add evidence") }}</button>
         </section>
       </div>
 
       {# Next Steps (full width) #}
       {% if gen.next_steps %}
       <section class="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 class="text-sm font-semibold text-slate-900 mb-3">Next Steps</h2>
+        <h2 class="text-sm font-semibold text-slate-900 mb-3">{{ tr("Next Steps") }}</h2>
         <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {% for s in gen.next_steps %}
           <li class="flex items-start gap-2 rounded-lg border border-slate-200 p-2.5">
@@ -303,8 +303,8 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <section class="rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex items-center gap-2 mb-3">
-            <h2 class="text-sm font-semibold text-slate-900">Connected Collections</h2>
-            <button @click="manage=true" class="ml-auto text-xs text-violet-600 hover:underline">Manage</button>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Connected Collections") }}</h2>
+            <button @click="manage=true" class="ml-auto text-xs text-violet-600 hover:underline">{{ tr("Manage") }}</button>
           </div>
           {% if linked %}
           <ul class="space-y-2">
@@ -312,26 +312,26 @@
             <li class="flex items-center gap-3">
               <span class="text-slate-400 shrink-0">▤</span>
               <a href="/c/{{ c.slug }}" class="text-sm font-medium text-slate-800 hover:underline shrink-0">{{ c.name }}</a>
-              <span class="text-[11px] text-slate-400 shrink-0">{{ c.papers }} papers</span>
-              <span class="ml-auto block w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden" title="{{ c.evidence }} evidence items from this collection">
+              <span class="text-[11px] text-slate-400 shrink-0">{{ c.papers }} {{ tr("papers") }}</span>
+              <span class="ml-auto block w-24 h-1.5 rounded-full bg-slate-100 overflow-hidden" title="{{ c.evidence }} {{ tr('evidence items from this collection') }}">
                 <span class="block h-full bg-violet-400" style="width: {{ c.relevance_pct }}%"></span>
               </span>
             </li>
             {% endfor %}
           </ul>
-          {% else %}<p class="text-sm text-slate-400">No collections linked. <button @click="manage=true" class="text-violet-600 hover:underline">Link one</button>.</p>{% endif %}
+          {% else %}<p class="text-sm text-slate-400">{{ tr("No collections linked.") }} <button @click="manage=true" class="text-violet-600 hover:underline">{{ tr("Link one") }}</button>.</p>{% endif %}
         </section>
 
         {# 7 — Key Terms #}
         <section class="rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex items-center gap-2 mb-3">
-            <h2 class="text-sm font-semibold text-slate-900">Key Terms</h2>
+            <h2 class="text-sm font-semibold text-slate-900">{{ tr("Key Terms") }}</h2>
           </div>
           {% if gen.key_terms %}
           <div class="flex flex-wrap gap-1.5">
             {% for k in gen.key_terms %}<span class="text-xs rounded-md px-2 py-1 bg-violet-50 text-violet-700 border border-violet-100">{{ k }}</span>{% endfor %}
           </div>
-          {% else %}<p class="text-sm text-slate-400">No key terms yet.</p>{% endif %}
+          {% else %}<p class="text-sm text-slate-400">{{ tr("No key terms yet.") }}</p>{% endif %}
         </section>
       </div>
       {% endif %}
@@ -339,15 +339,15 @@
 
     {# ===== INVESTIGATION: Map-style switcher over Hypotheses · Evidence · Unknowns · Experiments ===== #}
     <div x-show="tab==='investigation'" x-cloak class="mb-4">
-      <p class="text-xs text-slate-500 mb-2">Each hypothesis holds its evidence &amp; open questions — click one to open it.</p>
+      <p class="text-xs text-slate-500 mb-2">{{ tr("Each hypothesis holds its evidence & open questions — click one to open it.") }}</p>
       <div class="grid grid-cols-2 gap-2">
         {% for v in [('hypotheses','Hypotheses', t.hypotheses|length, 'text-violet-700','ring-violet-400'),
                      ('experiments','Experiments', t.experiments|length, 'text-emerald-700','ring-emerald-400')] %}
         <button type="button" @click="inv='{{ v[0] }}'"
                 :class="inv==='{{ v[0] }}' ? 'ring-2 {{ v[4] }} bg-white' : 'bg-slate-50/50 hover:bg-white'"
-                class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ v[1] }}">
+                class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="{{ tr('Show') }} {{ tr(v[1]) }}">
           <div class="text-xl font-semibold tabular-nums {{ v[3] }}">{{ v[2] }}</div>
-          <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ v[1] }}</div>
+          <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ tr(v[1]) }}</div>
         </button>
         {% endfor %}
       </div>
@@ -355,8 +355,8 @@
 
     {# ============================ HYPOTHESES ============================ #}
     <div x-show="tab==='investigation' && inv==='hypotheses'" x-cloak class="space-y-3">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧪</span> Hypotheses
-        <button @click="addHyp=true" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add hypothesis</button></h2>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🧪</span> {{ tr("Hypotheses") }}
+        <button @click="addHyp=true" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ {{ tr("Add hypothesis") }}</button></h2>
       {% for h in t.hypotheses %}
       {% set nevs = t.evidence|selectattr('hypothesis_id','equalto',h.id)|list %}
       {% set nunk = t.unknowns|selectattr('hypothesis_id','equalto',h.id)|list %}
@@ -366,20 +366,20 @@
           <span class="text-sm font-semibold text-violet-500 mt-0.5 shrink-0">H{{ loop.index }}</span>
           <p class="flex-1 text-sm text-slate-800 leading-snug">{{ h.text }}</p>
           <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HSTAT.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
-          <span class="shrink-0 text-[11px] text-emerald-600 tabular-nums" title="supporting">👍{{ h.support_count }}</span>
-          <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="counter">👎{{ h.counter_count }}</span>
+          <span class="shrink-0 text-[11px] text-emerald-600 tabular-nums" title="{{ tr('supporting') }}">👍{{ h.support_count }}</span>
+          <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="{{ tr('counter') }}">👎{{ h.counter_count }}</span>
           <button type="button" data-ask-label="H{{ loop.index }}: {{ h.text }}"
                   @click.stop="$dispatch('pa-ask', {kind:'topic', label: $el.dataset.askLabel, icon:'💬'})"
-                  class="shrink-0 text-[11px] text-slate-300 hover:text-violet-600" title="Ask the assistant about this hypothesis">💬</button>
-          <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600" title="Delete">✕</button></form>
+                  class="shrink-0 text-[11px] text-slate-300 hover:text-violet-600" title="{{ tr('Ask the assistant about this hypothesis') }}">💬</button>
+          <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600" title="{{ tr('Delete') }}">✕</button></form>
         </div>
         <div class="mt-2 pl-7 flex items-center gap-3 text-[11px] text-slate-400">
-          <span><b class="text-slate-600 tabular-nums">{{ nevs|length }}</b> evidence</span>
-          <span><b class="text-slate-600 tabular-nums">{{ nunk|length }}</b> open question{{ 's' if nunk|length != 1 }}</span>
-          <span class="ml-auto text-violet-500 opacity-0 group-hover:opacity-100">open →</span>
+          <span><b class="text-slate-600 tabular-nums">{{ nevs|length }}</b> {{ tr("evidence") }}</span>
+          <span><b class="text-slate-600 tabular-nums">{{ nunk|length }}</b> {{ tr("open question") }}{{ 's' if nunk|length != 1 }}</span>
+          <span class="ml-auto text-violet-500 opacity-0 group-hover:opacity-100">{{ tr("open →") }}</span>
         </div>
       </div>
-      {% else %}<p class="text-sm text-slate-400">No hypotheses yet — use Find evidence to generate them, or add your own.</p>{% endfor %}
+      {% else %}<p class="text-sm text-slate-400">{{ tr("No hypotheses yet — use Find evidence to generate them, or add your own.") }}</p>{% endfor %}
       {# Unlinked: evidence / unknowns with no hypothesis #}
       {% set orphE = t.evidence|rejectattr('hypothesis_id')|list %}
       {% set orphU = t.unknowns|rejectattr('hypothesis_id')|list %}
@@ -388,12 +388,12 @@
            @click="hypOpen = true; htmx.ajax('GET', '/t/{{ t.slug }}/hypothesis/unlinked', { target: '#hyp-modal-body', swap: 'innerHTML' })">
         <div class="flex items-start gap-3">
           <span class="text-sm text-slate-400 mt-0.5 shrink-0">◌</span>
-          <p class="flex-1 text-sm text-slate-600 leading-snug">Unlinked — evidence &amp; questions not tied to a hypothesis</p>
+          <p class="flex-1 text-sm text-slate-600 leading-snug">{{ tr("Unlinked — evidence & questions not tied to a hypothesis") }}</p>
         </div>
         <div class="mt-2 pl-7 flex items-center gap-3 text-[11px] text-slate-400">
-          <span><b class="text-slate-600 tabular-nums">{{ orphE|length }}</b> evidence</span>
-          <span><b class="text-slate-600 tabular-nums">{{ orphU|length }}</b> open question{{ 's' if orphU|length != 1 }}</span>
-          <span class="ml-auto text-slate-500 opacity-0 group-hover:opacity-100">open →</span>
+          <span><b class="text-slate-600 tabular-nums">{{ orphE|length }}</b> {{ tr("evidence") }}</span>
+          <span><b class="text-slate-600 tabular-nums">{{ orphU|length }}</b> {{ tr("open question") }}{{ 's' if orphU|length != 1 }}</span>
+          <span class="ml-auto text-slate-500 opacity-0 group-hover:opacity-100">{{ tr("open →") }}</span>
         </div>
       </div>
       {% endif %}
@@ -401,13 +401,13 @@
 
     {# ============================ EXPERIMENTS ============================ #}
     <div x-show="tab==='investigation' && inv==='experiments'" x-cloak class="space-y-3" x-data="{ add: false }">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚗</span> Experiments
-        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ Add experiment</button></h2>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚗</span> {{ tr("Experiments") }}
+        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ {{ tr("Add experiment") }}</button></h2>
       <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/experiments" class="rounded-lg border border-slate-200 p-3 space-y-2">
-        <input name="title" required placeholder="Experiment title (e.g. Adapt memory module only)" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
-        <input name="method" placeholder="Method / setup" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
-        <div class="flex gap-2"><input name="metric" placeholder="Metric (e.g. LongVideoBench)" class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
-          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add</button></div>
+        <input name="title" required placeholder="{{ tr('Experiment title (e.g. Adapt memory module only)') }}" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <input name="method" placeholder="{{ tr('Method / setup') }}" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <div class="flex gap-2"><input name="metric" placeholder="{{ tr('Metric (e.g. LongVideoBench)') }}" class="flex-1 rounded border border-slate-300 px-3 py-1.5 text-sm">
+          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">{{ tr("Add") }}</button></div>
       </form>
       {% for x in t.experiments %}
       <div class="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 hover:shadow-sm transition cursor-pointer group"
@@ -415,17 +415,17 @@
         <div class="flex items-start gap-2">
           <span class="text-slate-400 mt-0.5 shrink-0">⚗</span>
           <p class="flex-1 text-sm font-medium text-slate-800">{{ x.title }}</p>
-          {% if x.result %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-600 border border-violet-200" title="Result logged{{ ' · analyzed' if x.analysis }}">📋{% if x.analysis %} ✦{% endif %}</span>{% endif %}
+          {% if x.result %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-600 border border-violet-200" title="{{ tr('Result logged') }}{{ ' · ' + tr('analyzed') if x.analysis }}">📋{% if x.analysis %} ✦{% endif %}</span>{% endif %}
           <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
           <form method="post" action="/t/{{ t.slug }}/experiments/{{ x.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
         </div>
         <div class="mt-1.5 pl-6 text-[12px] text-slate-600 space-y-0.5">
-          {% if x.method %}<div><span class="text-slate-400">Method:</span> {{ x.method }}</div>{% endif %}
-          {% if x.metric %}<div><span class="text-slate-400">Measure:</span> {{ x.metric }}</div>{% endif %}
-          {% if x.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == x.hypothesis_id %}<div><span class="text-slate-400">Tests:</span> <span class="text-violet-700">H{{ loop.index }}</span></div>{% endif %}{% endfor %}{% endif %}
+          {% if x.method %}<div><span class="text-slate-400">{{ tr("Method:") }}</span> {{ x.method }}</div>{% endif %}
+          {% if x.metric %}<div><span class="text-slate-400">{{ tr("Measure:") }}</span> {{ x.metric }}</div>{% endif %}
+          {% if x.hypothesis_id %}{% for h in t.hypotheses %}{% if h.id == x.hypothesis_id %}<div><span class="text-slate-400">{{ tr("Tests:") }}</span> <span class="text-violet-700">H{{ loop.index }}</span></div>{% endif %}{% endfor %}{% endif %}
         </div>
       </div>
-      {% else %}<p class="text-sm text-slate-400">No experiments yet — lightweight candidate studies that would test a hypothesis.</p>{% endfor %}
+      {% else %}<p class="text-sm text-slate-400">{{ tr("No experiments yet — lightweight candidate studies that would test a hypothesis.") }}</p>{% endfor %}
     </div>
 
     {# ============================ SUGGESTED READING ============================ #}
@@ -433,27 +433,27 @@
       {% if reading_running %}
       <div class="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
         <span class="inline-block animate-spin">⟳</span>
-        <span>Searching arXiv &amp; validating… <b>you can keep using other tabs</b> — results will appear here when it's done.</span>
+        <span>{{ tr("Searching arXiv & validating…") }} <b>{{ tr("you can keep using other tabs") }}</b> {{ tr("— results will appear here when it's done.") }}</span>
       </div>
       {% endif %}
       {% set suggest_action = "/t/" ~ t.slug ~ "/reading/suggest" %}
       {% set launcher_hx = False %}
-      {% set launcher_subject = "this research topic" %}
-      {% set launcher_placeholder = "Find papers that challenge frequent test-time adaptation" %}
-      {% set examples = ["Counter-evidence for one of my hypotheses", "Papers that fill a missing-evidence gap", "Recent methods relevant to my question"] %}
+      {% set launcher_subject = tr("this research topic") %}
+      {% set launcher_placeholder = tr("Find papers that challenge frequent test-time adaptation") %}
+      {% set examples = [tr("Counter-evidence for one of my hypotheses"), tr("Papers that fill a missing-evidence gap"), tr("Recent methods relevant to my question")] %}
       {% include "_reading_launcher.html" %}
 
-      <p class="text-xs text-slate-500"><b>Targeted</b> searches start from the entities — use 🔎 on a hypothesis (support / challenge), an unknown, or a missing-evidence gap. A validated hypothesis match files a <b>grounded</b> evidence link on Accept; otherwise it lands <b>unverified</b>.</p>
+      <p class="text-xs text-slate-500"><b>{{ tr("Targeted") }}</b> {{ tr("searches start from the entities — use 🔎 on a hypothesis (support / challenge), an unknown, or a missing-evidence gap. A validated hypothesis match files a") }} <b>{{ tr("grounded") }}</b> {{ tr("evidence link on Accept; otherwise it lands") }} <b>{{ tr("unverified") }}</b>.</p>
 
       {% include "_topic_reading_list.html" %}
     </div>
 
     {# ============================ NOTES ============================ #}
     <div x-show="tab==='notes'" x-cloak class="space-y-3">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🗒</span> Notes</h2>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>🗒</span> {{ tr("Notes") }}</h2>
       <form method="post" action="/t/{{ t.slug }}/notes" class="space-y-2">
-        <textarea name="body" rows="3" required placeholder="A note on this investigation…" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
-        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">Add note</button>
+        <textarea name="body" rows="3" required placeholder="{{ tr('A note on this investigation…') }}" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">{{ tr("Add note") }}</button>
       </form>
       {% for n in t.notes %}
       <div class="rounded-xl border border-slate-200 bg-white p-4 flex items-start gap-3">
@@ -461,12 +461,12 @@
           <div class="text-[10px] text-slate-400 mt-1">{{ n.created_at }}</div></div>
         <form method="post" action="/t/{{ t.slug }}/notes/{{ n.id }}/delete" class="shrink-0"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
       </div>
-      {% else %}<p class="text-sm text-slate-400">No notes yet.</p>{% endfor %}
+      {% else %}<p class="text-sm text-slate-400">{{ tr("No notes yet.") }}</p>{% endfor %}
     </div>
 
     {# ============================ TIMELINE ============================ #}
     <div x-show="tab==='timeline'" x-cloak class="space-y-3">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◷</span> Timeline</h2>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◷</span> {{ tr("Timeline") }}</h2>
       {% if t.timeline %}
       <ol class="relative border-l border-slate-200 ml-2 space-y-4">
         {% for ev in t.timeline %}
@@ -478,7 +478,7 @@
         </li>
         {% endfor %}
       </ol>
-      {% else %}<p class="text-sm text-slate-400">No events yet.</p>{% endif %}
+      {% else %}<p class="text-sm text-slate-400">{{ tr("No events yet.") }}</p>{% endif %}
     </div>
     </div>{# /px-6 panes #}
 
@@ -487,10 +487,10 @@
     <div x-show="addHyp" x-cloak @keydown.escape.window="addHyp=false" @click.self="addHyp=false"
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24">
       <div class="bg-white rounded-xl shadow-xl w-[min(540px,95vw)] p-5">
-        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">Add hypothesis</h2><button @click="addHyp=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">{{ tr("Add hypothesis") }}</h2><button @click="addHyp=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
         <form method="post" action="/t/{{ t.slug }}/hypotheses" class="space-y-2">
-          <textarea name="text" rows="2" required placeholder="A testable claim, e.g. online adaptation improves evidence retention" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
-          <div class="flex justify-end"><button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700">Add hypothesis</button></div>
+          <textarea name="text" rows="2" required placeholder="{{ tr('A testable claim, e.g. online adaptation improves evidence retention') }}" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+          <div class="flex justify-end"><button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700">{{ tr("Add hypothesis") }}</button></div>
         </form>
       </div>
     </div>
@@ -498,7 +498,7 @@
     <div x-show="viewAll==='assumptions'" x-cloak @keydown.escape.window="viewAll=''" @click.self="viewAll=''"
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
       <div class="bg-white rounded-xl shadow-xl w-[min(620px,95vw)] max-h-[85vh] overflow-auto p-5">
-        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">Assumptions</h2><button @click="viewAll=''" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <div class="flex items-center justify-between mb-3"><h2 class="font-semibold">{{ tr("Assumptions") }}</h2><button @click="viewAll=''" class="text-slate-400 hover:text-slate-700">✕</button></div>
         <div class="space-y-2">
           {% for a in t.assumptions %}
           <div class="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/40 p-3 group">
@@ -506,7 +506,7 @@
             <p class="flex-1 text-sm text-slate-700">{{ a.text }}</p>
             <form method="post" action="/t/{{ t.slug }}/assumptions/{{ a.id }}/delete" class="shrink-0 opacity-0 group-hover:opacity-100"><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
           </div>
-          {% else %}<p class="text-sm text-slate-400">None yet.</p>{% endfor %}
+          {% else %}<p class="text-sm text-slate-400">{{ tr("None yet.") }}</p>{% endfor %}
         </div>
       </div>
     </div>
@@ -515,17 +515,17 @@
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
       <div class="bg-white rounded-xl shadow-xl w-[min(640px,95vw)] p-5">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="font-semibold">✎ Edit question with agent</h2>
+          <h2 class="font-semibold">✎ {{ tr("Edit question with agent") }}</h2>
           <button type="button" @click="aeditOpen=false" class="text-slate-400 hover:text-slate-700">✕</button>
         </div>
-        <p class="text-sm text-slate-500 mb-3">Describe the change in plain language — the agent proposes a revision, and <b>nothing is written until you Apply</b>. (One LLM call; edits the current text only.)</p>
+        <p class="text-sm text-slate-500 mb-3">{{ tr("Describe the change in plain language — the agent proposes a revision, and") }} <b>{{ tr("nothing is written until you Apply") }}</b>. {{ tr("(One LLM call; edits the current text only.)") }}</p>
         <form hx-post="/t/{{ t.slug }}/question/propose" hx-target="#t-aedit-diff" hx-swap="innerHTML" hx-disabled-elt="find button">
           <textarea id="t-aedit-instr" name="instruction" rows="2" required
-                    placeholder="e.g. narrow the question to memory-module adaptation specifically"
+                    placeholder="{{ tr('e.g. narrow the question to memory-module adaptation specifically') }}"
                     class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
           <div class="mt-2 flex items-center gap-2">
-            <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">Propose <span class="htmx-indicator">…</span></button>
-            <span class="text-[11px] text-slate-400">one LLM call · no tools</span>
+            <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">{{ tr("Propose") }} <span class="htmx-indicator">…</span></button>
+            <span class="text-[11px] text-slate-400">{{ tr("one LLM call · no tools") }}</span>
           </div>
         </form>
         <div id="t-aedit-diff" class="mt-3"></div>
@@ -535,18 +535,18 @@
     <div x-show="manage" x-cloak @keydown.escape.window="manage=false" @click.self="manage=false"
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
       <div class="bg-white rounded-xl shadow-xl w-[min(520px,95vw)] p-5">
-        <div class="flex items-center justify-between mb-1"><h2 class="font-semibold">Linked collections</h2><button @click="manage=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
-        <p class="text-xs text-slate-500 mb-3">Collections are evidence sources — this topic references them, it never owns their papers.</p>
+        <div class="flex items-center justify-between mb-1"><h2 class="font-semibold">{{ tr("Linked collections") }}</h2><button @click="manage=false" class="text-slate-400 hover:text-slate-700">✕</button></div>
+        <p class="text-xs text-slate-500 mb-3">{{ tr("Collections are evidence sources — this topic references them, it never owns their papers.") }}</p>
         <form method="post" action="/t/{{ t.slug }}/collections">
           <div class="max-h-72 overflow-y-auto space-y-1 mb-3">
             {% for c in all_collections %}
             <label class="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" name="collections" value="{{ c.slug }}" class="rounded border-slate-300" {{ 'checked' if c.slug in t.collections }}>
-              {{ c.name }} <span class="text-[11px] text-slate-400">{{ c.paper_count }} papers</span>
+              {{ c.name }} <span class="text-[11px] text-slate-400">{{ c.paper_count }} {{ tr("papers") }}</span>
             </label>
             {% endfor %}
           </div>
-          <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-3 py-1.5 text-sm text-white hover:bg-violet-700">Save & close</button></div>
+          <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-3 py-1.5 text-sm text-white hover:bg-violet-700">{{ tr("Save & close") }}</button></div>
         </form>
       </div>
     </div>
@@ -563,8 +563,8 @@
                   stroke-linecap="round" stroke-dasharray="31 126"></circle>
         </svg>
         <div id="tg-gen-label" class="tg-gen-label">{{ gen_label }}</div>
-        <div class="tg-gen-sub">{% if gen_collections %}reading {{ gen_collections }} collection{{ 's' if gen_collections != 1 }}{% endif %}</div>
-        <div class="tg-gen-foot">One LLM pass — you can keep chatting on the right.</div>
+        <div class="tg-gen-sub">{% if gen_collections %}{{ tr("reading") }} {{ gen_collections }} {{ tr("collection") }}{{ 's' if gen_collections != 1 }}{% endif %}</div>
+        <div class="tg-gen-foot">{{ tr("One LLM pass — you can keep chatting on the right.") }}</div>
       </div>
     </div>
     <style>
@@ -637,12 +637,12 @@
 
   {# reopen tab when the assistant is collapsed #}
   <button x-show="!asstOpen" x-cloak @click="setAsst(true)"
-          class="shrink-0 self-stretch w-5 border-l border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Show assistant">‹</button>
+          class="shrink-0 self-stretch w-5 border-l border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="{{ tr('Show assistant') }}">‹</button>
   {# draggable divider + hide handle #}
   <div x-show="asstOpen" x-cloak @mousedown.prevent="startDrag($event)"
        class="relative w-1.5 mx-1 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
     <button type="button" @mousedown.stop @click="setAsst(false)"
-            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer" title="Hide assistant">›</button>
+            class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer" title="{{ tr('Hide assistant') }}">›</button>
   </div>
   {# ---- right: Prinny Assistant — same component as the collection chat ---- #}
   <div x-show="asstOpen" x-cloak :style="`width:${asstW}px`" class="shrink-0 h-full">

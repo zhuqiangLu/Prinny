@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Stale papers — {{ name }}{% endblock %}
+{% block title %}{{ tr("Stale papers") }} — {{ name }}{% endblock %}
 {% block content %}
 <a href="/c/{{ slug }}" class="text-sm text-slate-500 hover:text-slate-900">← {{ name }}</a>
-<h1 class="text-xl font-semibold mt-2 mb-2">Stale papers</h1>
+<h1 class="text-xl font-semibold mt-2 mb-2">{{ tr("Stale papers") }}</h1>
 <p class="text-xs text-slate-400 mb-4">
-  Papers added &gt;90 days ago with zero appearances in your notes, thoughts, or wiki.
-  Nothing is removed — this is just a prompt for you to decide.
+  {{ tr("Papers added &gt;90 days ago with zero appearances in your notes, thoughts, or wiki.") }}
+  {{ tr("Nothing is removed — this is just a prompt for you to decide.") }}
 </p>
 
 {% if not stale %}
-<p class="text-slate-500">No stale papers. 🎉</p>
+<p class="text-slate-500">{{ tr("No stale papers.") }} 🎉</p>
 {% else %}
 <ul class="divide-y divide-slate-200 rounded border border-slate-200 bg-white">
   {% for s in stale %}
   <li class="px-4 py-3">
     <a href="/c/{{ slug }}/p/{{ s.key }}" class="font-medium text-slate-900 hover:underline">{{ s.title }}</a>
-    <div class="text-xs text-slate-400">added {{ s.date_added }}</div>
+    <div class="text-xs text-slate-400">{{ tr("added") }} {{ s.date_added }}</div>
   </li>
   {% endfor %}
 </ul>

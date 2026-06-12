@@ -12,12 +12,12 @@
 
   {% if draft_error %}
   <div class="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
-    <b>The last draft failed.</b> {{ draft_error }} — try ↻ Regenerate again.
+    <b>{{ tr("The last draft failed.") }}</b> {{ draft_error }} — {{ tr("try ↻ Regenerate again.") }}
   </div>
   {% endif %}
   {% if reading_error %}
   <div class="mb-3 rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
-    <b>Find reading failed.</b> {{ reading_error }} — try again from the Suggested reading tab.
+    <b>{{ tr("Find reading failed.") }}</b> {{ reading_error }} — {{ tr("try again from the Suggested reading tab.") }}
   </div>
   {% endif %}
 
@@ -33,39 +33,39 @@
      the research-topic header's gradient. #}
   <div class="bg-gradient-to-b from-violet-50 to-white border-b border-violet-100 -mx-6 -mt-6 px-6 pt-5 mb-5">
     <div class="text-sm text-slate-500 mb-1.5">
-      <a href="/" class="hover:text-slate-900">Collections</a>
+      <a href="/" class="hover:text-slate-900">{{ tr("Collections") }}</a>
       <span class="text-slate-300 mx-1">›</span>
       <span class="text-slate-700">{{ collection_name }}</span>
     </div>
     <div class="flex items-center gap-2.5 mb-4">
       <h1 class="text-2xl font-bold text-slate-900">{{ collection_name }}</h1>
       <button type="button" @click="toggleStar()" :class="starred ? 'text-amber-400' : 'text-slate-300 hover:text-amber-400'"
-              class="text-xl leading-none" title="Star this collection (local)"><span x-text="starred ? '★' : '☆'"></span></button>
+              class="text-xl leading-none" title="{{ tr('Star this collection (local)') }}"><span x-text="starred ? '★' : '☆'"></span></button>
       <div class="ml-auto flex items-center gap-2">
         <button type="button" @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })"
                 class="rounded-lg border px-3 py-1.5 text-sm font-medium {% if update_available %}border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100{% else %}border-slate-200 bg-white text-slate-700 hover:bg-slate-50{% endif %}"
-                title="{% if update_available %}You have new highlights/notes — fold them into the wiki{% else %}Review your beliefs, then re-draft the Field Model{% endif %}">↻ {% if update_available %}Update wiki{% else %}Regenerate{% endif %}</button>
+                title="{% if update_available %}{{ tr('You have new highlights/notes — fold them into the wiki') }}{% else %}{{ tr('Review your beliefs, then re-draft the Field Model') }}{% endif %}">↻ {% if update_available %}{{ tr("Update wiki") }}{% else %}{{ tr("Regenerate") }}{% endif %}</button>
         <button type="button" @click="$dispatch('open-add')"
-                class="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Add paper</button>
-        <button type="button" @click="$dispatch('open-create-topic')" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">✦ Create topic</button>
+                class="rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ {{ tr("Add paper") }}</button>
+        <button type="button" @click="$dispatch('open-create-topic')" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">✦ {{ tr("Create topic") }}</button>
         <div class="relative" x-data="{ open: false }" @click.outside="open = false">
-          <button type="button" @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More">⋯</button>
+          <button type="button" @click="open = !open" class="grid place-items-center w-9 h-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="{{ tr('More') }}">⋯</button>
           <div x-show="open" x-cloak class="absolute right-0 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-30 py-1 text-sm">
             {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
-            <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 Thoughts</button>
-            <button type="button" @click="open = false; tab = 'understanding'" class="{{ mi }}">◆ Understanding</button>
-            <button type="button" @click="open = false; tab = 'benchmarks'" class="{{ mi }}">▦ Benchmarks</button>
+            <button type="button" @click="open = false; thoughtsOpen = true; htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: '#thoughts-modal-body', swap: 'innerHTML' })" class="{{ mi }}">💭 {{ tr("Thoughts") }}</button>
+            <button type="button" @click="open = false; tab = 'understanding'" class="{{ mi }}">◆ {{ tr("Understanding") }}</button>
+            <button type="button" @click="open = false; tab = 'benchmarks'" class="{{ mi }}">▦ {{ tr("Benchmarks") }}</button>
             <button type="button" @click="open = false" hx-post="/c/{{ slug }}/wiki/entity-reviews/generate" hx-target="#left-panel" hx-swap="innerHTML"
-                    class="{{ mi }}" title="Write a short literature review for each concept/method/problem (shown in the Map popups; also refreshed on Regenerate)">✦ Generate entity reviews</button>
-            <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ Export…</button>
-            {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ Resolve duplicates <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
-            {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 Graveyard <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
-            {% if col and col.copy_mode == "lazy" %}<form method="post" action="/c/{{ slug }}/download-all" @submit="open = false"><button class="{{ mi }}">⤓ Download all PDFs</button></form>{% endif %}
-            <label class="{{ mi }} cursor-pointer" title="When on, the chat assistant may proactively propose wiki edits (you still Accept each). /updatewiki always works.">
+                    class="{{ mi }}" title="{{ tr('Write a short literature review for each concept/method/problem (shown in the Map popups; also refreshed on Regenerate)') }}">✦ {{ tr("Generate entity reviews") }}</button>
+            <button type="button" @click="open = false; syncOpen = true" class="{{ mi }}">⇪ {{ tr("Export…") }}</button>
+            {% if dup_count %}<button type="button" @click="open = false; dupOpen = true; htmx.ajax('GET', '/c/{{ slug }}/duplicates', { target: '#dup-body', swap: 'innerHTML' })" class="{{ mi }}">⧉ {{ tr("Resolve duplicates") }} <span class="ml-auto text-xs text-amber-600">{{ dup_count }}</span></button>{% endif %}
+            {% if graveyard_count %}<button type="button" @click="open = false; graveOpen = true; htmx.ajax('GET', '/c/{{ slug }}/graveyard', { target: '#graveyard-body', swap: 'innerHTML' })" class="{{ mi }}">🪦 {{ tr("Graveyard") }} <span class="ml-auto text-xs text-slate-400">{{ graveyard_count }}</span></button>{% endif %}
+            {% if col and col.copy_mode == "lazy" %}<form method="post" action="/c/{{ slug }}/download-all" @submit="open = false"><button class="{{ mi }}">⤓ {{ tr("Download all PDFs") }}</button></form>{% endif %}
+            <label class="{{ mi }} cursor-pointer" title="{{ tr('When on, the chat assistant may proactively propose wiki edits (you still Accept each). /updatewiki always works.') }}">
               <input type="checkbox" {% if not col or col.wiki_proactive %}checked{% endif %}
                      hx-post="/c/{{ slug }}/wiki/proactive" hx-target="#proactive-status" hx-swap="innerHTML"
                      hx-vals='js:{on: event.target.checked ? "1" : "0"}' class="accent-violet-600">
-              Chat may propose wiki edits
+              {{ tr("Chat may propose wiki edits") }}
               <span id="proactive-status" class="ml-auto text-xs text-slate-400"></span>
             </label>
           </div>
@@ -75,8 +75,8 @@
 
     {# tab bar #}
     {% set TABS = [
-      ('overview', '▢ Overview'), ('connections', '⊞ Map'),
-      ('papers', '▤ Papers'), ('reading', '✦ Suggested reading')
+      ('overview', '▢ ' ~ tr('Overview')), ('connections', '⊞ ' ~ tr('Map')),
+      ('papers', '▤ ' ~ tr('Papers')), ('reading', '✦ ' ~ tr('Suggested reading'))
     ] %}
     <div class="flex items-center gap-1 overflow-x-auto -mb-px">
       {% for key, label in TABS %}
@@ -91,25 +91,25 @@
   {# --- panel body --- #}
   {% if overview and overview.needs_migration %}
   <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
-    <p class="text-sm font-medium text-amber-900">The starter wiki format changed.</p>
-    <p class="text-xs text-amber-800 mt-1">Your previous starter wiki was a single JSON file; the new one is a small set of curated paper pages. Regenerate to upgrade — your notes-based wiki is untouched.</p>
+    <p class="text-sm font-medium text-amber-900">{{ tr("The starter wiki format changed.") }}</p>
+    <p class="text-xs text-amber-800 mt-1">{{ tr("Your previous starter wiki was a single JSON file; the new one is a small set of curated paper pages. Regenerate to upgrade — your notes-based wiki is untouched.") }}</p>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="mt-2">
-      <button class="rounded bg-amber-600 text-white px-3 py-1.5 text-xs hover:bg-amber-700">↻ Regenerate starter wiki</button>
+      <button class="rounded bg-amber-600 text-white px-3 py-1.5 text-xs hover:bg-amber-700">↻ {{ tr("Regenerate starter wiki") }}</button>
     </form>
   </div>
   {% elif has_field_model %}
     {% include "_wiki_overview.html" %}
   {% else %}
   <div class="rounded border border-slate-200 bg-white p-5">
-    <div class="text-sm text-slate-500 mb-1"><a href="/" class="hover:text-slate-900">Collections</a> <span class="text-slate-300 mx-1">›</span> <span class="text-slate-700">{{ collection_name }}</span></div>
+    <div class="text-sm text-slate-500 mb-1"><a href="/" class="hover:text-slate-900">{{ tr("Collections") }}</a> <span class="text-slate-300 mx-1">›</span> <span class="text-slate-700">{{ collection_name }}</span></div>
     <h1 class="text-xl font-semibold text-slate-900 mb-3">{{ collection_name }}</h1>
-    <p class="text-sm text-slate-600">No wiki yet.</p>
-    <p class="text-xs text-slate-400 mt-1">Draft the Field Model for this collection — a one-paragraph thesis + a four-column research landscape, in one pass:</p>
+    <p class="text-sm text-slate-600">{{ tr("No wiki yet.") }}</p>
+    <p class="text-xs text-slate-400 mt-1">{{ tr("Draft the Field Model for this collection — a one-paragraph thesis + a four-column research landscape, in one pass:") }}</p>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="mt-2">
-      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ Draft Field Model</button>
-      <span class="ml-1 text-xs text-slate-400">a minute or two; one LLM pass over abstracts + cached PDFs</span>
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-xs hover:bg-slate-700">✦ {{ tr("Draft Field Model") }}</button>
+      <span class="ml-1 text-xs text-slate-400">{{ tr("a minute or two; one LLM pass over abstracts + cached PDFs") }}</span>
     </form>
   </div>
   {% endif %}
@@ -147,7 +147,7 @@
          stable. Hidden via CSS unless populated. #}
       <div id="wiki-draft-cover-subline" class="wiki-draft-cover-subline">{{ draft_initial_subline }}</div>
       <div class="wiki-draft-cover-foot">
-        This may take a couple of minutes.
+        {{ tr("This may take a couple of minutes.") }}
       </div>
     </div>
   </div>

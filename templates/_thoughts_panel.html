@@ -8,28 +8,28 @@
         hx-on::after-request="if(event.detail.successful) this.reset()">
     <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
     <input type="hidden" name="panel_id" value="{{ pid }}">
-    <textarea name="text" rows="3" required placeholder="{% if paper_key %}A note on this paper… (markdown){% else %}A new thought… (markdown supported){% endif %}"
+    <textarea name="text" rows="3" required placeholder="{% if paper_key %}{{ tr('A note on this paper… (markdown)') }}{% else %}{{ tr('A new thought… (markdown supported)') }}{% endif %}"
               class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
     <div class="mt-1 flex items-center gap-2">
-      <button class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">Add thought</button>
-      <select name="synth_kind" title="seed = an attention signal; reasoning = an argument/connection you made"
+      <button class="rounded bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700">{{ tr("Add thought") }}</button>
+      <select name="synth_kind" title="{{ tr('seed = an attention signal; reasoning = an argument/connection you made') }}"
               class="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600">
-        <option value="seed" selected>seed</option>
-        <option value="reasoning">reasoning</option>
+        <option value="seed" selected>{{ tr("seed") }}</option>
+        <option value="reasoning">{{ tr("reasoning") }}</option>
       </select>
       {% if primary %}
       {# "Manage all" opens a modal with the whole stream (lazy-loaded), instead of navigating away #}
       <div class="ml-auto" x-data="{ open: false, loaded: false }" @keydown.escape.window="open = false">
         <button type="button" class="text-xs text-slate-500 hover:text-slate-800"
-                @click="open = true; if(!loaded){ loaded = true; $nextTick(() => window.htmx && window.htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: $refs.mbody, swap: 'innerHTML' })) }">manage all →</button>
+                @click="open = true; if(!loaded){ loaded = true; $nextTick(() => window.htmx && window.htmx.ajax('GET', '/c/{{ slug }}/thoughts/panel?panel_id=thoughts-manage', { target: $refs.mbody, swap: 'innerHTML' })) }">{{ tr("manage all →") }}</button>
         <div x-show="open" x-cloak class="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 p-4 pt-16"
              @click.self="open = false">
           <div class="bg-white rounded-xl shadow-xl w-[min(640px,94vw)] max-h-[80vh] flex flex-col">
             <div class="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 shrink-0">
-              <h2 class="font-semibold text-slate-900">All thoughts</h2>
+              <h2 class="font-semibold text-slate-900">{{ tr("All thoughts") }}</h2>
               <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
             </div>
-            <div x-ref="mbody" class="p-4 overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+            <div x-ref="mbody" class="p-4 overflow-auto"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
           </div>
         </div>
       </div>
@@ -37,7 +37,7 @@
     </div>
   </form>
   {% if not thoughts %}
-  <p class="text-sm text-slate-400">No thoughts yet.</p>
+  <p class="text-sm text-slate-400">{{ tr("No thoughts yet.") }}</p>
   {% else %}
   <ul class="space-y-2">
     {% for t in thoughts %}
@@ -47,9 +47,9 @@
       <div class="flex items-center gap-1.5 px-2.5 pt-2 text-xs text-slate-400 cursor-pointer select-none"
            @click="open = !open">
         <span>{{ t.created }}</span>
-        {% if t.synth_kind == "reasoning" %}<span class="rounded bg-indigo-100 text-indigo-700 px-1">reasoning</span>{% endif %}
-        {% if t.author_origin == "agent" %}<span class="rounded bg-amber-100 text-amber-700 px-1">agent</span>{% endif %}
-        {% if t.paper_title %}<a href="{{ t.paper_link }}" @click.stop class="rounded bg-violet-100 text-violet-700 px-1 truncate max-w-[14rem] hover:bg-violet-200" title="On paper: {{ t.paper_title }}">📄 {{ t.paper_title }}</a>{% endif %}
+        {% if t.synth_kind == "reasoning" %}<span class="rounded bg-indigo-100 text-indigo-700 px-1">{{ tr("reasoning") }}</span>{% endif %}
+        {% if t.author_origin == "agent" %}<span class="rounded bg-amber-100 text-amber-700 px-1">{{ tr("agent") }}</span>{% endif %}
+        {% if t.paper_title %}<a href="{{ t.paper_link }}" @click.stop class="rounded bg-violet-100 text-violet-700 px-1 truncate max-w-[14rem] hover:bg-violet-200" title="{{ tr('On paper:') }} {{ t.paper_title }}">📄 {{ t.paper_title }}</a>{% endif %}
         {% for tag in t.tags %}<span class="rounded bg-slate-100 px-1">{{ tag }}</span>{% endfor %}
         <svg class="ml-auto w-3.5 h-3.5 transition-transform" :class="open && 'rotate-180'"
              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -61,7 +61,7 @@
            @click="if(!open) open = true">{{ t.body_html|safe }}</div>
       {# actions (only when expanded) #}
       <div x-show="open && !editing" x-cloak class="flex items-center gap-3 px-2.5 pb-2.5 text-xs flex-wrap">
-        <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ Edit</button>
+        <button type="button" @click="editing = true" class="text-slate-600 hover:text-violet-600">✎ {{ tr("Edit") }}</button>
         {# link this thought to a paper (anchors it; chip then shows). Posts on change. #}
         <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/anchor" hx-target="#{{ pid }}" hx-swap="outerHTML"
               hx-trigger="change" class="inline-flex items-center gap-1">
@@ -69,17 +69,17 @@
           <input type="hidden" name="panel_id" value="{{ pid }}">
           <span class="text-slate-400">📄</span>
           <select name="link_paper" class="rounded border border-slate-300 px-1 py-0.5 text-xs max-w-[12rem]">
-            <option value="">{{ 'Linked — change/unlink' if t.paper_key else 'Link to paper…' }}</option>
+            <option value="">{{ tr('Linked — change/unlink') if t.paper_key else tr('Link to paper…') }}</option>
             {% for pp in papers %}
             <option value="{{ pp.id }}" {% if t.paper_key == (pp.id|string) %}selected{% endif %}>{{ pp.title|truncate(46) }}</option>
             {% endfor %}
           </select>
         </form>
         <form hx-post="/c/{{ slug }}/thoughts/{{ t.id }}/delete" hx-target="#{{ pid }}" hx-swap="outerHTML"
-              hx-confirm="Delete this thought? This cannot be undone.">
+              hx-confirm="{{ tr('Delete this thought? This cannot be undone.') }}">
           <input type="hidden" name="paper_key" value="{{ paper_key|default('') }}">
           <input type="hidden" name="panel_id" value="{{ pid }}">
-          <button class="text-rose-600 hover:text-rose-700">Delete</button>
+          <button class="text-rose-600 hover:text-rose-700">{{ tr("Delete") }}</button>
         </form>
       </div>
       {# inline editor #}
@@ -90,8 +90,8 @@
           <textarea name="text" rows="6"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono">{{ t.body }}</textarea>
           <div class="mt-1 flex items-center gap-2">
-            <button class="rounded bg-slate-900 px-3 py-1 text-xs text-white hover:bg-slate-700">Save</button>
-            <button type="button" @click="editing = false" class="text-xs text-slate-500 hover:text-slate-800">Cancel</button>
+            <button class="rounded bg-slate-900 px-3 py-1 text-xs text-white hover:bg-slate-700">{{ tr("Save") }}</button>
+            <button type="button" @click="editing = false" class="text-xs text-slate-500 hover:text-slate-800">{{ tr("Cancel") }}</button>
           </div>
         </form>
       </div>

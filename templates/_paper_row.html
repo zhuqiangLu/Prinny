@@ -7,12 +7,12 @@
     data-year="{{ p.year }}" data-added="{{ p.added_at }}">
   <div class="flex items-start gap-3 px-4 py-3">
     <input type="checkbox" value="{{ p.id }}" x-model="selected" x-show="toolsOpen" x-cloak
-           class="mt-1 shrink-0 rounded border-slate-300 cursor-pointer" title="Select">
+           class="mt-1 shrink-0 rounded border-slate-300 cursor-pointer" title="{{ tr('Select') }}">
     {% if p.fetching or p.failed %}
     {# not openable yet — plain text, no link #}
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
-        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="unread"></span>
+        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="{{ tr('unread') }}"></span>
         <div class="font-medium text-slate-500">{{ p.title }}</div>
       </div>
       <div class="text-sm text-slate-400 mt-0.5">{{ p.authors }}{% if p.authors and p.year %} · {% endif %}{{ p.year }}</div>
@@ -21,19 +21,19 @@
     <a href="/c/{{ slug }}/p/{{ p.id }}" class="min-w-0 flex-1 group"
        @click="if (toolsOpen) { $event.preventDefault(); toggleOne('{{ p.id }}'); }">
       <div class="flex items-center gap-2">
-        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="unread"></span>
+        <span x-show="!read['{{ p.id }}']" class="shrink-0 w-2 h-2 rounded-full bg-sky-500" title="{{ tr('unread') }}"></span>
         <div class="font-medium text-slate-900 group-hover:text-slate-600">{{ p.title }}</div>
       </div>
       <div class="text-sm text-slate-500 mt-0.5">{{ p.authors }}{% if p.authors and p.year %} · {% endif %}{{ p.year }}</div>
       {% if p.added_at %}
-      <div x-show="toolsOpen" x-cloak class="text-xs text-slate-400 mt-0.5">added {{ p.added_at[:10] }}</div>
+      <div x-show="toolsOpen" x-cloak class="text-xs text-slate-400 mt-0.5">{{ tr("added") }} {{ p.added_at[:10] }}</div>
       {% endif %}
     </a>
     {% endif %}
     <div class="shrink-0 flex items-center gap-1.5">
-      {% if p.source_flag == "new-from-zotero" %}<span x-show="!read['{{ p.id }}']" class="text-xs rounded bg-sky-100 text-sky-700 px-1.5 py-0.5">new</span>{% endif %}
-      {% if p.source_flag == "removed-in-zotero" %}<span class="text-xs rounded bg-rose-100 text-rose-700 px-1.5 py-0.5">removed in Zotero</span>{% endif %}
-      {% if p.source_flag == "arxiv-suggested" %}<span class="text-xs rounded bg-violet-100 text-violet-700 px-1.5 py-0.5">suggested</span>{% endif %}
+      {% if p.source_flag == "new-from-zotero" %}<span x-show="!read['{{ p.id }}']" class="text-xs rounded bg-sky-100 text-sky-700 px-1.5 py-0.5">{{ tr("new") }}</span>{% endif %}
+      {% if p.source_flag == "removed-in-zotero" %}<span class="text-xs rounded bg-rose-100 text-rose-700 px-1.5 py-0.5">{{ tr("removed in Zotero") }}</span>{% endif %}
+      {% if p.source_flag == "arxiv-suggested" %}<span class="text-xs rounded bg-violet-100 text-violet-700 px-1.5 py-0.5">{{ tr("suggested") }}</span>{% endif %}
 
       {% if p.fetching %}
       <span class="inline-flex items-center gap-1.5 text-xs text-slate-500"
@@ -52,15 +52,15 @@
         <span>{% if p.pct is not none %}{{ p.pct }}%{% else %}…{% endif %}</span>
       </span>
       {% elif p.failed %}
-      <span class="text-xs text-rose-600">download failed</span>
+      <span class="text-xs text-rose-600">{{ tr("download failed") }}</span>
       <button hx-post="/c/{{ slug }}/p/{{ p.id }}/retry-download" hx-target="closest li" hx-swap="outerHTML"
-              class="text-xs rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50">Retry</button>
+              class="text-xs rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50">{{ tr("Retry") }}</button>
       <button hx-post="/c/{{ slug }}/p/{{ p.id }}/drop" hx-target="closest li" hx-swap="outerHTML"
-              class="text-xs rounded border border-rose-300 px-2 py-0.5 text-rose-600 hover:bg-rose-50">Remove</button>
+              class="text-xs rounded border border-rose-300 px-2 py-0.5 text-rose-600 hover:bg-rose-50">{{ tr("Remove") }}</button>
       {% elif p.has_pdf %}
       <button x-show="!toolsOpen" @click="open = !open" class="text-xs rounded border border-slate-200 px-2 py-0.5 text-slate-500 hover:bg-slate-50" x-text="open ? 'Hide' : 'Preview'"></button>
       {% else %}
-      <span x-show="!toolsOpen" class="text-xs rounded bg-slate-100 text-slate-400 px-1.5 py-0.5">no PDF</span>
+      <span x-show="!toolsOpen" class="text-xs rounded bg-slate-100 text-slate-400 px-1.5 py-0.5">{{ tr("no PDF") }}</span>
       {% endif %}
     </div>
   </div>
@@ -68,7 +68,7 @@
   <div x-show="open" x-cloak class="px-4 pb-4">
     <iframe x-bind:src="open ? '/pdf/{{ p.id }}#toolbar=0&navpanes=0&view=FitH' : ''" loading="lazy"
             class="w-full h-[26rem] rounded border border-slate-200 bg-slate-50"></iframe>
-    <a href="/c/{{ slug }}/p/{{ p.id }}" class="mt-1 inline-block text-xs text-slate-500 hover:text-slate-800">Open full reader →</a>
+    <a href="/c/{{ slug }}/p/{{ p.id }}" class="mt-1 inline-block text-xs text-slate-500 hover:text-slate-800">{{ tr("Open full reader →") }}</a>
   </div>
   {% endif %}
 </li>

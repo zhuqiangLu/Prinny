@@ -2,20 +2,20 @@
    hx-post and re-render this panel. #}
 <div class="p-3">
   <div class="flex items-center gap-2 mb-2">
-    <h2 class="text-sm font-semibold text-slate-700">Triage</h2>
+    <h2 class="text-sm font-semibold text-slate-700">{{ tr("Triage") }}</h2>
     <form hx-post="/c/{{ slug }}/triage/scan" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
-      <button class="text-xs rounded bg-slate-900 px-2.5 py-1 text-white hover:bg-slate-700">Scan inbox</button>
+      <button class="text-xs rounded bg-slate-900 px-2.5 py-1 text-white hover:bg-slate-700">{{ tr("Scan inbox") }}</button>
     </form>
   </div>
   <p class="text-xs text-slate-400 mb-3">
-    Inbox:
-    {% if inbox.inbox_collection %}collection “{{ inbox.inbox_collection }}”
-    {% elif inbox.inbox_tag %}tag “{{ inbox.inbox_tag }}”
-    {% else %}not configured — set <code>inbox_collection</code> or <code>inbox_tag</code> in purpose.md frontmatter.{% endif %}
+    {{ tr("Inbox:") }}
+    {% if inbox.inbox_collection %}{{ tr("collection") }} “{{ inbox.inbox_collection }}”
+    {% elif inbox.inbox_tag %}{{ tr("tag") }} “{{ inbox.inbox_tag }}”
+    {% else %}{{ tr("not configured — set") }} <code>inbox_collection</code> {{ tr("or") }} <code>inbox_tag</code> {{ tr("in purpose.md frontmatter.") }}{% endif %}
   </p>
 
   {% if not items %}
-  <p class="text-sm text-slate-500">No pending candidates.</p>
+  <p class="text-sm text-slate-500">{{ tr("No pending candidates.") }}</p>
   {% else %}
   <ul class="space-y-3">
     {% for it in items %}
@@ -28,15 +28,15 @@
       {% endif %}
       {% if it.arxiv_id %}
       <div class="mt-1 text-xs text-slate-400">
-        <a href="https://arxiv.org/abs/{{ it.arxiv_id }}" target="_blank" class="hover:text-slate-700">view on arXiv ↗</a>
-        · Accept imports it locally (PDF pulled).
+        <a href="https://arxiv.org/abs/{{ it.arxiv_id }}" target="_blank" class="hover:text-slate-700">{{ tr("view on arXiv ↗") }}</a>
+        · {{ tr("Accept imports it locally (PDF pulled).") }}
       </div>
       {% endif %}
       <div class="mt-2 flex flex-wrap gap-1.5 text-sm">
-        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/pitch" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Generate pitch</button></form>
-        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded bg-slate-900 text-white px-2 py-0.5 hover:bg-slate-700">Accept</button></form>
-        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/reject" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Reject</button></form>
-        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/defer" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Defer</button></form>
+        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/pitch" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">{{ tr("Generate pitch") }}</button></form>
+        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded bg-slate-900 text-white px-2 py-0.5 hover:bg-slate-700">{{ tr("Accept") }}</button></form>
+        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/reject" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">{{ tr("Reject") }}</button></form>
+        <form hx-post="/c/{{ slug }}/triage/{{ it.id }}/defer" hx-target="#left-panel" hx-swap="innerHTML"><button class="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">{{ tr("Defer") }}</button></form>
       </div>
     </li>
     {% endfor %}

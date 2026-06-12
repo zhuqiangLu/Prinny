@@ -1,7 +1,7 @@
 <!doctype html>
 {% set _t = pa_theme() %}
 {% set b = pa_branding() %}
-<html lang="en"{% if _t.active %} class="pa-themed"{% endif %}>
+<html lang="{{ pa_lang() }}"{% if _t.active %} class="pa-themed"{% endif %}>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -162,7 +162,7 @@
       {% if b.assets.logo %}<img src="{{ b.assets.logo }}" alt="" class="h-6 w-6">{% else %}<span class="text-lg leading-none">📚</span>{% endif %}
     </a>
     <button type="button" @click="toggleNav()" class="grid place-items-center w-9 h-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            title="Show sidebar" aria-label="Show sidebar">☰</button>
+            title="{{ tr('Show sidebar') }}" aria-label="{{ tr('Show sidebar') }}">☰</button>
   </div>
   <aside x-show="navOpen" class="w-60 shrink-0 h-full flex flex-col border-r border-slate-200 bg-white">
     <div class="flex items-center gap-2 px-4 h-14 shrink-0 border-b border-slate-100">
@@ -172,7 +172,7 @@
       </a>
       <div class="ml-auto flex items-center gap-1">
         <button type="button" @click="toggleNav()" class="grid place-items-center w-7 h-7 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                title="Hide sidebar" aria-label="Hide sidebar">‹</button>
+                title="{{ tr('Hide sidebar') }}" aria-label="{{ tr('Hide sidebar') }}">‹</button>
       </div>
     </div>
     {% set NAV_MAX = 6 %}
@@ -186,7 +186,7 @@
             <span class="text-slate-400 shrink-0">▤</span><span class="flex-1 truncate">{{ c.name }}</span>
             {% if c.papers %}<span class="text-[11px] text-slate-400 tabular-nums">{{ c.papers }}</span>{% endif %}
           </a>
-          <button type="button" title="Delete collection" data-slug="{{ c.slug }}" data-name="{{ c.name }}" data-topics="{{ c.topics_using or 0 }}"
+          <button type="button" title="{{ tr('Delete collection') }}" data-slug="{{ c.slug }}" data-name="{{ c.name }}" data-topics="{{ c.topics_using or 0 }}"
                   @click.stop.prevent="$dispatch('nav-del', {kind:'collection', slug:$el.dataset.slug, name:$el.dataset.name, topics:Number($el.dataset.topics)})"
                   class="shrink-0 px-1.5 py-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-600">✕</button>
         </div>
@@ -208,7 +208,7 @@
           <a href="/t/{{ t.slug }}" class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 text-slate-700 {% if request.url.path == '/t/' ~ t.slug %}font-medium text-slate-900{% endif %}">
             <span class="text-violet-400 shrink-0">◆</span><span class="flex-1 truncate">{{ t.title }}</span>
           </a>
-          <button type="button" title="Delete topic" data-slug="{{ t.slug }}" data-name="{{ t.title }}"
+          <button type="button" title="{{ tr('Delete topic') }}" data-slug="{{ t.slug }}" data-name="{{ t.title }}"
                   @click.stop.prevent="$dispatch('nav-del', {kind:'topic', slug:$el.dataset.slug, name:$el.dataset.name, topics:0})"
                   class="shrink-0 px-1.5 py-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-600">✕</button>
         </div>
@@ -233,17 +233,17 @@
                 class="w-full flex items-center gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left hover:bg-violet-100">
           <span class="shrink-0 w-2.5 h-2.5 rounded-full bg-violet-500"></span>
           <span class="min-w-0">
-            <span class="block font-medium text-slate-800 leading-tight">To review</span>
+            <span class="block font-medium text-slate-800 leading-tight">{{ tr("To review") }}</span>
             <span class="block text-[11px] text-violet-600 leading-tight" x-text="count + ' awaiting accept'"></span>
           </span>
         </button>
         <div x-show="open" x-cloak @click.outside="open = false"
              class="absolute left-0 bottom-full mb-1 w-72 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1 text-sm">
-          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">To review</div>
+          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">{{ tr("To review") }}</div>
           {# Note drafts review in a popup (verify/edit/approve); other kinds link to their place #}
           <template x-if="items.some(it => it.kind === 'Note draft')">
             <button type="button" class="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-slate-100 text-violet-700 font-medium"
-                    @click="open = false; $dispatch('pa-review-drafts')">✨ Review note drafts in popup →</button>
+                    @click="open = false; $dispatch('pa-review-drafts')">✨ {{ tr("Review note drafts in popup") }} →</button>
           </template>
           <template x-for="(it, i) in items" :key="i">
             <template x-if="it.kind === 'Note draft'">
@@ -275,7 +275,7 @@
                 class="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50">
           <span class="shrink-0 w-2.5 h-2.5 rounded-full" :class="running > 0 ? 'bg-emerald-500 animate-pulse' : (unseen > 0 ? 'bg-emerald-500' : 'bg-slate-300')"></span>
           <span class="min-w-0">
-            <span class="block font-medium text-slate-800 leading-tight">Background Jobs</span>
+            <span class="block font-medium text-slate-800 leading-tight">{{ tr("Background Jobs") }}</span>
             <span class="block text-[11px] text-slate-400 leading-tight"
                   x-text="running > 0 ? (running + ' running') : (items.length ? items.length + ' recent' : 'idle')"></span>
           </span>
@@ -285,7 +285,7 @@
           {# currently-running jobs, listed (not just counted) #}
           <template x-if="jobs.length">
             <div>
-              <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-400 border-b border-slate-100">Running now</div>
+              <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-400 border-b border-slate-100">{{ tr("Running now") }}</div>
               <template x-for="(j, i) in jobs" :key="i">
                 <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-50 leading-snug">
                   <span class="shrink-0 inline-block w-3 h-3 rounded-full border-2 border-violet-300 border-t-violet-600 animate-spin"></span>
@@ -294,17 +294,17 @@
               </template>
             </div>
           </template>
-          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">Activity</div>
+          <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">{{ tr("Activity") }}</div>
           <template x-for="n in items" :key="n.id">
             <a :href="n.link || '#'" class="block px-3 py-2 hover:bg-slate-50 border-b border-slate-50 leading-snug">
               <span :class="n.ok ? 'text-slate-700' : 'text-rose-700'" x-text="n.message"></span>
             </a>
           </template>
-          <p x-show="!items.length" class="px-3 py-3 text-xs text-slate-400 text-center">No recent activity.</p>
+          <p x-show="!items.length" class="px-3 py-3 text-xs text-slate-400 text-center">{{ tr("No recent activity.") }}</p>
         </div>
       </div>
       <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
-              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"><span>Settings</span></button>
+              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"><span>{{ tr("Settings") }}</span></button>
       <button type="button" @click="toggleTheme()"
               class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
         <span x-text="dark ? 'Light mode' : 'Dark mode'"></span></button>
@@ -317,10 +317,10 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
     <div class="bg-white rounded-lg shadow-xl w-[min(1000px,95vw)] max-h-[90vh] overflow-auto p-5">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold">Settings</h2>
+        <h2 class="font-semibold">{{ tr("Settings") }}</h2>
         <button type="button" @click="settingsOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <div id="settings-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="settings-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -331,10 +331,10 @@
        class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
     <div class="bg-white rounded-lg shadow-xl w-[min(720px,95vw)] max-h-[90vh] overflow-auto p-5">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold text-slate-900">Review note drafts</h2>
+        <h2 class="font-semibold text-slate-900">{{ tr("Review note drafts") }}</h2>
         <button type="button" @click="open = false" class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
       </div>
-      <div id="drafts-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="drafts-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -344,10 +344,10 @@
        class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
     <div class="bg-white rounded-lg shadow-xl w-[min(720px,94vw)] max-h-[88vh] overflow-auto p-5">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold">Edit skill · <code class="text-sm text-slate-500" x-text="skillTitle"></code></h2>
+        <h2 class="font-semibold">{{ tr("Edit skill") }} · <code class="text-sm text-slate-500" x-text="skillTitle"></code></h2>
         <button type="button" @click="skillOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <div id="skill-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="skill-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -374,12 +374,12 @@
           </div>
         </template>
         <template x-if="kind === 'topic'">
-          <p class="text-sm text-slate-600">This removes the investigation record. Its linked collections and their papers are untouched.</p>
+          <p class="text-sm text-slate-600">{{ tr("This removes the investigation record. Its linked collections and their papers are untouched.") }}</p>
         </template>
         <form x-ref="form" method="post" :action="action" class="mt-4 flex justify-end gap-2">
-          <button type="button" @click="open = false" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="button" @click="open = false" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">{{ tr("Cancel") }}</button>
           <button type="submit" :disabled="!ready" @click="if (!ready) $event.preventDefault()"
-                  class="rounded bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 disabled:opacity-40">Delete</button>
+                  class="rounded bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 disabled:opacity-40">{{ tr("Delete") }}</button>
         </form>
       </div>
     </div>
@@ -390,8 +390,8 @@
     <div class="bg-white rounded-lg shadow-xl w-[min(420px,92vw)] p-5">
       <p id="pa-confirm-msg" class="text-sm text-slate-700 whitespace-pre-line"></p>
       <div class="mt-4 flex justify-end gap-2">
-        <button id="pa-confirm-cancel" type="button" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
-        <button id="pa-confirm-ok" type="button" class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">OK</button>
+        <button id="pa-confirm-cancel" type="button" class="rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">{{ tr("Cancel") }}</button>
+        <button id="pa-confirm-ok" type="button" class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">{{ tr("OK") }}</button>
       </div>
     </div>
   </div>

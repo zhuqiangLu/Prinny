@@ -15,17 +15,17 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
     <div class="bg-white rounded-xl shadow-xl w-[min(640px,95vw)] p-5">
       <div class="flex items-center justify-between mb-1">
-        <h2 class="font-semibold">✎ Edit thesis with agent</h2>
+        <h2 class="font-semibold">✎ {{ tr("Edit thesis with agent") }}</h2>
         <button type="button" @click="aeditOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3">Describe the change in plain language — the agent proposes a revision, and <b>nothing is written until you Apply</b>. (One LLM call; it edits the current text only, no PDFs.)</p>
+      <p class="text-sm text-slate-500 mb-3">{{ tr("Describe the change in plain language — the agent proposes a revision, and") }} <b>{{ tr("nothing is written until you Apply") }}</b>. {{ tr("(One LLM call; it edits the current text only, no PDFs.)") }}</p>
       <form hx-post="/c/{{ slug }}/wiki/thesis/propose" hx-target="#aedit-diff" hx-swap="innerHTML" hx-disabled-elt="find button">
         <textarea id="aedit-instr" name="instruction" rows="2" required
-                  placeholder="e.g. sharpen the thesis around long-context cost; keep the three callouts"
+                  placeholder="{{ tr('e.g. sharpen the thesis around long-context cost; keep the three callouts') }}"
                   class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
         <div class="mt-2 flex items-center gap-2">
-          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">Propose <span class="htmx-indicator">…</span></button>
-          <span class="text-[11px] text-slate-400">one LLM call · no tools</span>
+          <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-50">{{ tr("Propose") }} <span class="htmx-indicator">…</span></button>
+          <span class="text-[11px] text-slate-400">{{ tr("one LLM call · no tools") }}</span>
         </div>
       </form>
       <div id="aedit-diff" class="mt-3"></div>
@@ -37,21 +37,21 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-20 overflow-auto">
     <div class="bg-white rounded-xl shadow-xl w-[min(560px,95vw)] p-5">
       <div class="flex items-center justify-between mb-1">
-        <h2 class="font-semibold">✦ New research topic</h2>
+        <h2 class="font-semibold">✦ {{ tr("New research topic") }}</h2>
         <button type="button" @click="topicOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
       <p class="text-sm text-slate-500 mb-3">A topic is a scientific <b>investigation</b> — a question this collection (and others) helps answer. It references papers as evidence; it never owns them.</p>
       <form method="post" action="/topics" class="space-y-2">
         <input type="hidden" name="collections" value="{{ slug }}">
-        <label class="block text-xs font-medium text-slate-500">Research question <span class="text-rose-500">*</span></label>
-        <textarea name="question" rows="2" required placeholder="e.g. Can test-time adaptation improve long-video reasoning?"
+        <label class="block text-xs font-medium text-slate-500">{{ tr("Research question") }} <span class="text-rose-500">*</span></label>
+        <textarea name="question" rows="2" required placeholder="{{ tr('e.g. Can test-time adaptation improve long-video reasoning?') }}"
                   class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
-        <label class="block text-xs font-medium text-slate-500">Title (optional)</label>
-        <input name="title" placeholder="Short name (defaults to the question)" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
-        <label class="block text-xs font-medium text-slate-500">Description (optional)</label>
+        <label class="block text-xs font-medium text-slate-500">{{ tr("Title (optional)") }}</label>
+        <input name="title" placeholder="{{ tr('Short name (defaults to the question)') }}" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
+        <label class="block text-xs font-medium text-slate-500">{{ tr("Description (optional)") }}</label>
         <textarea name="description" rows="2" class="w-full rounded border border-slate-300 px-3 py-1.5 text-xs"></textarea>
         <p class="text-[11px] text-slate-400">Linked: <b>{{ name }}</b>. You can link more collections and generate the investigation on the topic page.</p>
-        <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-4 py-1.5 text-sm text-white hover:bg-violet-700">Create topic →</button></div>
+        <div class="flex justify-end"><button class="rounded-md bg-violet-600 px-4 py-1.5 text-sm text-white hover:bg-violet-700">{{ tr("Create topic") }} →</button></div>
       </form>
     </div>
   </div>
@@ -64,7 +64,7 @@
         <h2 class="font-semibold">Pull “{{ name }}” from Zotero</h2>
         <button type="button" @click="syncWith = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <div id="sync-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="sync-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -77,7 +77,7 @@
         <button type="button" @click="graveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
       <p class="text-sm text-slate-500 mb-3">Papers you removed (newest first). <b>Restore</b> brings one back. <b>Permanently delete</b> moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it; <b>Purge</b> forgets it for good.</p>
-      <div id="graveyard-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="graveyard-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -90,8 +90,8 @@
         <h2 class="font-semibold">💭 Thoughts — “{{ name }}”</h2>
         <button type="button" @click="thoughtsOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3 shrink-0">Your notes + captured chat seeds &amp; reasoning. Add, edit, and link thoughts to papers.</p>
-      <div id="thoughts-modal-body" class="overflow-auto"><span class="text-sm text-slate-400">Loading…</span></div>
+      <p class="text-sm text-slate-500 mb-3 shrink-0">{{ tr("Your notes + captured chat seeds & reasoning. Add, edit, and link thoughts to papers.") }}</p>
+      <div id="thoughts-modal-body" class="overflow-auto"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -101,11 +101,11 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
     <div class="bg-white rounded-lg shadow-xl w-[min(620px,94vw)] max-h-[82vh] flex flex-col p-5">
       <div class="flex items-center justify-between mb-1 shrink-0">
-        <h2 class="font-semibold">↻ Regenerate — review beliefs first</h2>
+        <h2 class="font-semibold">↻ {{ tr("Regenerate — review beliefs first") }}</h2>
         <button type="button" @click="regenOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3 shrink-0">Accept the beliefs you hold; they shape the re-drafted Thesis &amp; Landscape. Then regenerate.</p>
-      <div id="regen-gate-body" class="overflow-auto"><span class="text-sm text-slate-400">Drafting belief candidates for you to review…</span></div>
+      <p class="text-sm text-slate-500 mb-3 shrink-0">{{ tr("Accept the beliefs you hold; they shape the re-drafted Thesis & Landscape. Then regenerate.") }}</p>
+      <div id="regen-gate-body" class="overflow-auto"><span class="text-sm text-slate-400">{{ tr("Drafting belief candidates for you to review…") }}</span></div>
     </div>
   </div>
 
@@ -115,7 +115,7 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-12 overflow-auto">
     <div class="relative bg-white rounded-2xl shadow-2xl w-[min(720px,95vw)] max-h-[88vh] overflow-auto p-6">
       <button type="button" @click="entityOpen = false" class="absolute right-4 top-4 grid place-items-center w-8 h-8 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50">✕</button>
-      <div id="entity-modal-body"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="entity-modal-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 
@@ -127,7 +127,7 @@
         <h2 class="font-semibold">Export “{{ name }}”</h2>
         <button type="button" @click="syncOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-4">Send a one-shot copy of this collection’s papers somewhere new. (To bring in new papers from Zotero, use ⇅ Pull.)</p>
+      <p class="text-sm text-slate-500 mb-4">{{ tr("Send a one-shot copy of this collection’s papers somewhere new. (To bring in new papers from Zotero, use ⇅ Pull.)") }}</p>
       <div class="space-y-2" x-data="{ open: '', bib: '', loadingBib: false,
                 async loadBib(){ this.loadingBib = true; try { const d = await (await fetch('/c/{{ slug }}/export/bibtex')).json(); this.bib = d.bibtex || ''; } finally { this.loadingBib = false; } } }">
 
@@ -137,18 +137,18 @@
                   class="flex w-full items-start gap-3 p-3 text-left hover:bg-slate-50 rounded-lg">
             <span class="text-xl leading-none">📁</span>
             <span class="min-w-0">
-              <span class="block font-medium text-slate-800">Directory of PDFs</span>
-              <span class="block text-xs text-slate-500">Copy every paper’s PDF into a local folder.</span>
+              <span class="block font-medium text-slate-800">{{ tr("Directory of PDFs") }}</span>
+              <span class="block text-xs text-slate-500">{{ tr("Copy every paper’s PDF into a local folder.") }}</span>
             </span>
             <span class="ml-auto text-slate-400" x-text="open === 'dir' ? '▴' : '▾'"></span>
           </button>
           <form x-show="open === 'dir'" x-cloak class="px-3 pb-3 space-y-2"
                 hx-post="/c/{{ slug }}/export/dir" hx-target="#export-result" hx-swap="innerHTML">
-            <label class="block text-xs text-slate-500">Destination folder</label>
+            <label class="block text-xs text-slate-500">{{ tr("Destination folder") }}</label>
             <input name="path" type="text" value="{{ export_dir_default }}" spellcheck="false"
                    class="w-full rounded border border-slate-300 px-2 py-1 text-xs font-mono">
             <div class="flex justify-end">
-              <button type="submit" class="rounded bg-slate-900 text-white text-xs px-3 py-1 hover:bg-slate-700">Copy PDFs</button>
+              <button type="submit" class="rounded bg-slate-900 text-white text-xs px-3 py-1 hover:bg-slate-700">{{ tr("Copy PDFs") }}</button>
             </div>
           </form>
         </div>
@@ -160,7 +160,7 @@
             <span class="text-xl leading-none">📋</span>
             <span class="min-w-0">
               <span class="block font-medium text-slate-800">BibTeX</span>
-              <span class="block text-xs text-slate-500">Render BibTeX as text to copy — no file written.</span>
+              <span class="block text-xs text-slate-500">{{ tr("Render BibTeX as text to copy — no file written.") }}</span>
             </span>
             <span class="ml-auto text-slate-400" x-text="open === 'bib' ? '▴' : '▾'"></span>
           </button>
@@ -169,7 +169,7 @@
                       class="w-full rounded border border-slate-300 px-2 py-1 text-xs font-mono"></textarea>
             <div class="flex justify-end">
               <button type="button" @click="$refs.bibText.select(); document.execCommand('copy');"
-                      class="rounded border border-slate-300 text-xs px-3 py-1 hover:bg-slate-50">Copy</button>
+                      class="rounded border border-slate-300 text-xs px-3 py-1 hover:bg-slate-50">{{ tr("Copy") }}</button>
             </div>
           </div>
         </div>
@@ -189,11 +189,11 @@
            class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
         <div class="bg-white rounded-lg shadow-xl w-[min(560px,94vw)] p-5">
           <div class="flex items-center justify-between mb-1">
-            <h2 class="font-semibold">Resolve duplicates</h2>
+            <h2 class="font-semibold">{{ tr("Resolve duplicates") }}</h2>
             <button type="button" @click="dupOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
           </div>
-          <p class="text-sm text-slate-500 mb-3">Same-title papers in this collection. Choose the copy to keep — the others are removed or merged into it.</p>
-          <div id="dup-body"><span class="text-sm text-slate-400">Loading…</span></div>
+          <p class="text-sm text-slate-500 mb-3">{{ tr("Same-title papers in this collection. Choose the copy to keep — the others are removed or merged into it.") }}</p>
+          <div id="dup-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
         </div>
       </div>
       <!-- Add-paper wizard (paste URLs → parse → pick → add + download) -->
@@ -202,7 +202,7 @@
         <div class="bg-white rounded-lg shadow-xl w-[min(640px,95vw)] p-5"
              x-data="addWizard('{{ slug }}')">
           <div class="flex items-center justify-between mb-1">
-            <h2 class="font-semibold">Add papers</h2>
+            <h2 class="font-semibold">{{ tr("Add papers") }}</h2>
             <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
           </div>
           <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids), or a direct <b>.pdf</b> link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
@@ -212,7 +212,7 @@
           <div class="mt-2 flex items-center gap-2">
             <button type="button" @click="parse()" :disabled="parsing || !raw.trim()"
                     class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40">
-              <span x-show="!parsing">Parse</span><span x-show="parsing" x-cloak>Parsing…</span>
+              <span x-show="!parsing">{{ tr("Parse") }}</span><span x-show="parsing" x-cloak>{{ tr("Parsing…") }}</span>
             </button>
             <span x-show="err" x-cloak x-text="err" class="text-xs text-rose-600"></span>
           </div>
@@ -238,9 +238,9 @@
                         <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : e.kind === 'pdf' ? ' · PDF' : '')"></span>
                       </template>
                       <template x-if="e.ok && e.note"><span class="ml-1 text-xs text-amber-600" x-text="e.note"></span></template>
-                      <template x-if="e.dup"><span class="ml-1 text-xs text-amber-600">already in collection</span></template>
-                      <template x-if="e.removed === 'graveyard'"><span class="ml-1 text-xs text-sky-600">in graveyard — adding restores it</span></template>
-                      <template x-if="e.removed === 'deleted'"><span class="ml-1 text-xs text-sky-600">permanently deleted — adding restores it</span></template>
+                      <template x-if="e.dup"><span class="ml-1 text-xs text-amber-600">{{ tr("already in collection") }}</span></template>
+                      <template x-if="e.removed === 'graveyard'"><span class="ml-1 text-xs text-sky-600">{{ tr("in graveyard — adding restores it") }}</span></template>
+                      <template x-if="e.removed === 'deleted'"><span class="ml-1 text-xs text-sky-600">{{ tr("permanently deleted — adding restores it") }}</span></template>
                       <template x-if="!e.ok"><span class="ml-1 text-xs text-rose-600" x-text="e.error"></span></template>
                     </span>
                   </label>
@@ -259,7 +259,7 @@
 
       <!-- wiki (the collection's single surface; loaded via HTMX on init) -->
       <div id="left-panel">
-        <span class="block p-3 text-sm text-slate-400">Loading…</span>
+        <span class="block p-3 text-sm text-slate-400">{{ tr("Loading…") }}</span>
       </div>
     </div><!-- /left scroll column -->
 
@@ -268,7 +268,7 @@
          class="relative w-1.5 mx-1.5 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
       <button type="button" @mousedown.stop @click="paneOpen=false"
               class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer"
-              title="Hide panel">›</button>
+              title="{{ tr('Hide panel') }}">›</button>
     </div>
 
     <!-- right pane: Chat / Thoughts -->
@@ -276,7 +276,7 @@
          class="shrink-0 h-full flex flex-col min-h-0 border-l border-slate-200 bg-white overflow-hidden">
       <div class="shrink-0 border-b border-slate-200 px-3 py-2.5 flex items-center gap-2 text-sm">
         <span class="text-violet-500">✦</span>
-        <span class="font-semibold text-slate-900 shrink-0">Prinny Assistant</span>
+        <span class="font-semibold text-slate-900 shrink-0">{{ tr("Prinny Assistant") }}</span>
       </div>
       <div class="flex-1 min-h-0">
         <div class="h-full">{% include "_chat.html" %}</div>
@@ -286,7 +286,7 @@
     <!-- collapsed rail -->
     <button x-show="!paneOpen" x-cloak @click="paneOpen=true"
             class="shrink-0 ml-1.5 w-9 rounded border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center"
-            title="Show panel">⟨</button>
+            title="{{ tr('Show panel') }}">⟨</button>
   </div>
 </div>
 

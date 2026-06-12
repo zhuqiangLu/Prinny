@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ paper.title }} — Paper Agent{% endblock %}
+{% block title %}{{ paper.title }} — {{ tr("Paper Agent") }}{% endblock %}
 {% block main_width %}max-w-none{% endblock %}
 {% block main_pad %}pt-3 pb-2{% endblock %}
 {% block main_inner %}h-full{% endblock %}
@@ -12,18 +12,18 @@
       {# On leaving, fire a background "draft from highlights+chat" (server gates on
          chat/highlights + no note + no existing draft); sendBeacon survives navigation. #}
       <a href="/c/{{ slug }}?tab=papers" class="text-sm text-slate-600 hover:text-slate-900 shrink-0"
-         @click="navigator.sendBeacon && navigator.sendBeacon('/c/{{ slug }}/p/{{ paper.id }}/autodraft')">← Return</a>
-      <a href="/c/{{ slug }}" class="text-sm font-medium text-slate-800 hover:text-slate-600 truncate max-w-[28ch]" title="Collection: {{ name }}">{{ name }}</a>
+         @click="navigator.sendBeacon && navigator.sendBeacon('/c/{{ slug }}/p/{{ paper.id }}/autodraft')">← {{ tr("Return") }}</a>
+      <a href="/c/{{ slug }}" class="text-sm font-medium text-slate-800 hover:text-slate-600 truncate max-w-[28ch]" title="{{ tr('Collection:') }} {{ name }}">{{ name }}</a>
     </div>
 
     {% if paper.has_pdf and show_highlight_legend %}
     <!-- highlight legend: centered (display-only; meaning of each color). Hide via Settings. -->
     <div class="flex items-center gap-2 flex-wrap text-xs text-slate-500 shrink-0">
-      <span>highlight:</span>
+      <span>{{ tr("highlight:") }}</span>
       {% for c in highlight_scheme %}
       <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm" style="background:{{ c.color }}"></span>{{ c.label }}</span>
       {% endfor %}
-      <span>· <span class="rounded bg-slate-200 px-1">Z</span> Zotero</span>
+      <span>· <span class="rounded bg-slate-200 px-1">Z</span> {{ tr("Zotero") }}</span>
     </div>
     {% endif %}
 
@@ -33,13 +33,13 @@
               class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
         <span class="text-base leading-none" x-text="pdfDark ? '🌙' : '☀️'"></span>
         <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">
-          PDF: <span x-text="pdfDark ? 'dark' : 'light'"></span> — click to flip</span>
+          {{ tr("PDF:") }} <span x-text="pdfDark ? 'dark' : 'light'"></span> {{ tr("— click to flip") }}</span>
       </button>
       {% endif %}
       <button type="button" @click="openJump()"
               class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
         <span class="text-base leading-none">🔍</span>
-        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">Jump to paper…</span>
+        <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">{{ tr("Jump to paper…") }}</span>
       </button>
     </div>
   </div>
@@ -54,7 +54,7 @@
               data-scheme='{{ highlight_scheme|tojson }}'
               src="/static/pdfjs/web/viewer.html?file=/pdf/{{ paper.id }}#pagemode=none"></iframe>
       {% else %}
-      <div class="p-6 text-slate-500">No PDF attached to this paper in Zotero.</div>
+      <div class="p-6 text-slate-500">{{ tr("No PDF attached to this paper in Zotero.") }}</div>
       {% endif %}
     </div>
 
@@ -63,16 +63,16 @@
          class="relative w-1.5 mx-1.5 shrink-0 cursor-col-resize rounded bg-slate-200 hover:bg-slate-400 transition-colors">
       <button type="button" @mousedown.stop @click="paneOpen=false"
               class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-12 rounded bg-slate-300 text-slate-600 shadow hover:bg-slate-500 hover:text-white cursor-pointer"
-              title="Hide panel">›</button>
+              title="{{ tr('Hide panel') }}">›</button>
     </div>
 
     <!-- Right pane: tabbed Chat / Notes / Highlights -->
     <div x-show="paneOpen" x-cloak :style="`width:${paneW}px`"
          class="shrink-0 flex flex-col min-h-0 rounded border border-slate-200 bg-white overflow-hidden">
       <div class="flex items-center border-b border-slate-200 text-sm shrink-0">
-        <button @click="tab='chat'" :class="tabCls('chat')">Chat</button>
-        <button @click="tab='notes'" :class="tabCls('notes')">Notes</button>
-        {% if paper.has_pdf %}<button @click="tab='highlights'" :class="tabCls('highlights')">Highlights</button>{% endif %}
+        <button @click="tab='chat'" :class="tabCls('chat')">{{ tr("Chat") }}</button>
+        <button @click="tab='notes'" :class="tabCls('notes')">{{ tr("Notes") }}</button>
+        {% if paper.has_pdf %}<button @click="tab='highlights'" :class="tabCls('highlights')">{{ tr("Highlights") }}</button>{% endif %}
         {# Find similar → seeds the discovery agent with this paper; results → Suggested reading.
            Stays disabled + "Finding…" while the (background) search runs. #}
         <span class="ml-auto text-[11px] text-emerald-700 truncate max-w-[40%]" x-text="findStatus" x-init="checkFindSimilar()"></span>
@@ -101,27 +101,27 @@
             <div class="mt-1.5 flex items-center gap-2">
               <template x-if="stagedDraftAdditive">
                 <button type="button" @click="noteMd = (noteMd.trim() ? noteMd.trimEnd() + '\n\n' : '') + stagedDraft; stagedDraft = null; showPreview = false"
-                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Append to my note</button>
+                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">{{ tr("Append to my note") }}</button>
               </template>
               <template x-if="!stagedDraftAdditive">
                 <button type="button" @click="noteMd = stagedDraft; stagedDraft = null; showPreview = false"
-                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">Use this draft</button>
+                        class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">{{ tr("Use this draft") }}</button>
               </template>
               <form hx-post="/c/{{ slug }}/p/{{ paper.id }}/autodraft/discard" hx-swap="none" @submit="stagedDraft = null">
-                <button class="text-xs text-slate-500 hover:text-rose-600">Discard</button>
+                <button class="text-xs text-slate-500 hover:text-rose-600">{{ tr("Discard") }}</button>
               </form>
             </div>
           </div>
           <div class="flex items-center gap-2 mb-2 text-sm">
             <button @click="showPreview=false"
                     :class="!showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
-                    class="rounded px-2 py-0.5">Write</button>
+                    class="rounded px-2 py-0.5">{{ tr("Write") }}</button>
             <button @click="preview()"
                     :class="showPreview ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100'"
-                    class="rounded px-2 py-0.5">Preview</button>
+                    class="rounded px-2 py-0.5">{{ tr("Preview") }}</button>
           </div>
           <textarea x-show="!showPreview" x-model="noteMd"
-                    placeholder="Write your note in Markdown… (supports $LaTeX$ math)"
+                    placeholder="{{ tr('Write your note in Markdown… (supports $LaTeX$ math)') }}"
                     class="flex-1 min-h-0 w-full resize-none rounded border border-slate-300 px-3 py-2 font-mono text-sm"></textarea>
           <div x-show="showPreview" x-ref="notePreview" x-html="previewHtml"
                class="flex-1 min-h-0 overflow-auto rounded border border-slate-200 px-3 py-2 prose prose-sm max-w-none"></div>
@@ -130,19 +130,19 @@
                     class="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50">
               <span x-text="busy ? 'Drafting…' : '✨ Draft from highlights + chat'"></span>
             </button>
-            <span x-show="saved" x-cloak class="text-sm text-emerald-700">Saved.</span>
+            <span x-show="saved" x-cloak class="text-sm text-emerald-700">{{ tr("Saved.") }}</span>
             <button @click="save()" :disabled="busy"
-                    class="ml-auto rounded bg-slate-900 px-4 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50">Save</button>
+                    class="ml-auto rounded bg-slate-900 px-4 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50">{{ tr("Save") }}</button>
           </div>
           <p x-show="err" x-text="err" class="mt-2 text-sm text-rose-700"></p>
           {# Per-paper notes/thoughts (anchored thoughts) — many dated atoms, distinct from
              the single consolidated note above. Chat captures + /thought land here too. #}
           <div class="mt-4 shrink-0 border-t border-slate-200 pt-3">
-            <div class="text-xs font-medium text-slate-600 mb-1.5">Notes &amp; thoughts on this paper</div>
+            <div class="text-xs font-medium text-slate-600 mb-1.5">{{ tr("Notes &amp; thoughts on this paper") }}</div>
             <div class="max-h-64 overflow-auto"
                  hx-get="/c/{{ slug }}/thoughts/panel?paper_key={{ paper.id }}"
                  hx-trigger="load" hx-swap="innerHTML">
-              <span class="text-sm text-slate-400">Loading…</span>
+              <span class="text-sm text-slate-400">{{ tr("Loading…") }}</span>
             </div>
           </div>
         </div>
@@ -168,10 +168,10 @@
        class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-14 overflow-auto">
     <div class="bg-white rounded-lg shadow-xl w-[min(600px,92vw)] h-[72vh] flex flex-col p-4">
       <div class="flex items-center justify-between mb-2 shrink-0">
-        <h2 class="font-semibold text-sm">Jump to paper</h2>
+        <h2 class="font-semibold text-sm">{{ tr("Jump to paper") }}</h2>
         <button @click="jumpOpen=false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <div id="jump-body" class="flex-1 min-h-0"><span class="text-sm text-slate-400">Loading…</span></div>
+      <div id="jump-body" class="flex-1 min-h-0"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
 </div>
@@ -184,8 +184,8 @@
   <button data-act="hl" data-color="{{ c.color }}" title="{{ c.label }}" style="background:{{ c.color }}" class="w-4 h-4 rounded-sm border border-black/20 hover:scale-110 transition"></button>
   {% endfor %}
   <span class="w-px h-4 bg-slate-600 mx-0.5"></span>
-  <button data-act="ask" class="px-1.5 py-0.5 rounded hover:bg-slate-700">Ask</button>
-  <button data-act="note" class="px-1.5 py-0.5 rounded hover:bg-slate-700">✎ Note</button>
+  <button data-act="ask" class="px-1.5 py-0.5 rounded hover:bg-slate-700">{{ tr("Ask") }}</button>
+  <button data-act="note" class="px-1.5 py-0.5 rounded hover:bg-slate-700">✎ {{ tr("Note") }}</button>
 </div>
 <script src="/static/annotate.js?v={{ asset_v('annotate.js') }}"></script>
 {% endif %}

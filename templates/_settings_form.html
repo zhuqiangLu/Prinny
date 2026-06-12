@@ -5,7 +5,7 @@
 <div id="settings-form-wrap">
   {% if saved %}
   <div class="mb-4 rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-green-800 text-sm">
-    Saved to <code>~/.paper-agent/config.toml</code>.
+    {{ tr("Saved to") }} <code>~/.paper-agent/config.toml</code>.
   </div>
   {% endif %}
 
@@ -16,7 +16,7 @@
     <div class="flex gap-8">
       {# --- sidebar (Apple-style: icon + label, rounded selection) --- #}
       <nav class="w-52 shrink-0 space-y-1 text-sm">
-        {% set cats = [("engine","Engine & model"),("appearance","Appearance"),("agents","Agents"),("zotero","Zotero"),("storage","Storage"),("display","Reading & display"),("advanced","Advanced")] %}
+        {% set cats = [("engine",tr("Engine & model")),("appearance",tr("Appearance")),("agents",tr("Agents")),("zotero",tr("Zotero")),("storage",tr("Storage")),("display",tr("Reading & display")),("advanced",tr("Advanced"))] %}
         {% for key, label in cats %}
         <button type="button" @click="cat = '{{ key }}'"
                 :class="cat === '{{ key }}' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'"
@@ -34,58 +34,58 @@
         <div x-show="cat === 'engine'" class="space-y-4">
           <div class="{{ sect }} space-y-3">
             <div class="flex items-center justify-between">
-              <label class="text-sm font-medium">LLM engine</label>
+              <label class="text-sm font-medium">{{ tr("LLM engine") }}</label>
               {% if status %}
               <span class="text-xs rounded-full px-2 py-0.5 {{ 'bg-emerald-100 text-emerald-700' if status.ok else 'bg-rose-100 text-rose-700' }}"
-                    title="{{ status.detail }}">{{ status.name }} · {{ 'ready' if status.ok else 'unavailable' }}</span>
+                    title="{{ status.detail }}">{{ status.name }} · {{ tr('ready') if status.ok else tr('unavailable') }}</span>
               {% endif %}
             </div>
             <select name="engine" x-model="eng" class="w-full rounded border border-slate-300 px-3 py-2 bg-white">
-              <option value="">Auto (Claude Code)</option>
-              <option value="claude-code">Claude Code (CLI)</option>
-              <option value="codex">Codex (CLI)</option>
+              <option value="">{{ tr("Auto (Claude Code)") }}</option>
+              <option value="claude-code">{{ tr("Claude Code (CLI)") }}</option>
+              <option value="codex">{{ tr("Codex (CLI)") }}</option>
             </select>
-            <p class="text-xs text-slate-500">Uses your existing Claude Code / Codex login — no API key. LLM features need the selected agent installed.</p>
+            <p class="text-xs text-slate-500">{{ tr("Uses your existing Claude Code / Codex login — no API key. LLM features need the selected agent installed.") }}</p>
             <div x-show="effEngine === 'claude-code'">
-              <label class="block text-xs font-medium mb-1">Claude Code binary</label>
+              <label class="block text-xs font-medium mb-1">{{ tr("Claude Code binary") }}</label>
               <input type="text" name="claude_bin" value="{{ config.claude_bin }}"
                      class="w-full rounded border border-slate-300 px-3 py-2 text-sm font-mono" />
             </div>
             <div x-show="eng === 'codex'" x-cloak>
-              <label class="block text-xs font-medium mb-1">Codex binary</label>
+              <label class="block text-xs font-medium mb-1">{{ tr("Codex binary") }}</label>
               <input type="text" name="codex_bin" value="{{ config.codex_bin }}"
                      class="w-full rounded border border-slate-300 px-3 py-2 text-sm font-mono" />
             </div>
             <div x-show="effEngine === 'claude-code'">
-              <label class="block text-xs font-medium mb-1">Per-paper chat session</label>
+              <label class="block text-xs font-medium mb-1">{{ tr("Per-paper chat session") }}</label>
               <select name="chat_session_mode" class="w-full rounded border border-slate-300 px-3 py-2 bg-white text-sm">
-                <option value="resume" {% if config.chat_session_mode != "live" %}selected{% endif %}>Resume (durable — survives restart; ~1–3s per turn)</option>
-                <option value="live" {% if config.chat_session_mode == "live" %}selected{% endif %}>Live (persistent process — faster; lost on idle/restart)</option>
+                <option value="resume" {% if config.chat_session_mode != "live" %}selected{% endif %}>{{ tr("Resume (durable — survives restart; ~1–3s per turn)") }}</option>
+                <option value="live" {% if config.chat_session_mode == "live" %}selected{% endif %}>{{ tr("Live (persistent process — faster; lost on idle/restart)") }}</option>
               </select>
-              <p class="text-xs text-slate-500 mt-1">How the paper sub-agent keeps conversation memory. Try both.</p>
+              <p class="text-xs text-slate-500 mt-1">{{ tr("How the paper sub-agent keeps conversation memory. Try both.") }}</p>
             </div>
           </div>
           <div class="{{ sect }}" x-data='{ models: {{ models|tojson }}, model: "{{ config.model }}", isCustom: false }'
                x-init="isCustom = !!model && !models.includes(model)">
-            <label class="block text-sm font-medium mb-0.5">Model</label>
-            <p class="text-xs text-slate-500 mb-2">Default for all chats (blank = engine default).</p>
+            <label class="block text-sm font-medium mb-0.5">{{ tr("Model") }}</label>
+            <p class="text-xs text-slate-500 mb-2">{{ tr("Default for all chats (blank = engine default).") }}</p>
             <input type="hidden" name="model" :value="model" />
             <div class="flex gap-2 items-center">
               <select x-show="models.length && !isCustom" x-model="model"
                       @change="if (model === '__custom__') { isCustom = true; model = ''; }"
                       class="flex-1 rounded border border-slate-300 px-3 py-2 bg-white">
-                <option value="">(engine default)</option>
+                <option value="">{{ tr("(engine default)") }}</option>
                 {% for m in models %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
-                <option value="__custom__">Custom…</option>
+                <option value="__custom__">{{ tr("Custom…") }}</option>
               </select>
               <input type="text" x-model="model" x-show="isCustom || !models.length"
-                     placeholder="model id — blank = engine default"
+                     placeholder="{{ tr('model id — blank = engine default') }}"
                      class="flex-1 rounded border border-slate-300 px-3 py-2" />
               <button type="button" hx-get="/settings/form?refresh=1" hx-target="#settings-form-wrap" hx-swap="outerHTML"
-                      class="shrink-0 text-xs text-slate-500 hover:text-slate-800 underline">refresh list</button>
+                      class="shrink-0 text-xs text-slate-500 hover:text-slate-800 underline">{{ tr("refresh list") }}</button>
             </div>
             <p x-show="!models.length" x-cloak class="text-xs text-slate-400 mt-1">
-              No preset list for this engine — leave blank for its default, or type a model id.
+              {{ tr("No preset list for this engine — leave blank for its default, or type a model id.") }}
             </p>
           </div>
         </div>
@@ -105,19 +105,19 @@
             </div>
           </div>
           <div class="{{ sect }} space-y-3">
-            <h3 class="text-sm font-semibold text-slate-700">Names</h3>
+            <h3 class="text-sm font-semibold text-slate-700">{{ tr("Names") }}</h3>
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">Workspace title
-                <span class="font-normal text-slate-400">· landing headline</span></label>
+              <label class="block text-xs font-medium text-slate-600 mb-1">{{ tr("Workspace title") }}
+                <span class="font-normal text-slate-400">· {{ tr("landing headline") }}</span></label>
               <input type="text" name="workspace_title" value="{{ config.workspace_title }}" maxlength="80"
                      class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">Workspace subtitle</label>
+              <label class="block text-xs font-medium text-slate-600 mb-1">{{ tr("Workspace subtitle") }}</label>
               <input type="text" name="workspace_subtitle" value="{{ config.workspace_subtitle }}" maxlength="160"
                      class="w-full rounded border border-slate-300 px-3 py-2 text-sm">
             </div>
-            <p class="text-xs text-slate-400">Saved with the Save button below.</p>
+            <p class="text-xs text-slate-400">{{ tr("Saved with the Save button below.") }}</p>
           </div>
 
           {% if false %}{# Theme picker removed — light/dark + the default scene are enough. #}
@@ -205,42 +205,37 @@
           <div class="{{ sect }} space-y-3">
             {# Setup guide — Prinny reads Zotero two ways; this is how to enable each. #}
             <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
-              <p class="font-medium text-slate-800">Connecting Zotero</p>
-              <p class="text-slate-600">Prinny only <b>reads</b> your library — it tries Zotero's local API first, then falls back to the SQLite file. Set up either one:</p>
+              <p class="font-medium text-slate-800">{{ tr("Connecting Zotero") }}</p>
+              <p class="text-slate-600">{{ tr("Prinny only reads your library — it tries Zotero's local API first, then falls back to the SQLite file. Set up either one:") }}</p>
               <ol class="list-decimal pl-5 space-y-1.5 text-slate-600">
-                <li><b>Recommended — local API (keep Zotero open):</b> in Zotero open
-                  <b>Settings → Advanced → Miscellaneous</b> and tick
-                  <b>“Allow other applications on this computer to communicate with Zotero.”</b>
-                  It exposes <code class="rounded bg-slate-200 px-1">http://localhost:23119/api/</code> (the “HTTP API base” below).
-                  Restart Zotero if it was already running.</li>
-                <li><b>Fallback — SQLite (Zotero must be closed):</b> point the path below at
-                  <code class="rounded bg-slate-200 px-1">~/Zotero/zotero.sqlite</code>. Zotero <b>locks</b> this file while it's open,
-                  so quit Zotero to use this mode — an open Zotero is the usual cause of
-                  <i>“unable to open database file.”</i></li>
+                <li>{{ tr("Recommended — local API (keep Zotero open): in Zotero open Settings → Advanced → Miscellaneous and tick “Allow other applications on this computer to communicate with Zotero.” It exposes the “HTTP API base” below. Restart Zotero if it was already running.") }}
+                  <code class="rounded bg-slate-200 px-1">http://localhost:23119/api/</code></li>
+                <li>{{ tr("Fallback — SQLite (Zotero must be closed): point the path below at the file below. Zotero locks this file while it's open, so quit Zotero to use this mode — an open Zotero is the usual cause of “unable to open database file.”") }}
+                  <code class="rounded bg-slate-200 px-1">~/Zotero/zotero.sqlite</code></li>
               </ol>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Zotero SQLite path</label>
+              <label class="block text-sm font-medium mb-1">{{ tr("Zotero SQLite path") }}</label>
               <input type="text" name="zotero_sqlite_path" value="{{ config.zotero_sqlite_path }}"
                      class="w-full rounded border border-slate-300 px-3 py-2" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Zotero HTTP API base</label>
+              <label class="block text-sm font-medium mb-1">{{ tr("Zotero HTTP API base") }}</label>
               <input type="text" name="zotero_api_base" value="{{ config.zotero_api_base }}"
                      class="w-full rounded border border-slate-300 px-3 py-2" />
-              <p class="text-xs text-slate-500 mt-1">Preferred when reachable; SQLite is the fallback.</p>
+              <p class="text-xs text-slate-500 mt-1">{{ tr("Preferred when reachable; SQLite is the fallback.") }}</p>
             </div>
-            <p class="text-xs text-slate-500">The app reads from Zotero and never writes back (Zotero's local API is read-only). Use ⇅ Pull on a collection to bring in newly-added papers.</p>
+            <p class="text-xs text-slate-500">{{ tr("The app reads from Zotero and never writes back (Zotero's local API is read-only). Use ⇅ Pull on a collection to bring in newly-added papers.") }}</p>
           </div>
         </div>
 
         <!-- Storage -->
         <div x-show="cat === 'storage'" x-cloak>
           <div class="{{ sect }}">
-            <label class="block text-sm font-medium mb-1">PDF store path</label>
+            <label class="block text-sm font-medium mb-1">{{ tr("PDF store path") }}</label>
             <input type="text" name="pdf_store_path" value="{{ config.pdf_store_path }}"
                    class="w-full rounded border border-slate-300 px-3 py-2" />
-            <p class="text-xs text-slate-500 mt-1">Where the app keeps its own copy of every paper's PDF. May be a network drive; the app degrades gracefully if it's disconnected.</p>
+            <p class="text-xs text-slate-500 mt-1">{{ tr("Where the app keeps its own copy of every paper's PDF. May be a network drive; the app degrades gracefully if it's disconnected.") }}</p>
           </div>
         </div>
 
@@ -250,54 +245,54 @@
             <label class="flex items-center gap-2 text-sm">
               <input type="checkbox" name="pdf_dark" value="true" class="rounded border-slate-300"
                      {% if config.pdf_dark != "false" %}checked{% endif %} />
-              Invert the PDF in dark mode <span class="text-xs text-slate-400">(toggle per paper from the reader)</span>
+              {{ tr("Invert the PDF in dark mode") }} <span class="text-xs text-slate-400">{{ tr("(toggle per paper from the reader)") }}</span>
             </label>
             <label class="flex items-center gap-2 text-sm">
               <input type="checkbox" name="show_highlight_legend" value="true" class="rounded border-slate-300"
                      {% if config.show_highlight_legend != "false" %}checked{% endif %} />
-              Show the highlight legend in the paper toolbar
+              {{ tr("Show the highlight legend in the paper toolbar") }}
             </label>
             <div>
-              <label class="block text-sm font-medium mb-1">Reading log size
-                <span class="text-xs font-normal text-slate-400">· how many papers "Previous paper" can walk back</span>
+              <label class="block text-sm font-medium mb-1">{{ tr("Reading log size") }}
+                <span class="text-xs font-normal text-slate-400">· {{ tr("how many papers \"Previous paper\" can walk back") }}</span>
               </label>
               <input type="number" name="reading_log_cap" min="1" value="{{ config.reading_log_cap or '100' }}"
                      class="w-28 rounded border border-slate-300 px-3 py-2 text-sm" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Recommended papers per run
-                <span class="text-xs font-normal text-slate-400">· how many arXiv papers the wiki's “✦ Suggest papers” proposes</span>
+              <label class="block text-sm font-medium mb-1">{{ tr("Recommended papers per run") }}
+                <span class="text-xs font-normal text-slate-400">· {{ tr("how many arXiv papers the wiki's “✦ Suggest papers” proposes") }}</span>
               </label>
               <input type="number" name="recommend_count" min="1" max="50" value="{{ config.recommend_count or '10' }}"
                      class="w-28 rounded border border-slate-300 px-3 py-2 text-sm" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Semantic Scholar API key
-                <span class="text-xs font-normal text-slate-400">· optional — used when arXiv rate-limits. A free key gives a personal quota that works on shared/institutional networks.</span>
+              <label class="block text-sm font-medium mb-1">{{ tr("Semantic Scholar API key") }}
+                <span class="text-xs font-normal text-slate-400">· {{ tr("optional — used when arXiv rate-limits. A free key gives a personal quota that works on shared/institutional networks.") }}</span>
               </label>
               <input type="password" name="semantic_scholar_api_key" autocomplete="off"
                      value="{{ config.semantic_scholar_api_key or '' }}"
-                     placeholder="paste your Semantic Scholar API key"
+                     placeholder="{{ tr('paste your Semantic Scholar API key') }}"
                      class="w-full max-w-md rounded border border-slate-300 px-3 py-2 text-sm" />
-              <p class="text-xs text-slate-400 mt-1">Get one free at <span class="font-mono">semanticscholar.org/product/api</span>. Leave blank to use the public quota (may rate-limit on shared IPs).</p>
+              <p class="text-xs text-slate-400 mt-1">{{ tr("Get one free at") }} <span class="font-mono">semanticscholar.org/product/api</span>. {{ tr("Leave blank to use the public quota (may rate-limit on shared IPs).") }}</p>
             </div>
           </div>
           <div class="{{ sect }}">
-            <h3 class="text-sm font-semibold text-slate-700">Highlight scheme</h3>
-            <p class="text-xs text-slate-500 mb-2">Colors &amp; meanings for PDF highlights. Changing a color recolors existing highlights to the nearest new color.</p>
+            <h3 class="text-sm font-semibold text-slate-700">{{ tr("Highlight scheme") }}</h3>
+            <p class="text-xs text-slate-500 mb-2">{{ tr("Colors & meanings for PDF highlights. Changing a color recolors existing highlights to the nearest new color.") }}</p>
             <div x-data='schemeEditor({{ highlight_scheme|tojson }})'>
               <input type="hidden" name="highlight_scheme" :value="JSON.stringify(rows)" />
               <template x-for="(r, i) in rows" :key="i">
                 <div class="flex items-center gap-2 mb-1.5">
-                  <input type="color" x-model="r.color" title="color"
+                  <input type="color" x-model="r.color" title="{{ tr('color') }}"
                          class="w-8 h-8 shrink-0 rounded border border-slate-300 p-0 bg-transparent cursor-pointer">
-                  <input type="text" x-model="r.label" placeholder="meaning (e.g. core claim)"
+                  <input type="text" x-model="r.label" placeholder="{{ tr('meaning (e.g. core claim)') }}"
                          class="flex-1 rounded border border-slate-300 px-2 py-1 text-sm">
                   <button type="button" @click="rows.splice(i, 1)"
-                          class="shrink-0 text-slate-400 hover:text-rose-600 px-1" title="Remove">×</button>
+                          class="shrink-0 text-slate-400 hover:text-rose-600 px-1" title="{{ tr('Remove') }}">×</button>
                 </div>
               </template>
-              <button type="button" @click="add()" class="text-xs text-slate-500 hover:text-slate-800 underline">+ add color</button>
+              <button type="button" @click="add()" class="text-xs text-slate-500 hover:text-slate-800 underline">{{ tr("+ add color") }}</button>
             </div>
           </div>
         </div>
@@ -308,7 +303,7 @@
             <label class="flex items-center gap-2 text-sm">
               <input type="checkbox" name="debug" value="true" class="rounded border-slate-300"
                      {% if config.debug == "true" %}checked{% endif %} />
-              Debug mode <span class="text-xs text-slate-400">(show the chat session id)</span>
+              {{ tr("Debug mode") }} <span class="text-xs text-slate-400">{{ tr("(show the chat session id)") }}</span>
             </label>
           </div>
         </div>
@@ -318,8 +313,8 @@
     </div>
 
     <div class="mt-4 flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
-      <span class="text-xs text-slate-400 mr-auto">One Save applies every category.</span>
-      <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">Save</button>
+      <span class="text-xs text-slate-400 mr-auto">{{ tr("One Save applies every category.") }}</span>
+      <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">{{ tr("Save") }}</button>
     </div>
   </form>
 </div>

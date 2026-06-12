@@ -4,23 +4,23 @@
 <form hx-post="/agents/skill/{{ skill.name }}" hx-target="#skill-modal-body" hx-swap="innerHTML">
   <div class="flex items-center gap-2 mb-2 text-xs">
     <code class="font-semibold text-slate-700">{{ skill.name }}</code>
-    {% if skill.customized %}<span class="rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5">customized</span>{% endif %}
-    {% if saved %}<span class="text-emerald-600">saved ✓</span>{% endif %}
+    {% if skill.customized %}<span class="rounded-full bg-amber-100 text-amber-700 px-1.5 py-0.5">{{ tr("customized") }}</span>{% endif %}
+    {% if saved %}<span class="text-emerald-600">{{ tr("saved") }} ✓</span>{% endif %}
     <div class="ml-auto flex items-center gap-2">
       {% if skill.customized %}
       <button type="button" hx-post="/agents/skill/{{ skill.name }}/reset"
               hx-target="#skill-modal-body" hx-swap="innerHTML"
-              hx-confirm="Reset “{{ skill.name }}” to the shipped default? Your edits are discarded."
-              class="rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50">Reset to default</button>
+              hx-confirm="{{ tr('Reset to the shipped default? Your edits are discarded.') }}"
+              class="rounded border border-slate-300 px-2 py-0.5 text-slate-600 hover:bg-slate-50">{{ tr("Reset to default") }}</button>
       {% endif %}
-      <button class="rounded bg-slate-900 text-white px-3 py-0.5 hover:bg-slate-700">Save</button>
+      <button class="rounded bg-slate-900 text-white px-3 py-0.5 hover:bg-slate-700">{{ tr("Save") }}</button>
     </div>
   </div>
-  <label class="block text-xs font-medium text-slate-500 mb-1">Description <span class="font-normal text-slate-400">(what this skill is for)</span></label>
+  <label class="block text-xs font-medium text-slate-500 mb-1">{{ tr("Description") }} <span class="font-normal text-slate-400">{{ tr("(what this skill is for)") }}</span></label>
   <input name="description" value="{{ skill.description }}"
          class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm mb-3">
-  <label class="block text-xs font-medium text-slate-500 mb-1">Instructions</label>
+  <label class="block text-xs font-medium text-slate-500 mb-1">{{ tr("Instructions") }}</label>
   <textarea name="body" rows="18" spellcheck="false"
             class="w-full rounded border border-slate-300 px-2 py-2 text-xs font-mono leading-relaxed">{{ skill.body }}</textarea>
-  <p class="mt-1 text-xs text-slate-400">Advisory guidance for the agent — the tool allowlist &amp; permissions stay enforced in code.</p>
+  <p class="mt-1 text-xs text-slate-400">{{ tr("Advisory guidance for the agent — the tool allowlist & permissions stay enforced in code.") }}</p>
 </form>

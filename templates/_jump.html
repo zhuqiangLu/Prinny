@@ -3,7 +3,7 @@
 <div class="flex flex-col h-full" x-data='jumpPicker({{ groups|tojson }}, "{{ current }}")'>
   <div class="shrink-0 space-y-2">
     <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-500 shrink-0">Collection</span>
+      <span class="text-xs text-slate-500 shrink-0">{{ tr("Collection") }}</span>
       <select x-model="col" :disabled="q.trim().length > 0"
               class="flex-1 min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50">
         <template x-for="c in cols" :key="c.slug">
@@ -11,19 +11,19 @@
         </template>
       </select>
     </div>
-    <input x-model="q" x-ref="jumpq" placeholder="Search papers across collections…"
+    <input x-model="q" x-ref="jumpq" placeholder="{{ tr('Search papers across collections…') }}"
            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-slate-400">
     {# Filter — same model + sessionStorage as the Papers tab (one shared filter, two views) #}
     <div x-show="onCurrent" x-cloak class="text-[11px]">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="text-slate-400 mr-0.5">Filter:</span>
-        <button type="button" @click="clearFilters()" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-        <template x-if="optThemes.length"><button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button></template>
-        <template x-if="optConcepts.length"><button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">Concept</button></template>
-        <template x-if="optMethods.length"><button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button></template>
-        <template x-if="optProblems.length"><button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button></template>
-        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
-        <span x-show="selKeys.length" x-cloak class="text-slate-400">· filtering by <span x-text="selKeys.length"></span></span>
+        <span class="text-slate-400 mr-0.5">{{ tr("Filter:") }}</span>
+        <button type="button" @click="clearFilters()" :class="selKeys.length===0 ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">{{ tr("All") }}</button>
+        <template x-if="optThemes.length"><button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">{{ tr("Theme") }}</button></template>
+        <template x-if="optConcepts.length"><button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">{{ tr("Concept") }}</button></template>
+        <template x-if="optMethods.length"><button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">{{ tr("Method") }}</button></template>
+        <template x-if="optProblems.length"><button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">{{ tr("Problem") }}</button></template>
+        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">{{ tr("Unmapped") }}</button>
+        <span x-show="selKeys.length" x-cloak class="text-slate-400">· {{ tr("filtering by") }} <span x-text="selKeys.length"></span></span>
       </div>
       <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
         <template x-for="t in optThemes" :key="t.key"><button type="button" @click="toggleKey(t.key)" :class="selKeys.includes(t.key) ? 'ring-2 ring-violet-400 bg-violet-100' : 'bg-violet-50 hover:bg-violet-100'" class="rounded px-2 py-0.5 text-violet-700" x-text="t.label"></button></template>

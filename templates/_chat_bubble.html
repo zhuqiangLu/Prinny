@@ -4,7 +4,7 @@
   <div class="flex flex-wrap gap-1 max-w-[85%] {% if m.role == 'user' %}justify-end{% endif %}">
     {% for src in m.images %}
     <img src="{{ src }}" onclick="window.dispatchEvent(new CustomEvent('pa-lightbox', {detail: this.src}))"
-         class="h-20 w-20 object-cover rounded border border-slate-200 cursor-zoom-in hover:opacity-90" alt="attached image" title="Click to enlarge">
+         class="h-20 w-20 object-cover rounded border border-slate-200 cursor-zoom-in hover:opacity-90" alt="{{ tr('attached image') }}" title="{{ tr('Click to enlarge') }}">
     {% endfor %}
   </div>
 </div>

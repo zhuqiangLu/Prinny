@@ -4,7 +4,7 @@
    scope, so regenOpen is in scope. #}
 <div id="regen-gate">
   {% if candidates %}
-  <p class="text-xs font-medium text-slate-600 mb-2">Belief candidates — Accept the ones you actually hold:</p>
+  <p class="text-xs font-medium text-slate-600 mb-2">{{ tr("Belief candidates — Accept the ones you actually hold:") }}</p>
   <div class="space-y-2 mb-4">
     {% for c in candidates %}
     <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
@@ -16,38 +16,38 @@
       </div>
       <div class="mt-1.5 flex items-center gap-2">
         <button class="rounded bg-emerald-600 text-white px-2.5 py-1 text-xs hover:bg-emerald-700"
-                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/accept" hx-target="#regen-gate-body" hx-swap="innerHTML">Accept</button>
+                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/accept" hx-target="#regen-gate-body" hx-swap="innerHTML">{{ tr("Accept") }}</button>
         <button class="text-xs text-slate-500 hover:text-rose-600"
-                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/dismiss" hx-target="#regen-gate-body" hx-swap="innerHTML">Dismiss</button>
+                hx-post="/c/{{ slug }}/wiki/regen/belief/{{ c.id }}/dismiss" hx-target="#regen-gate-body" hx-swap="innerHTML">{{ tr("Dismiss") }}</button>
       </div>
     </div>
     {% endfor %}
   </div>
   {% else %}
   <p class="text-xs text-slate-500 mb-4">
-    {% if can_suggest %}No new belief candidates this round.{% else %}Not enough signal to suggest beliefs yet — regenerate will use only your existing accepted beliefs.{% endif %}
+    {% if can_suggest %}{{ tr("No new belief candidates this round.") }}{% else %}{{ tr("Not enough signal to suggest beliefs yet — regenerate will use only your existing accepted beliefs.") }}{% endif %}
   </p>
   {% endif %}
 
   {% if accepted %}
-  <p class="text-xs font-medium text-slate-600 mb-1.5">✓ These accepted beliefs will shape the regenerated Field Model:</p>
+  <p class="text-xs font-medium text-slate-600 mb-1.5">✓ {{ tr("These accepted beliefs will shape the regenerated Field Model:") }}</p>
   <ul class="space-y-1 mb-4">
     {% for b in accepted %}
     <li class="text-[13px] text-slate-700 flex items-start gap-1.5"><span class="text-emerald-500 mt-0.5">✓</span><span>{{ b.title }}</span></li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="text-xs text-slate-400 mb-4 italic">No accepted beliefs yet — the regen will draft from your notes, thoughts, and papers as usual.</p>
+  <p class="text-xs text-slate-400 mb-4 italic">{{ tr("No accepted beliefs yet — the regen will draft from your notes, thoughts, and papers as usual.") }}</p>
   {% endif %}
 
   {# Optional one-shot EDITORIAL steer for this regeneration. Held in the parent
      collectionView() scope (regenSteer) so triaging beliefs above doesn't clear it.
      Each form below carries it as a hidden `steer` input. #}
   <div class="border-t border-slate-100 pt-3 mb-2">
-    <label class="block text-[11px] font-medium text-slate-600 mb-1">Optional steer for this regen
-      <span class="font-normal text-slate-400">— editorial only (emphasis / clustering / framing). Ignored if the papers don't support it; not saved.</span></label>
+    <label class="block text-[11px] font-medium text-slate-600 mb-1">{{ tr("Optional steer for this regen") }}
+      <span class="font-normal text-slate-400">{{ tr("— editorial only (emphasis / clustering / framing). Ignored if the papers don't support it; not saved.") }}</span></label>
     <textarea x-model="regenSteer" maxlength="300" rows="2"
-              placeholder="e.g. Lead the thesis with the long-context angle; keep retrieval and memory as separate method families."
+              placeholder="{{ tr('e.g. Lead the thesis with the long-context angle; keep retrieval and memory as separate method families.') }}"
               class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
     <div class="text-right text-[10px] text-slate-400"><span x-text="(regenSteer||'').length"></span>/300</div>
   </div>
@@ -60,24 +60,24 @@
       <input type="hidden" name="mode" value="incremental">
       <input type="hidden" name="steer" :value="regenSteer">
       <button class="rounded bg-violet-600 text-white px-3 py-1.5 text-sm hover:bg-violet-700"
-              title="Fold the new papers and your recent highlights/notes into the current model — keeps its structure and your edits">✦ Update — fold in new</button>
+              title="{{ tr('Fold the new papers and your recent highlights/notes into the current model — keeps its structure and your edits') }}">✦ {{ tr("Update — fold in new") }}</button>
     </form>
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
       <input type="hidden" name="mode" value="full">
       <input type="hidden" name="steer" :value="regenSteer">
       <button class="rounded border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-sm hover:bg-slate-50"
-              title="Re-cluster the whole collection from scratch — discards the current structure">↻ Rebuild from scratch</button>
+              title="{{ tr('Re-cluster the whole collection from scratch — discards the current structure') }}">↻ {{ tr("Rebuild from scratch") }}</button>
     </form>
     {% else %}
     <form hx-post="/c/{{ slug }}/wiki/draft" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" @submit="regenOpen = false">
       <input type="hidden" name="mode" value="full">
       <input type="hidden" name="steer" :value="regenSteer">
-      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">✦ Generate Field Model</button>
+      <button class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">✦ {{ tr("Generate Field Model") }}</button>
     </form>
     {% endif %}
-    <button type="button" @click="regenOpen = false" class="text-sm text-slate-500 hover:text-slate-800">Cancel</button>
-    <span class="ml-auto text-[11px] text-slate-400">Runs in the background</span>
+    <button type="button" @click="regenOpen = false" class="text-sm text-slate-500 hover:text-slate-800">{{ tr("Cancel") }}</button>
+    <span class="ml-auto text-[11px] text-slate-400">{{ tr("Runs in the background") }}</span>
   </div>
 </div>

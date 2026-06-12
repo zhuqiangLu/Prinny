@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Notes — {{ paper.title }}{% endblock %}
+{% block title %}{{ tr("Notes") }} — {{ paper.title }}{% endblock %}
 {% block content %}
 <a href="/c/{{ slug }}/p/{{ paper.id }}" class="text-sm text-slate-500 hover:text-slate-900">← {{ paper.title }}</a>
-<h1 class="text-lg font-semibold mt-2">Notes</h1>
+<h1 class="text-lg font-semibold mt-2">{{ tr("Notes") }}</h1>
 <p class="text-sm text-slate-500">{{ paper.authors }}{% if paper.year %} · {{ paper.year }}{% endif %}</p>
 
 {% if error %}
-<div class="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}{% if "API key" in error %} <a href="/settings" class="underline">Settings</a>.{% endif %}</div>
+<div class="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ error }}{% if "API key" in error %} <a href="/settings" class="underline">{{ tr("Settings") }}</a>.{% endif %}</div>
 {% endif %}
 {% if draft %}
 <div class="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -16,33 +16,33 @@
 
 <form method="post" action="/c/{{ slug }}/p/{{ paper.id }}/notes" class="mt-4 space-y-4">
   <div>
-    <label class="block text-sm font-medium mb-1">Summary</label>
+    <label class="block text-sm font-medium mb-1">{{ tr("Summary") }}</label>
     <textarea name="summary" rows="3" class="w-full rounded border border-slate-300 px-3 py-2">{{ note.summary }}</textarea>
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1">Thoughts</label>
+    <label class="block text-sm font-medium mb-1">{{ tr("Thoughts") }}</label>
     <textarea name="thoughts" rows="5" class="w-full rounded border border-slate-300 px-3 py-2">{{ note.thoughts }}</textarea>
   </div>
   <div>
-    <label class="block text-sm font-medium mb-1">Key Quotes <span class="text-slate-400">(markdown)</span></label>
+    <label class="block text-sm font-medium mb-1">{{ tr("Key Quotes") }} <span class="text-slate-400">{{ tr("(markdown)") }}</span></label>
     <textarea name="key_quotes" rows="4" class="w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm">{{ note.key_quotes }}</textarea>
   </div>
   <div class="flex items-center gap-3">
     <input type="hidden" name="status" value="{{ note.status or 'unread' }}">
-    <label class="text-sm font-medium" title="How this note can ground the wiki. auto = reasoning if you wrote in Thoughts, else seed.">Kind</label>
+    <label class="text-sm font-medium" title="{{ tr('How this note can ground the wiki. auto = reasoning if you wrote in Thoughts, else seed.') }}">{{ tr("Kind") }}</label>
     <select name="synth_kind" class="rounded border border-slate-300 px-2 py-1">
       {% for k in ("auto", "seed", "reasoning") %}
       <option value="{{ k }}" {% if note.synth_kind == k %}selected{% endif %}>{{ k }}</option>
       {% endfor %}
     </select>
-    <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">Save</button>
+    <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">{{ tr("Save") }}</button>
   </div>
 </form>
 
 <form method="post" action="/c/{{ slug }}/p/{{ paper.id }}/notes/draft" class="mt-4">
   <button type="submit" class="text-sm rounded border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
-    ✨ Draft notes from chat
+    ✨ {{ tr("Draft notes from chat") }}
   </button>
-  <span class="text-xs text-slate-400 ml-2">Drafts fields from recent chat. You review before saving.</span>
+  <span class="text-xs text-slate-400 ml-2">{{ tr("Drafts fields from recent chat. You review before saving.") }}</span>
 </form>
 {% endblock %}

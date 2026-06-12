@@ -1,45 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Thoughts — {{ name }}{% endblock %}
+{% block title %}{{ tr("Thoughts") }} — {{ name }}{% endblock %}
 {% block content %}
 <a href="/c/{{ slug }}" class="text-sm text-slate-500 hover:text-slate-900">← {{ name }}</a>
-<h1 class="text-xl font-semibold mt-2 mb-4">Thoughts</h1>
+<h1 class="text-xl font-semibold mt-2 mb-4">{{ tr("Thoughts") }}</h1>
 
 <form method="post" action="/c/{{ slug }}/thoughts" class="mb-6">
-  <textarea name="text" rows="3" required placeholder="A new thought…"
+  <textarea name="text" rows="3" required placeholder="{{ tr('A new thought…') }}"
             class="w-full rounded border border-slate-300 px-3 py-2"></textarea>
   <div class="mt-2 flex items-center gap-2">
-    <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">Add thought</button>
-    <select name="synth_kind" title="seed = an attention signal; reasoning = an argument/connection you made"
+    <button type="submit" class="rounded bg-slate-900 px-4 py-2 text-white hover:bg-slate-700">{{ tr("Add thought") }}</button>
+    <select name="synth_kind" title="{{ tr('seed = an attention signal; reasoning = an argument/connection you made') }}"
             class="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-600">
-      <option value="seed" selected>seed</option>
-      <option value="reasoning">reasoning</option>
+      <option value="seed" selected>{{ tr("seed") }}</option>
+      <option value="reasoning">{{ tr("reasoning") }}</option>
     </select>
   </div>
 </form>
 
 {% if consolidation %}
 <div class="mb-6 rounded border border-amber-200 bg-amber-50 p-4">
-  <p class="font-medium text-amber-800">Proposed consolidation (review before accepting)</p>
+  <p class="font-medium text-amber-800">{{ tr("Proposed consolidation (review before accepting)") }}</p>
   {% if consolidation.error %}
   <p class="text-sm text-rose-700 mt-1">{{ consolidation.error }}</p>
   {% else %}
   <form method="post" action="/c/{{ slug }}/thoughts/consolidate/accept" class="mt-2">
     {% for i in consolidation.ids %}<input type="hidden" name="ids" value="{{ i }}">{% endfor %}
     <textarea name="text" rows="8" class="w-full rounded border border-slate-300 px-3 py-2">{{ consolidation.text }}</textarea>
-    <p class="text-xs text-amber-700 mt-1">Accepting archives the {{ consolidation.ids|length }} originals and saves this as a new entry.</p>
-    <button type="submit" class="mt-2 rounded bg-amber-700 px-4 py-2 text-white hover:bg-amber-800">Accept consolidation</button>
+    <p class="text-xs text-amber-700 mt-1">{{ tr("Accepting archives the") }} {{ consolidation.ids|length }} {{ tr("originals and saves this as a new entry.") }}</p>
+    <button type="submit" class="mt-2 rounded bg-amber-700 px-4 py-2 text-white hover:bg-amber-800">{{ tr("Accept consolidation") }}</button>
   </form>
   {% endif %}
 </div>
 {% endif %}
 
 {% if not thoughts %}
-<p class="text-slate-500">No thoughts yet.</p>
+<p class="text-slate-500">{{ tr("No thoughts yet.") }}</p>
 {% else %}
 <form method="post" action="/c/{{ slug }}/thoughts/consolidate">
   <div class="flex items-center justify-between mb-2">
-    <span class="text-sm text-slate-500">Select entries to consolidate</span>
-    <button type="submit" class="text-sm rounded border border-slate-300 px-3 py-1 hover:bg-slate-50">Consolidate selected</button>
+    <span class="text-sm text-slate-500">{{ tr("Select entries to consolidate") }}</span>
+    <button type="submit" class="text-sm rounded border border-slate-300 px-3 py-1 hover:bg-slate-50">{{ tr("Consolidate selected") }}</button>
   </div>
   <ul class="space-y-3">
     {% for t in thoughts %}
@@ -48,8 +48,8 @@
         <input type="checkbox" name="ids" value="{{ t.id }}" class="mt-1">
         <div class="flex-1">
           <div class="text-xs text-slate-400">{{ t.created }}
-            {% if t.synth_kind == "reasoning" %}<span class="ml-1 rounded bg-indigo-100 text-indigo-700 px-1">reasoning</span>{% endif %}
-            {% if t.author_origin == "agent" %}<span class="ml-1 rounded bg-amber-100 text-amber-700 px-1">agent</span>{% endif %}
+            {% if t.synth_kind == "reasoning" %}<span class="ml-1 rounded bg-indigo-100 text-indigo-700 px-1">{{ tr("reasoning") }}</span>{% endif %}
+            {% if t.author_origin == "agent" %}<span class="ml-1 rounded bg-amber-100 text-amber-700 px-1">{{ tr("agent") }}</span>{% endif %}
             {% for tag in t.tags %}<span class="ml-1 rounded bg-slate-100 px-1">{{ tag }}</span>{% endfor %}
           </div>
           <div class="prose prose-sm mt-1" x-show="!edit" style="white-space:pre-wrap">{{ t.body }}</div>
@@ -58,10 +58,10 @@
           </div>
           <div class="mt-2 flex gap-3 text-xs text-slate-500">
             <button type="button" @click="edit=!edit" x-text="edit?'cancel':'edit'"></button>
-            <button form="edit-{{ t.id }}" type="submit" x-show="edit" class="text-slate-700">save</button>
-            <button form="supersede-{{ t.id }}" type="submit" class="hover:text-slate-700">supersede</button>
+            <button form="edit-{{ t.id }}" type="submit" x-show="edit" class="text-slate-700">{{ tr("save") }}</button>
+            <button form="supersede-{{ t.id }}" type="submit" class="hover:text-slate-700">{{ tr("supersede") }}</button>
             <button form="delete-{{ t.id }}" type="submit" class="hover:text-rose-700"
-                    onclick="var f=document.getElementById('delete-{{ t.id }}'); event.preventDefault(); window.paConfirm('Delete this thought permanently?', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">delete</button>
+                    onclick="var f=document.getElementById('delete-{{ t.id }}'); event.preventDefault(); window.paConfirm('{{ tr('Delete this thought permanently?') }}', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">{{ tr("delete") }}</button>
           </div>
         </div>
       </div>

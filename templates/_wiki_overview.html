@@ -51,17 +51,17 @@
   {# Provenance line + Regenerate (also available in the ⋯ header menu). #}
   <div class="flex items-center gap-2 rounded-lg bg-violet-50 border border-violet-100 px-3 py-1.5 text-xs text-violet-700">
     <span>✦</span>
-    <span>AI-drafted Field Model — the orientation layer of your wiki.
+    <span>{{ tr("AI-drafted Field Model — the orientation layer of your wiki.") }}
       {% if overview.meta and overview.meta.pdfs_read is defined and overview.meta.paper_count is defined %}
-      <span class="text-violet-500">(from {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} papers with PDF excerpts.)</span>
+      <span class="text-violet-500">({{ tr("from") }} {{ overview.meta.pdfs_read }}/{{ overview.meta.paper_count }} {{ tr("papers with PDF excerpts.") }})</span>
       {% set _added = (overview.papers|length) - (overview.meta.paper_count|int) %}
-      {% if _added > 0 %}<span class="text-amber-700 font-medium">· {{ _added }} paper{{ 's' if _added != 1 }} added since — Update wiki to fold them in.</span>{% endif %}
+      {% if _added > 0 %}<span class="text-amber-700 font-medium">· {{ _added }} paper{{ 's' if _added != 1 }} {{ tr("added since — Update wiki to fold them in.") }}</span>{% endif %}
       {% endif %}
     </span>
     <div class="ml-auto flex items-center gap-2">
       {% if thesis_undo %}
       <form hx-post="/c/{{ slug }}/wiki/thesis/undo" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="Revert the last agent edit to the thesis">↩ Undo last edit</button>
+        <button class="rounded border border-violet-200 bg-white px-2 py-0.5 hover:bg-violet-100" title="{{ tr('Revert the last agent edit to the thesis') }}">↩ {{ tr("Undo last edit") }}</button>
       </form>
       {% endif %}
     </div>
@@ -76,12 +76,12 @@
          @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-center gap-2 mb-3">
         {{ section_badge(1) }}
-        <h2 class="text-lg font-semibold text-slate-900">Collection Thesis</h2>
-        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
-                class="ml-auto opacity-0 group-hover:opacity-100 transition text-xs text-slate-400 hover:text-violet-600">💬 ask</button>
-        <button type="button" title="Edit with agent"
+        <h2 class="text-lg font-semibold text-slate-900">{{ tr("Collection Thesis") }}</h2>
+        <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat (or right-click the card)') }}"
+                class="ml-auto opacity-0 group-hover:opacity-100 transition text-xs text-slate-400 hover:text-violet-600">💬 {{ tr("ask") }}</button>
+        <button type="button" title="{{ tr('Edit with agent') }}"
                 @click="aeditOpen = true; $nextTick(() => { var i = document.getElementById('aedit-instr'); if (i) i.value = ''; var d = document.getElementById('aedit-diff'); if (d) d.innerHTML = ''; })"
-                class="text-xs text-slate-400 hover:text-violet-600">✎ Edit with agent</button>
+                class="text-xs text-slate-400 hover:text-violet-600">✎ {{ tr("Edit with agent") }}</button>
       </div>
       {% if overview.thesis.one_paragraph %}
       <p class="text-sm text-slate-700 leading-relaxed mb-3">{{ overview.thesis.one_paragraph }}</p>
@@ -90,19 +90,19 @@
       <div class="flex flex-wrap gap-2">
         {% if overview.thesis.core_tension %}
         <div class="flex-1 min-w-[200px] rounded-lg border border-sky-100 bg-sky-50 px-3 py-2.5">
-          <div class="flex items-center gap-1.5 text-xs font-medium text-sky-800 mb-1"><span>📦</span><span>Core tension</span></div>
+          <div class="flex items-center gap-1.5 text-xs font-medium text-sky-800 mb-1"><span>📦</span><span>{{ tr("Core tension") }}</span></div>
           <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.core_tension }}</p>
         </div>
         {% endif %}
         {% if overview.thesis.key_intuition %}
         <div class="flex-1 min-w-[200px] rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
-          <div class="flex items-center gap-1.5 text-xs font-medium text-amber-800 mb-1"><span>💡</span><span>Key intuition</span></div>
+          <div class="flex items-center gap-1.5 text-xs font-medium text-amber-800 mb-1"><span>💡</span><span>{{ tr("Key intuition") }}</span></div>
           <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.key_intuition }}</p>
         </div>
         {% endif %}
         {% if overview.thesis.central_question %}
         <div class="flex-1 min-w-[200px] rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5">
-          <div class="flex items-center gap-1.5 text-xs font-medium text-emerald-800 mb-1"><span>🎯</span><span>Central question</span></div>
+          <div class="flex items-center gap-1.5 text-xs font-medium text-emerald-800 mb-1"><span>🎯</span><span>{{ tr("Central question") }}</span></div>
           <p class="text-xs text-slate-700 leading-snug">{{ overview.thesis.central_question }}</p>
         </div>
         {% endif %}
@@ -113,10 +113,10 @@
     {% if overview.focus %}
     <aside class="rounded-xl border border-slate-200 bg-white p-5">
       <div class="flex items-start gap-1.5 mb-1">
-        <h3 class="text-sm font-semibold text-slate-700">Your Current Focus</h3>
-        <span class="text-slate-400 text-xs cursor-help mt-0.5" title="Top concepts ranked by your highlights and notes. Deterministic count over concept synonyms — no LLM.">ⓘ</span>
+        <h3 class="text-sm font-semibold text-slate-700">{{ tr("Your Current Focus") }}</h3>
+        <span class="text-slate-400 text-xs cursor-help mt-0.5" title="{{ tr('Top concepts ranked by your highlights and notes. Deterministic count over concept synonyms — no LLM.') }}">ⓘ</span>
       </div>
-      <p class="text-xs text-slate-500 mb-3">Based on your attention in this collection</p>
+      <p class="text-xs text-slate-500 mb-3">{{ tr("Based on your attention in this collection") }}</p>
       <div class="flex flex-wrap gap-1.5">
         {% for c in overview.focus.concepts %}
           {% set i = loop.index0 % 3 %}
@@ -129,7 +129,7 @@
           {% endif %}
         {% endfor %}
       </div>
-      <button type="button" @click="go('connections')" class="mt-3 text-[11px] text-violet-600 hover:underline">Open the Map →</button>
+      <button type="button" @click="go('connections')" class="mt-3 text-[11px] text-violet-600 hover:underline">{{ tr("Open the Map") }} →</button>
     </aside>
     {% endif %}
   </section>
@@ -141,9 +141,9 @@
   <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
     <div class="flex items-center gap-2 mb-2">
       <span class="text-violet-500">◆</span>
-      <h2 class="text-sm font-semibold text-slate-900">Your Current Understanding</h2>
-      <span class="hidden sm:inline text-xs text-slate-400">— beliefs you've accepted; these orient the wiki</span>
-      <button type="button" @click="go('understanding')" class="ml-auto text-[11px] text-violet-600 hover:underline">Manage →</button>
+      <h2 class="text-sm font-semibold text-slate-900">{{ tr("Your Current Understanding") }}</h2>
+      <span class="hidden sm:inline text-xs text-slate-400">— {{ tr("beliefs you've accepted; these orient the wiki") }}</span>
+      <button type="button" @click="go('understanding')" class="ml-auto text-[11px] text-violet-600 hover:underline">{{ tr("Manage") }} →</button>
     </div>
     <ul class="space-y-1.5">
       {% for b in overview.beliefs %}
@@ -156,8 +156,8 @@
     </ul>
     {# discoverable Regenerate that folds these beliefs into the thesis/landscape (via the gate) #}
     <button type="button" class="mt-2.5 text-[11px] text-violet-700 hover:underline"
-            title="Review beliefs, then re-draft the Field Model so the Thesis & Landscape foreground them"
-            @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ Regenerate to fold these into the thesis</button>
+            title="{{ tr('Review beliefs, then re-draft the Field Model so the Thesis & Landscape foreground them') }}"
+            @click="regenOpen = true; htmx.ajax('POST', '/c/{{ slug }}/wiki/regen/prepare', { target: '#regen-gate-body', swap: 'innerHTML' })">↻ {{ tr("Regenerate to fold these into the thesis") }}</button>
   </section>
   {% endif %}
 
@@ -167,40 +167,40 @@
   <section class="rounded-xl border border-slate-200 bg-white p-5">
     <div class="flex items-center gap-2 mb-3">
       {{ section_badge(2) }}
-      <h2 class="text-lg font-semibold text-slate-900">Research Landscape</h2>
+      <h2 class="text-lg font-semibold text-slate-900">{{ tr("Research Landscape") }}</h2>
     </div>
     <div class="flex flex-wrap gap-3">
       {% if overview.landscape.problems %}
       <div class="group flex-1 min-w-[220px] rounded-lg border border-rose-100 bg-rose-50/40 p-3"
            data-ask-kind="landscape" data-ask-label="Problems" data-ask-icon="🚩" @contextmenu.prevent="window.paAskEl($el)">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-rose-100"><span>🚩</span><h3 class="text-sm font-semibold text-rose-900">Problems</h3>
-          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-rose-100"><span>🚩</span><h3 class="text-sm font-semibold text-rose-900">{{ tr("Problems") }}</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat') }}" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.problems[:3] %}
           <li class="flex items-start gap-1.5"><span class="text-rose-400 mt-1">•</span><span class="flex-1 min-w-0">{{ item.text }}</span></li>
           {% endfor %}
         </ul>
-        <button type="button" @click="lsModal = 'problems'" class="mt-2 pt-1.5 border-t border-rose-100 w-full text-left text-[11px] text-rose-700 hover:underline">View all problems ({{ overview.landscape.problems|length }}) →</button>
+        <button type="button" @click="lsModal = 'problems'" class="mt-2 pt-1.5 border-t border-rose-100 w-full text-left text-[11px] text-rose-700 hover:underline">{{ tr("View all problems") }} ({{ overview.landscape.problems|length }}) →</button>
       </div>
       {% endif %}
       {% if overview.landscape.methods %}
       <div class="group flex-1 min-w-[220px] rounded-lg border border-sky-100 bg-sky-50/40 p-3"
            data-ask-kind="landscape" data-ask-label="Methods" data-ask-icon="🔧" @contextmenu.prevent="window.paAskEl($el)">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-sky-100"><span>🔧</span><h3 class="text-sm font-semibold text-sky-900">Methods</h3>
-          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-sky-100"><span>🔧</span><h3 class="text-sm font-semibold text-sky-900">{{ tr("Methods") }}</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat') }}" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.methods[:3] %}
           <li class="flex items-start gap-1.5"><span class="text-sky-400 mt-1">•</span><span class="flex-1 min-w-0">{{ item.text }}</span></li>
           {% endfor %}
         </ul>
-        <button type="button" @click="lsModal = 'methods'" class="mt-2 pt-1.5 border-t border-sky-100 w-full text-left text-[11px] text-sky-700 hover:underline">View all methods ({{ overview.landscape.methods|length }}) →</button>
+        <button type="button" @click="lsModal = 'methods'" class="mt-2 pt-1.5 border-t border-sky-100 w-full text-left text-[11px] text-sky-700 hover:underline">{{ tr("View all methods") }} ({{ overview.landscape.methods|length }}) →</button>
       </div>
       {% endif %}
       {% if overview.landscape.debates %}
       <div class="group flex-1 min-w-[220px] rounded-lg border border-amber-100 bg-amber-50/40 p-3"
            data-ask-kind="landscape" data-ask-label="Debates" data-ask-icon="💬" @contextmenu.prevent="window.paAskEl($el)">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-amber-100"><span>💬</span><h3 class="text-sm font-semibold text-amber-900">Debates</h3>
-          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-amber-100"><span>💬</span><h3 class="text-sm font-semibold text-amber-900">{{ tr("Debates") }}</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat') }}" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.debates %}
           <li class="flex items-start gap-1.5"><span class="text-amber-400 mt-1">•</span><span>{{ item }}</span></li>
@@ -211,8 +211,8 @@
       {% if overview.landscape.open_questions %}
       <div class="group flex-1 min-w-[220px] rounded-lg border border-violet-100 bg-violet-50/40 p-3"
            data-ask-kind="landscape" data-ask-label="Open questions" data-ask-icon="❓" @contextmenu.prevent="window.paAskEl($el)">
-        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-violet-100"><span>❓</span><h3 class="text-sm font-semibold text-violet-900">Open questions</h3>
-          <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
+        <div class="flex items-center gap-1.5 mb-2 pb-1.5 border-b border-violet-100"><span>❓</span><h3 class="text-sm font-semibold text-violet-900">{{ tr("Open questions") }}</h3>
+          <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat') }}" class="ml-auto opacity-0 group-hover:opacity-100 transition text-[11px] text-slate-400 hover:text-violet-600">💬</button></div>
         <ul class="space-y-1 text-sm text-slate-700">
           {% for item in overview.landscape.open_questions %}
           <li class="flex items-start gap-1.5"><span class="text-violet-400 mt-1">•</span><span>{{ item }}</span></li>
@@ -233,28 +233,28 @@
   {% if reading_running %}
   <div class="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
     <span class="inline-block animate-spin">⟳</span>
-    <span>Searching arXiv &amp; validating… <b>you can keep using other tabs</b> — results will appear here when it's done.</span>
+    <span>{{ tr("Searching arXiv & validating…") }} <b>{{ tr("you can keep using other tabs") }}</b> — {{ tr("results will appear here when it's done.") }}</span>
   </div>
   {% endif %}
   {% set suggest_action = "/c/" ~ slug ~ "/wiki/recommend-add" %}
   {% set launcher_hx = True %}
-  {% set launcher_subject = "this collection" %}
-  {% set launcher_placeholder = "Find recent surveys on streaming-video memory" %}
+  {% set launcher_subject = tr("this collection") %}
+  {% set launcher_placeholder = tr("Find recent surveys on streaming-video memory") %}
   {% set launcher_approach = True %}
-  {% set examples = ["Recent SOTA on the collection's thesis", "Papers addressing an open question in this field", "Methods adjacent to this collection's approach"] %}
+  {% set examples = [tr("Recent SOTA on the collection's thesis"), tr("Papers addressing an open question in this field"), tr("Methods adjacent to this collection's approach")] %}
   {% include "_reading_launcher.html" %}
 
-  <p class="text-xs text-slate-500">Tip: for a specific concept, use 🔎 on a concept in the <b>Concepts</b> tab.</p>
+  <p class="text-xs text-slate-500">{{ tr("Tip: for a specific concept, use 🔎 on a concept in the") }} <b>{{ tr("Concepts") }}</b> {{ tr("tab.") }}</p>
 
   {% if not overview.add_candidates %}
-  <p class="text-sm text-slate-400">No pending suggestions yet. Use the search above.</p>
+  <p class="text-sm text-slate-400">{{ tr("No pending suggestions yet. Use the search above.") }}</p>
   {% else %}
   <div class="flex items-center justify-between">
-    <span class="text-xs text-slate-500">{{ overview.add_candidates|length }} pending</span>
+    <span class="text-xs text-slate-500">{{ overview.add_candidates|length }} {{ tr("pending") }}</span>
     {# Clear all: empties the list WITHOUT judging (not added, not rejected; may resurface) #}
     <form hx-post="/c/{{ slug }}/wiki/reading/clear" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
-          hx-confirm="Clear all {{ overview.add_candidates|length }} suggestions? They're removed from this list — NOT added to the collection and NOT rejected, so a later search may surface them again.">
-      <button class="text-xs text-slate-500 hover:text-rose-600">Clear all</button>
+          hx-confirm="{{ tr('Clear all') }} {{ overview.add_candidates|length }} {{ tr('suggestions? They are removed from this list — NOT added to the collection and NOT rejected, so a later search may surface them again.') }}">
+      <button class="text-xs text-slate-500 hover:text-rose-600">{{ tr("Clear all") }}</button>
     </form>
   </div>
   {# One CARD per source (how the batch was found); its papers live inside. Clear a whole
@@ -269,10 +269,10 @@
       <span class="shrink-0 text-xs text-slate-400">({{ g.cands|length }})</span>
       {% if g.source %}
       <form hx-post="/c/{{ slug }}/wiki/reading/clear-source" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto shrink-0"
-            hx-confirm="Clear these {{ g.cands|length }} suggestions from “{{ g.label }}”? Removed without rejecting (may resurface later).">
+            hx-confirm="{{ tr('Clear these') }} {{ g.cands|length }} {{ tr('suggestions from') }} “{{ g.label }}”? {{ tr('Removed without rejecting (may resurface later).') }}">
         <input type="hidden" name="source" value="{{ g.source }}">
         <input type="hidden" name="source_detail" value="{{ g.detail|default('') }}">
-        <button class="text-xs text-slate-400 hover:text-rose-600">Clear</button>
+        <button class="text-xs text-slate-400 hover:text-rose-600">{{ tr("Clear") }}</button>
       </form>
       {% endif %}
     </div>
@@ -282,16 +282,16 @@
       <li class="rounded-lg border border-slate-200 bg-slate-50/40 p-3">
         <div class="flex items-baseline gap-2 flex-wrap">
           <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title|default('(untitled)') }}</p>
-          {% if c.venue %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700" title="Peer-reviewed venue">{{ c.venue }}</span>{% endif %}
-          {% if c.citation_count and c.citation_count > 0 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500" title="Citations (Semantic Scholar)">{{ c.citation_count }} cites</span>{% endif %}
+          {% if c.venue %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700" title="{{ tr('Peer-reviewed venue') }}">{{ c.venue }}</span>{% endif %}
+          {% if c.citation_count and c.citation_count > 0 %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500" title="{{ tr('Citations (Semantic Scholar)') }}">{{ c.citation_count }} {{ tr("cites") }}</span>{% endif %}
           {% if c.arxiv_id %}<a href="https://arxiv.org/abs/{{ c.arxiv_id }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">arXiv:{{ c.arxiv_id }} ↗</a>{% elif c.doi %}<a href="https://doi.org/{{ c.doi }}" target="_blank" rel="noopener" class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100">DOI ↗</a>{% endif %}
         </div>
         {% if c.llm_relevance_note %}
-        <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">Why this fits:</span> {{ c.llm_relevance_note }}</p>
+        <p class="mt-1.5 text-xs text-slate-600 leading-snug"><span class="font-medium text-violet-700">{{ tr("Why this fits:") }}</span> {{ c.llm_relevance_note }}</p>
         {% endif %}
         <div class="mt-2">
           <form hx-post="/c/{{ slug }}/wiki/add/{{ c.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-            <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">Add to collection</button>
+            <button class="rounded bg-emerald-600 text-white px-2.5 py-0.5 text-xs hover:bg-emerald-700">{{ tr("Add to collection") }}</button>
           </form>
         </div>
       </li>
@@ -313,10 +313,10 @@
      class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
   <div class="bg-white rounded-xl shadow-xl w-[min(680px,95vw)] max-h-[85vh] overflow-auto p-5">
     <div class="flex items-center justify-between mb-1">
-      <h2 class="font-semibold text-slate-900 flex items-center gap-2"><span>🚩</span> Problems</h2>
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2"><span>🚩</span> {{ tr("Problems") }}</h2>
       <button type="button" @click="lsModal = ''" class="text-slate-400 hover:text-slate-700">✕</button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">Research problems this collection works on — clustered, not enumerated (the agent caps the list to force real grouping).</p>
+    <p class="text-xs text-slate-500 mb-3">{{ tr("Research problems this collection works on — clustered, not enumerated (the agent caps the list to force real grouping).") }}</p>
     <div class="space-y-2.5">
       {% for item in overview.landscape.problems %}
       <div class="rounded-lg border border-rose-100 bg-rose-50/30 p-3">
@@ -325,7 +325,7 @@
           <div class="flex-1 min-w-0">
             <p class="text-sm text-slate-800 leading-snug">{{ item.text }}</p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              {% if item.theme %}<button type="button" onclick="window.wikiJump && window.wikiJump('{{ item.node_key }}')" class="text-[10px] rounded px-1.5 py-0.5 {{ theme_color(item.theme.index)|trim }} hover:opacity-80" title="Show in the collection map">◆ {{ item.theme.name|truncate(22) }}</button>{% endif %}
+              {% if item.theme %}<button type="button" onclick="window.wikiJump && window.wikiJump('{{ item.node_key }}')" class="text-[10px] rounded px-1.5 py-0.5 {{ theme_color(item.theme.index)|trim }} hover:opacity-80" title="{{ tr('Show in the collection map') }}">◆ {{ item.theme.name|truncate(22) }}</button>{% endif %}
               {% for p in item.papers_full %}
               <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-rose-200 text-slate-600 hover:bg-rose-100">{{ p.title|truncate(40) }}</a>
               {% endfor %}
@@ -342,10 +342,10 @@
      class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16 overflow-auto">
   <div class="bg-white rounded-xl shadow-xl w-[min(680px,95vw)] max-h-[85vh] overflow-auto p-5">
     <div class="flex items-center justify-between mb-1">
-      <h2 class="font-semibold text-slate-900 flex items-center gap-2"><span>🔧</span> Methods</h2>
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2"><span>🔧</span> {{ tr("Methods") }}</h2>
       <button type="button" @click="lsModal = ''" class="text-slate-400 hover:text-slate-700">✕</button>
     </div>
-    <p class="text-xs text-slate-500 mb-3">Method families the collection draws on — grouped at a consistent level of abstraction.</p>
+    <p class="text-xs text-slate-500 mb-3">{{ tr("Method families the collection draws on — grouped at a consistent level of abstraction.") }}</p>
     <div class="space-y-2.5">
       {% for item in overview.landscape.methods %}
       <div class="rounded-lg border border-sky-100 bg-sky-50/30 p-3">
@@ -354,7 +354,7 @@
           <div class="flex-1 min-w-0">
             <p class="text-sm text-slate-800 leading-snug">{{ item.text }}</p>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
-              {% if item.theme %}<button type="button" onclick="window.wikiJump && window.wikiJump('{{ item.node_key }}')" class="text-[10px] rounded px-1.5 py-0.5 {{ theme_color(item.theme.index)|trim }} hover:opacity-80" title="Show in the collection map">◆ {{ item.theme.name|truncate(22) }}</button>{% endif %}
+              {% if item.theme %}<button type="button" onclick="window.wikiJump && window.wikiJump('{{ item.node_key }}')" class="text-[10px] rounded px-1.5 py-0.5 {{ theme_color(item.theme.index)|trim }} hover:opacity-80" title="{{ tr('Show in the collection map') }}">◆ {{ item.theme.name|truncate(22) }}</button>{% endif %}
               {% for p in item.papers_full %}
               <a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-sky-200 text-slate-600 hover:bg-sky-100">{{ p.title|truncate(40) }}</a>
               {% endfor %}
@@ -372,42 +372,42 @@
    =================================================================== #}
 <div x-show="tab==='benchmarks'" x-cloak class="relative space-y-3" x-data="{ showAll: false }">
   {% if benchmark_error %}
-  <div class="rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800"><b>Extraction failed.</b> {{ benchmark_error }}</div>
+  <div class="rounded border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-800"><b>{{ tr("Extraction failed.") }}</b> {{ benchmark_error }}</div>
   {% endif %}
   <div class="flex items-center gap-2">
-    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▦</span> Benchmarks</h2>
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▦</span> {{ tr("Benchmarks") }}</h2>
     <form hx-post="/c/{{ slug }}/wiki/benchmarks/extract" hx-target="#left-panel" hx-swap="innerHTML"
           hx-disabled-elt="find button" class="ml-auto">
       <button {% if benchmark_running %}disabled{% endif %}
               class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              title="Reads each paper's PDF with an agent (paging to its results tables) and pulls out reported numbers — only numbers stated in the papers, never invented. Takes a while.">
-        {% if benchmark_running %}⟳ Extracting…{% elif benchmarks and benchmarks.n_results %}↻ Re-extract{% else %}✦ Extract benchmarks{% endif %}
+              title="{{ tr('Reads each paper PDF with an agent (paging to its results tables) and pulls out reported numbers — only numbers stated in the papers, never invented. Takes a while.') }}">
+        {% if benchmark_running %}⟳ {{ tr("Extracting…") }}{% elif benchmarks and benchmarks.n_results %}↻ {{ tr("Re-extract") }}{% else %}✦ {{ tr("Extract benchmarks") }}{% endif %}
       </button>
     </form>
   </div>
-  <p class="text-xs text-slate-500">Reported performance per method × benchmark — each number cites the paper that reported it (hover a cell). Best in each column is highlighted. Numbers are extracted from the papers, never estimated.</p>
+  <p class="text-xs text-slate-500">{{ tr("Reported performance per method × benchmark — each number cites the paper that reported it (hover a cell). Best in each column is highlighted. Numbers are extracted from the papers, never estimated.") }}</p>
   {% if benchmarks and benchmarks.n_results %}
   <div class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
     <span class="shrink-0">⚠</span>
-    <span><b>Agent-extracted — double-check before trusting.</b> An agent reads each PDF to pull these numbers and can make mistakes — misreading a table, mixing up methods or benchmarks, or misattributing a paper. Verify against the source (click a value to open its paper) before relying on them.</span>
+    <span><b>{{ tr("Agent-extracted — double-check before trusting.") }}</b> {{ tr("An agent reads each PDF to pull these numbers and can make mistakes — misreading a table, mixing up methods or benchmarks, or misattributing a paper. Verify against the source (click a value to open its paper) before relying on them.") }}</span>
   </div>
   {% endif %}
 
   {% if not benchmarks or not benchmarks.n_results %}
   <div class="rounded-xl border border-slate-200 bg-white p-5 text-center">
-    <p class="text-sm text-slate-600">No benchmark table yet.</p>
-    <p class="text-xs text-slate-400 mt-1">Click <b>✦ Extract benchmarks</b> above — the agent reads your papers and builds a method × benchmark table from the numbers they report.</p>
+    <p class="text-sm text-slate-600">{{ tr("No benchmark table yet.") }}</p>
+    <p class="text-xs text-slate-400 mt-1">{{ tr("Click") }} <b>✦ {{ tr("Extract benchmarks") }}</b> {{ tr("above — the agent reads your papers and builds a method × benchmark table from the numbers they report.") }}</p>
   </div>
   {% else %}
   <div class="rounded-xl border border-slate-200 bg-white overflow-x-auto">
     <table class="w-full text-sm border-collapse">
       <thead>
         <tr class="border-b border-slate-200 bg-slate-50/60">
-          <th class="text-left font-semibold text-slate-600 px-3 py-2 sticky left-0 z-20 bg-slate-100">Method</th>
+          <th class="text-left font-semibold text-slate-600 px-3 py-2 sticky left-0 z-20 bg-slate-100">{{ tr("Method") }}</th>
           {% for b in benchmarks.benchmarks %}
           <th class="text-center font-medium text-slate-600 px-3 py-2 whitespace-nowrap">
             <a href="https://arxiv.org/search/?searchtype=all&query={{ b|urlencode }}" target="_blank" rel="noopener"
-               class="hover:text-violet-700 hover:underline" title="Find the “{{ b }}” benchmark paper on arXiv">{{ b }} <span class="text-slate-300">↗</span></a>
+               class="hover:text-violet-700 hover:underline" title="{{ tr('Find the') }} “{{ b }}” {{ tr('benchmark paper on arXiv') }}">{{ b }} <span class="text-slate-300">↗</span></a>
           </th>
           {% endfor %}
         </tr>
@@ -438,7 +438,7 @@
   <button type="button" @click="showAll = !showAll" class="text-xs text-violet-600 hover:underline"
           x-text="showAll ? 'Show top 5 methods' : 'Show all {{ benchmarks.methods|length }} methods'"></button>
   {% endif %}
-  <p class="text-[10px] text-slate-400">{{ benchmarks.n_results }} result{{ 's' if benchmarks.n_results != 1 }} across {{ benchmarks.benchmarks|length }} benchmark{{ 's' if benchmarks.benchmarks|length != 1 }}. Best per column = leading value for that metric's direction.</p>
+  <p class="text-[10px] text-slate-400">{{ benchmarks.n_results }} result{{ 's' if benchmarks.n_results != 1 }} {{ tr("across") }} {{ benchmarks.benchmarks|length }} benchmark{{ 's' if benchmarks.benchmarks|length != 1 }}. {{ tr("Best per column = leading value for that metric's direction.") }}</p>
   {% endif %}
 
   {# ===== extracting overlay (animated; per-paper agent runs in the background;
@@ -451,9 +451,9 @@
         <circle cx="25" cy="25" r="20" fill="none" stroke="#ede9fe" stroke-width="5"></circle>
         <circle cx="25" cy="25" r="20" fill="none" stroke="#7c3aed" stroke-width="5" stroke-linecap="round" stroke-dasharray="31 126"></circle>
       </svg>
-      <div style="margin-top:.9rem;font-size:.95rem;font-weight:600;color:#0f172a;">Reading papers for benchmark numbers…</div>
-      <div id="wiki-bench-prog" style="margin-top:.35rem;font-size:.8rem;color:#64748b;">starting…</div>
-      <div style="margin-top:.6rem;font-size:.7rem;color:#94a3b8;">An agent reads each PDF's results tables. You can use other tabs.</div>
+      <div style="margin-top:.9rem;font-size:.95rem;font-weight:600;color:#0f172a;">{{ tr("Reading papers for benchmark numbers…") }}</div>
+      <div id="wiki-bench-prog" style="margin-top:.35rem;font-size:.8rem;color:#64748b;">{{ tr("starting…") }}</div>
+      <div style="margin-top:.6rem;font-size:.7rem;color:#94a3b8;">{{ tr("An agent reads each PDF's results tables. You can use other tabs.") }}</div>
     </div>
   </div>
   <style>@keyframes wiki-bench-rot { to { transform: rotate(360deg); } }</style>
@@ -494,23 +494,23 @@
   <div x-show="drafting" x-cloak class="absolute inset-0 z-30 grid place-items-center rounded bg-white/80 backdrop-blur-[1px]" style="min-height:200px">
     <div class="flex flex-col items-center gap-2 text-slate-600">
       <svg class="w-7 h-7 animate-spin text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path></svg>
-      <div class="text-sm font-medium">Drafting beliefs…</div>
-      <div class="text-[11px] text-slate-400">reading your highlights &amp; notes — a minute or so</div>
+      <div class="text-sm font-medium">{{ tr("Drafting beliefs…") }}</div>
+      <div class="text-[11px] text-slate-400">{{ tr("reading your highlights & notes — a minute or so") }}</div>
     </div>
   </div>
   <div class="flex items-baseline gap-2">
-    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◆</span> Your Current Understanding</h2>
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>◆</span> {{ tr("Your Current Understanding") }}</h2>
     {% if overview.can_suggest_beliefs %}
     <form hx-post="/c/{{ slug }}/wiki/beliefs/suggest" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
       <button @click="drafting = true"
               class="rounded border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 px-2 py-0.5 text-xs"
-              title="One LLM call: drafts 1-5 candidate beliefs from your reading. Each lands in the tray below for you to accept or dismiss.">
-        ✦ Suggest beliefs <span class="htmx-indicator text-violet-400">…</span>
+              title="{{ tr('One LLM call: drafts 1-5 candidate beliefs from your reading. Each lands in the tray below for you to accept or dismiss.') }}">
+        ✦ {{ tr("Suggest beliefs") }} <span class="htmx-indicator text-violet-400">…</span>
       </button>
     </form>
     {% endif %}
   </div>
-  <p class="text-xs text-slate-500">Single-sentence claims you hold about this collection. The agent drafts candidates; <b>you</b> accept the ones that match your thinking.</p>
+  <p class="text-xs text-slate-500">{{ tr("Single-sentence claims you hold about this collection. The agent drafts candidates;") }} <b>{{ tr("you") }}</b> {{ tr("accept the ones that match your thinking.") }}</p>
 
   {% if overview.beliefs %}
   <ul class="space-y-3 {% if overview.belief_candidates %}mb-4{% endif %}">
@@ -520,17 +520,17 @@
         @contextmenu.prevent="window.paAskEl($el)">
       <div class="flex items-baseline gap-2 flex-wrap">
         <p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ b.title }}</p>
-        <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)"
-                class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">💬 ask</button>
-        {% if b.confidence == 'medium' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">medium</span>
-        {% elif b.confidence == 'uncertain' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">uncertain</span>
-        {% else %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">emerging</span>{% endif %}
+        <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat (or right-click the card)') }}"
+                class="opacity-0 group-hover:opacity-100 transition text-[10px] rounded px-1.5 py-0.5 bg-white text-slate-600 border border-slate-200 hover:bg-slate-100">💬 {{ tr("ask") }}</button>
+        {% if b.confidence == 'medium' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">{{ tr("medium") }}</span>
+        {% elif b.confidence == 'uncertain' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">{{ tr("uncertain") }}</span>
+        {% else %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">{{ tr("emerging") }}</span>{% endif %}
       </div>
       {% if b.papers or b.related %}
       <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-        {% if b.papers %}<span class="text-slate-400">supported by</span>
+        {% if b.papers %}<span class="text-slate-400">{{ tr("supported by") }}</span>
         {% for p in b.papers %}<a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(38) }}</a>{% endfor %}{% endif %}
-        {% if b.related %}<span class="text-slate-300">·</span><span class="text-slate-400">tags</span>
+        {% if b.related %}<span class="text-slate-300">·</span><span class="text-slate-400">{{ tr("tags") }}</span>
         {% for r in b.related %}<span class="text-slate-500" title="{{ r.blurb }}">#{{ r.name }}</span>{% endfor %}{% endif %}
       </div>
       {% endif %}
@@ -541,19 +541,19 @@
 
   {% if overview.belief_candidates %}
   <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-    <div class="text-xs font-medium text-amber-900 mb-2">✦ {{ overview.belief_candidates|length }} proposed belief{{ 's' if overview.belief_candidates|length != 1 }} — review and accept the ones that match your thinking</div>
+    <div class="text-xs font-medium text-amber-900 mb-2">✦ {{ overview.belief_candidates|length }} proposed belief{{ 's' if overview.belief_candidates|length != 1 }} — {{ tr("review and accept the ones that match your thinking") }}</div>
     <ul class="space-y-3">
       {% for b in overview.belief_candidates %}
       <li class="rounded border border-slate-200 bg-white p-3">
         <div class="flex items-baseline gap-2 flex-wrap mb-2">
           <p class="text-sm text-slate-800 leading-snug flex-1 min-w-0">{{ b.title }}</p>
-          {% if b.confidence == 'medium' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">medium</span>
-          {% elif b.confidence == 'uncertain' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">uncertain</span>
-          {% else %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">emerging</span>{% endif %}
+          {% if b.confidence == 'medium' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">{{ tr("medium") }}</span>
+          {% elif b.confidence == 'uncertain' %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">{{ tr("uncertain") }}</span>
+          {% else %}<span class="text-[10px] rounded px-1.5 py-0.5 bg-violet-100 text-violet-700">{{ tr("emerging") }}</span>{% endif %}
         </div>
         {% if b.papers or b.related %}
         <div class="flex flex-wrap items-center gap-1.5 text-[11px] mb-2">
-          {% if b.papers %}<span class="text-slate-400">supported by</span>
+          {% if b.papers %}<span class="text-slate-400">{{ tr("supported by") }}</span>
           {% for p in b.papers %}<a href="/c/{{ slug }}/p/{{ p.id }}" class="rounded bg-slate-50 border border-slate-200 px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">{{ p.title|truncate(38) }}</a>{% endfor %}{% endif %}
           {% if b.related %}<span class="text-slate-300">·</span>
           {% for r in b.related %}<span class="text-slate-500" title="{{ r.blurb }}">#{{ r.name }}</span>{% endfor %}{% endif %}
@@ -561,10 +561,10 @@
         {% endif %}
         <div class="flex items-center gap-1.5">
           <form hx-post="/c/{{ slug }}/wiki/beliefs/{{ b.id }}/accept" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-            <button class="rounded bg-violet-600 text-white px-2.5 py-0.5 text-xs hover:bg-violet-700">Accept</button>
+            <button class="rounded bg-violet-600 text-white px-2.5 py-0.5 text-xs hover:bg-violet-700">{{ tr("Accept") }}</button>
           </form>
           <form hx-post="/c/{{ slug }}/wiki/beliefs/{{ b.id }}/dismiss" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button">
-            <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">Dismiss</button>
+            <button class="rounded border border-slate-300 text-slate-600 hover:bg-slate-100 px-2.5 py-0.5 text-xs">{{ tr("Dismiss") }}</button>
           </form>
         </div>
       </li>
@@ -576,9 +576,9 @@
   {% if not overview.beliefs and not overview.belief_candidates %}
   <div class="rounded-xl border border-slate-200 bg-white p-5">
     {% if overview.can_suggest_beliefs %}
-    <p class="text-sm text-slate-500">No beliefs yet. Click <b>✦ Suggest beliefs</b> above and the agent will draft a few candidates from your highlights and notes — you decide which to keep.</p>
+    <p class="text-sm text-slate-500">{{ tr("No beliefs yet. Click") }} <b>✦ {{ tr("Suggest beliefs") }}</b> {{ tr("above and the agent will draft a few candidates from your highlights and notes — you decide which to keep.") }}</p>
     {% else %}
-    <p class="text-sm text-slate-500">No beliefs yet. Highlight passages and write notes as you read — once there's enough signal, a <b>✦ Suggest beliefs</b> button appears here so the agent can draft candidate claims for you to accept.</p>
+    <p class="text-sm text-slate-500">{{ tr("No beliefs yet. Highlight passages and write notes as you read — once there's enough signal, a") }} <b>✦ {{ tr("Suggest beliefs") }}</b> {{ tr("button appears here so the agent can draft candidate claims for you to accept.") }}</p>
     {% endif %}
   </div>
   {% endif %}
@@ -592,14 +592,14 @@
   {% set cx = overview.connections %}
   {% set ov = cx.overview %}
   {% set STRENGTH = {
-    'strong':   {'cls': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'icon': '↗', 'label': 'Strong'},
-    'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': 'Medium'},
-    'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': 'Emerging'}
+    'strong':   {'cls': 'bg-emerald-50 text-emerald-700 border-emerald-200', 'icon': '↗', 'label': tr('Strong')},
+    'medium':   {'cls': 'bg-amber-50 text-amber-700 border-amber-200', 'icon': '↗', 'label': tr('Medium')},
+    'emerging': {'cls': 'bg-slate-100 text-slate-600 border-slate-200', 'icon': '✦', 'label': tr('Emerging')}
   } %}
   <section class="rounded-xl border border-slate-200 bg-white p-5" x-data="{ insight: null, mapView: 'theme' }"
            @wiki-jump.window="mapView = 'graph'; $nextTick(() => window.kgRender && window.kgRender())">
     <div class="flex items-baseline gap-2 mb-1">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⊞</span> Map</h2>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⊞</span> {{ tr("Map") }}</h2>
     </div>
     <style>
       .kg-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .5rem; }
@@ -613,13 +613,13 @@
     {# View switcher — pick what the card area shows: Theme clusters, the three entity
        types, or the Graph. (Replaces the old Card/Graph toggle + Papers/Connections stats.) #}
     <div class="kg-stats mb-4">
-      {% for v in [('theme','Theme', ov.themes, 'text-violet-700', 'ring-violet-400'),
-                   ('concept','Concept', ov.concepts, 'text-slate-600', 'ring-slate-400'),
-                   ('method','Method', ov.methods, 'text-sky-700', 'ring-sky-400'),
-                   ('problem','Problem', ov.problems, 'text-rose-700', 'ring-rose-400')] %}
+      {% for v in [('theme', tr('Theme'), ov.themes, 'text-violet-700', 'ring-violet-400'),
+                   ('concept', tr('Concept'), ov.concepts, 'text-slate-600', 'ring-slate-400'),
+                   ('method', tr('Method'), ov.methods, 'text-sky-700', 'ring-sky-400'),
+                   ('problem', tr('Problem'), ov.problems, 'text-rose-700', 'ring-rose-400')] %}
       <button type="button" @click="mapView = '{{ v[0] }}'"
               :class="mapView === '{{ v[0] }}' ? 'ring-2 {{ v[4] }} bg-white' : 'bg-slate-50/50 hover:bg-white'"
-              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show {{ v[1] }}s">
+              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="{{ tr('Show') }} {{ v[1] }}">
         <div class="text-xl font-semibold tabular-nums {{ v[3] }}">{{ v[2] }}</div>
         <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ v[1] }}</div>
       </button>
@@ -627,9 +627,9 @@
       {% if cx.graph and cx.graph.nodes %}
       <button type="button" @click="mapView = 'graph'; $nextTick(() => window.kgRender && window.kgRender())"
               :class="mapView === 'graph' ? 'ring-2 ring-violet-400 bg-white' : 'bg-slate-50/50 hover:bg-white'"
-              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="Show the graph">
+              class="rounded-lg border border-slate-200 px-2 py-2 text-center transition" title="{{ tr('Show the graph') }}">
         <div class="text-xl leading-7">⚯</div>
-        <div class="text-[10px] uppercase tracking-wide text-slate-400">Graph</div>
+        <div class="text-[10px] uppercase tracking-wide text-slate-400">{{ tr("Graph") }}</div>
       </button>
       {% endif %}
     </div>
@@ -648,11 +648,11 @@
         {% if kind == 'concept' %}
         <form hx-post="/c/{{ slug }}/wiki/concepts/add" hx-target="#left-panel" hx-swap="innerHTML"
               x-data="{ a:false }" class="rounded-lg border border-dashed border-slate-300 p-3">
-          <button type="button" x-show="!a" @click="a=true" class="text-xs text-slate-600 hover:underline">+ Add concept</button>
+          <button type="button" x-show="!a" @click="a=true" class="text-xs text-slate-600 hover:underline">+ {{ tr("Add concept") }}</button>
           <div x-show="a" x-cloak class="space-y-1.5">
-            <input name="name" required placeholder="Concept name" class="w-full rounded border border-slate-300 px-2 py-1 text-xs">
-            <textarea name="blurb" rows="2" placeholder="One-line description (optional)" class="w-full rounded border border-slate-300 px-2 py-1 text-xs"></textarea>
-            <div class="flex gap-2"><button class="rounded bg-slate-700 text-white px-2.5 py-1 text-xs">Add</button><button type="button" @click="a=false" class="text-xs text-slate-400">Cancel</button></div>
+            <input name="name" required placeholder="{{ tr('Concept name') }}" class="w-full rounded border border-slate-300 px-2 py-1 text-xs">
+            <textarea name="blurb" rows="2" placeholder="{{ tr('One-line description (optional)') }}" class="w-full rounded border border-slate-300 px-2 py-1 text-xs"></textarea>
+            <div class="flex gap-2"><button class="rounded bg-slate-700 text-white px-2.5 py-1 text-xs">{{ tr("Add") }}</button><button type="button" @click="a=false" class="text-xs text-slate-400">{{ tr("Cancel") }}</button></div>
           </div>
         </form>
         {% endif %}
@@ -667,7 +667,7 @@
           {% if kind == 'concept' and ent.blurb %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.blurb }}</p>
           {% elif kind != 'concept' and ent.gist %}<p class="text-xs text-slate-600 leading-snug mb-1.5 line-clamp-2">{{ ent.gist }}</p>{% endif %}
           <div class="flex items-center gap-2 text-[11px] text-slate-400">
-            <span>{{ ent.paper_count }} paper{{ 's' if ent.paper_count != 1 }}</span>
+            <span>{{ ent.paper_count }} {{ tr("paper") }}{{ 's' if ent.paper_count != 1 }}</span>
           </div>
         </button>
         {% endfor %}
@@ -678,7 +678,7 @@
 
     <div class="kg-2col mb-4">
       <div class="kg-2col-main" x-show="mapView === 'theme'">
-        <p class="text-xs text-slate-500 mb-2">Themes — clusters of concepts, methods &amp; problems that recur together across the same papers (found automatically; not authored).</p>
+        <p class="text-xs text-slate-500 mb-2">{{ tr("Themes — clusters of concepts, methods & problems that recur together across the same papers (found automatically; not authored).") }}</p>
         <div class="kg-theme-scroll">
         {% for t in cx.themes %}
         {% set st = STRENGTH[t.strength] %}
@@ -693,22 +693,22 @@
                   <h3 x-show="!editing" class="text-[15px] font-semibold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h3>
                   <form x-show="editing" x-cloak @click.stop hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename"
                         hx-target="#left-panel" hx-swap="innerHTML" class="flex items-center gap-1">
-                    <input name="name" value="{{ t.name or '' }}" placeholder="Theme name" maxlength="48"
+                    <input name="name" value="{{ t.name or '' }}" placeholder="{{ tr('Theme name') }}" maxlength="48"
                            class="text-[14px] border border-slate-300 rounded px-1.5 py-0.5 w-44"
                            @keydown.enter.prevent="$el.closest('form').requestSubmit()" x-init="$nextTick(() => $el.focus())">
-                    <button class="text-[11px] rounded px-2 py-0.5 bg-violet-600 text-white hover:bg-violet-700">Save</button>
-                    <button type="button" @click.stop="editing = false" class="text-[11px] text-slate-400 hover:text-slate-600">Cancel</button>
+                    <button class="text-[11px] rounded px-2 py-0.5 bg-violet-600 text-white hover:bg-violet-700">{{ tr("Save") }}</button>
+                    <button type="button" @click.stop="editing = false" class="text-[11px] text-slate-400 hover:text-slate-600">{{ tr("Cancel") }}</button>
                   </form>
                   <span class="inline-flex items-center gap-0.5 text-[10px] rounded-full px-2 py-0.5 border {{ st.cls }}">{{ st.icon }} {{ st.label }}</span>
-                  <button type="button" x-show="!editing" @click.stop="editing = true" title="Rename theme" class="text-[12px] text-slate-300 hover:text-violet-600">✎</button>
-                  <button type="button" @click.stop="window.paAskEl($el)" title="Ask in chat (or right-click the card)" class="opacity-0 group-hover:opacity-100 transition text-[12px] text-slate-300 hover:text-violet-600">💬</button>
-                  {% if t.user_named %}<span class="text-[9px] text-slate-300" title="You named this theme">· yours</span>{% endif %}
+                  <button type="button" x-show="!editing" @click.stop="editing = true" title="{{ tr('Rename theme') }}" class="text-[12px] text-slate-300 hover:text-violet-600">✎</button>
+                  <button type="button" @click.stop="window.paAskEl($el)" title="{{ tr('Ask in chat (or right-click the card)') }}" class="opacity-0 group-hover:opacity-100 transition text-[12px] text-slate-300 hover:text-violet-600">💬</button>
+                  {% if t.user_named %}<span class="text-[9px] text-slate-300" title="{{ tr('You named this theme') }}">· {{ tr("yours") }}</span>{% endif %}
                   <span class="ml-auto text-[11px] text-slate-300">▸</span>
                 </div>
                 {% if t.description %}
                 <p class="text-[12.5px] text-slate-600 mt-1 leading-snug">{{ t.description }}</p>
                 {% else %}
-                <p class="text-[12px] text-slate-400 mt-1 leading-snug italic">Unnamed — the agent names themes on the next ↻ Regenerate (or rename it with ✎).</p>
+                <p class="text-[12px] text-slate-400 mt-1 leading-snug italic">{{ tr("Unnamed — the agent names themes on the next ↻ Regenerate (or rename it with ✎).") }}</p>
                 {% endif %}
                 <div class="flex flex-wrap gap-1.5 mt-2.5">
                   {% for e in t.entities[:4] %}
@@ -719,11 +719,11 @@
                   {% if t.entities|length > 4 %}<span class="text-[11px] rounded px-1.5 py-0.5 bg-slate-100 text-slate-500">+{{ t.entities|length - 4 }}</span>{% endif %}
                 </div>
                 <div class="flex items-center flex-wrap gap-x-3 gap-y-1 mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
-                  <span><b class="text-slate-700 tabular-nums">{{ t.n_ideas }}</b> ideas</span>
-                  <span><b class="text-slate-700 tabular-nums">{{ t.n_papers }}</b> papers</span>
+                  <span><b class="text-slate-700 tabular-nums">{{ t.n_ideas }}</b> {{ tr("ideas") }}</span>
+                  <span><b class="text-slate-700 tabular-nums">{{ t.n_papers }}</b> {{ tr("papers") }}</span>
                   {% if t.key_papers %}
                   <span class="inline-flex items-center gap-1 min-w-0">
-                    <span class="text-slate-400 shrink-0">Top paper:</span>
+                    <span class="text-slate-400 shrink-0">{{ tr("Top paper:") }}</span>
                     <a @click.stop href="/c/{{ slug }}/p/{{ t.key_papers[0].id }}" class="text-violet-700 hover:underline truncate">{{ t.key_papers[0].title|truncate(34) }}</a>
                   </span>
                   {% endif %}
@@ -739,16 +739,16 @@
         <div class="kg-ins pt-1">
           {% if cx.insights.strongest %}
           <button type="button" @click="insight = 'strongest'" class="text-left rounded-lg border border-slate-200 bg-slate-50/40 hover:bg-slate-100 hover:border-slate-300 transition p-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 Strongest link</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 {{ tr("Strongest link") }}</div>
             <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.strongest.a|truncate(24) }}</b> ↔ <b>{{ cx.insights.strongest.b|truncate(24) }}</b></div>
-            <div class="text-[10px] text-slate-400 mt-0.5">co-occur in {{ cx.insights.strongest.shared }} papers · view →</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">{{ tr("co-occur in") }} {{ cx.insights.strongest.shared }} {{ tr("papers · view →") }}</div>
           </button>
           {% endif %}
           {% if cx.insights.bridge %}
           <button type="button" @click="insight = 'bridge'" class="text-left rounded-lg border border-slate-200 bg-slate-50/40 hover:bg-slate-100 hover:border-slate-300 transition p-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge paper</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 {{ tr("Bridge paper") }}</div>
             <div class="text-[12px] text-slate-700 leading-snug"><b>{{ cx.insights.bridge.label|truncate(28) }}</b></div>
-            <div class="text-[10px] text-slate-400 mt-0.5">spans {{ cx.insights.bridge.n_themes }} themes · view →</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">{{ tr("spans") }} {{ cx.insights.bridge.n_themes }} {{ tr("themes · view →") }}</div>
           </button>
           {% endif %}
         </div>
@@ -759,17 +759,17 @@
       <div class="kg-2col-side" x-show="mapView === 'graph'" x-cloak>
         <div class="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
           <div class="flex items-center gap-2 mb-2">
-            <span class="text-xs font-semibold text-slate-600">Collection map</span>
-            <button type="button" @click="window.kgReset && window.kgReset()" class="text-[10px] rounded border border-slate-200 px-1.5 py-0.5 text-slate-500 hover:bg-slate-50" title="Re-run the layout (undo dragging)">⟲ Reset</button>
+            <span class="text-xs font-semibold text-slate-600">{{ tr("Collection map") }}</span>
+            <button type="button" @click="window.kgReset && window.kgReset()" class="text-[10px] rounded border border-slate-200 px-1.5 py-0.5 text-slate-500 hover:bg-slate-50" title="{{ tr('Re-run the layout (undo dragging)') }}">⟲ {{ tr("Reset") }}</button>
             <span class="ml-auto flex items-center gap-1.5 text-[9px] text-slate-500">
-              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>problem</span>
-              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>method</span>
-              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#64748b"></span>concept</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#f43f5e"></span>{{ tr("problem") }}</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#0ea5e9"></span>{{ tr("method") }}</span>
+              <span class="inline-flex items-center gap-0.5"><span class="inline-block w-2 h-2 rounded-full" style="background:#64748b"></span>{{ tr("concept") }}</span>
             </span>
           </div>
           <div id="kg-cyto" class="rounded-lg border border-slate-200 bg-white" style="height: 460px;"
                data-graph='{{ cx.graph | tojson }}' data-slug="{{ slug }}"></div>
-          <p class="mt-1.5 text-[10px] text-slate-400">Click a node to open it · drag to pan · scroll to zoom · hover to focus neighbors · ⟲ Reset re-runs the layout.</p>
+          <p class="mt-1.5 text-[10px] text-slate-400">{{ tr("Click a node to open it · drag to pan · scroll to zoom · hover to focus neighbors · ⟲ Reset re-runs the layout.") }}</p>
         </div>
       </div>
       <script>
@@ -848,11 +848,11 @@
       <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-5" @click.stop>
         {% if cx.insights and cx.insights.strongest %}
         <div x-show="insight === 'strongest'">
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 Strongest connection</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🔗 {{ tr("Strongest connection") }}</div>
           <p class="text-sm text-slate-800 mb-1"><b>{{ cx.insights.strongest.a }}</b> ↔ <b>{{ cx.insights.strongest.b }}</b></p>
-          <p class="text-[12px] text-slate-500 mb-3">These two ideas co-occur in {{ cx.insights.strongest.shared }} papers — the strongest shared-evidence tie in the collection.</p>
+          <p class="text-[12px] text-slate-500 mb-3">{{ tr("These two ideas co-occur in") }} {{ cx.insights.strongest.shared }} {{ tr("papers — the strongest shared-evidence tie in the collection.") }}</p>
           {% if cx.insights.strongest.papers %}
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Shared papers</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("Shared papers") }}</div>
           <ul class="space-y-1 max-h-60 overflow-y-auto">
             {% for p in cx.insights.strongest.papers %}<li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[12px] text-violet-700 hover:underline">{{ p.title|truncate(70) }}</a></li>{% endfor %}
           </ul>
@@ -861,34 +861,34 @@
         {% endif %}
         {% if cx.insights and cx.insights.bridge %}
         <div x-show="insight === 'bridge'">
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 Bridge paper</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">🌉 {{ tr("Bridge paper") }}</div>
           <p class="text-sm text-slate-800 mb-1"><b>{{ cx.insights.bridge.label }}</b></p>
-          <p class="text-[12px] text-slate-500 mb-3">This paper's ideas span {{ cx.insights.bridge.n_themes }} themes — {{ cx.insights.bridge.themes|join(', ') }} — so it ties otherwise-separate parts of the collection together.</p>
+          <p class="text-[12px] text-slate-500 mb-3">{{ tr("This paper's ideas span") }} {{ cx.insights.bridge.n_themes }} {{ tr("themes —") }} {{ cx.insights.bridge.themes|join(', ') }} {{ tr("— so it ties otherwise-separate parts of the collection together.") }}</p>
           {% if cx.insights.bridge.papers %}
-          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Open</div>
+          <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("Open") }}</div>
           <ul class="space-y-1 max-h-60 overflow-y-auto">
             {% for p in cx.insights.bridge.papers %}<li><a href="/c/{{ slug }}/p/{{ p.id }}" class="text-[12px] text-violet-700 hover:underline">{{ p.title|truncate(70) }}</a></li>{% endfor %}
           </ul>
           {% endif %}
         </div>
         {% endif %}
-        <div class="mt-4 text-right"><button type="button" @click="insight = null" class="text-xs rounded-md border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-100">Close</button></div>
+        <div class="mt-4 text-right"><button type="button" @click="insight = null" class="text-xs rounded-md border border-slate-300 px-3 py-1 text-slate-600 hover:bg-slate-100">{{ tr("Close") }}</button></div>
       </div>
     </div>
 
     {% if cx.orphans %}
     <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-      <div class="text-xs font-semibold text-amber-900 mb-1.5">Unmapped papers <span class="font-normal text-amber-700">— read these to grow the map</span></div>
+      <div class="text-xs font-semibold text-amber-900 mb-1.5">{{ tr("Unmapped papers") }} <span class="font-normal text-amber-700">— {{ tr("read these to grow the map") }}</span></div>
       <div class="flex flex-wrap gap-1.5">
-        {% for o in cx.orphans %}<a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100" title="Open to read">{{ o.label|truncate(40) }}</a>{% endfor %}
+        {% for o in cx.orphans %}<a href="/c/{{ slug }}/p/{{ o.id }}" class="text-[11px] rounded px-1.5 py-0.5 bg-white border border-amber-200 text-slate-700 hover:bg-amber-100" title="{{ tr('Open to read') }}">{{ o.label|truncate(40) }}</a>{% endfor %}
       </div>
-      <p class="mt-1.5 text-[10px] text-amber-700">Read these, then ↻ Regenerate so the agent can map them into the field model.</p>
+      <p class="mt-1.5 text-[10px] text-amber-700">{{ tr("Read these, then ↻ Regenerate so the agent can map them into the field model.") }}</p>
     </div>
     {% endif %}
   </section>
   {% else %}
   <div class="rounded-xl border border-slate-200 bg-white p-5">
-    <p class="text-sm text-slate-500">Not enough structure yet to draw connections. As more papers map to shared concepts/problems/methods, themes and a collection map appear here.</p>
+    <p class="text-sm text-slate-500">{{ tr("Not enough structure yet to draw connections. As more papers map to shared concepts/problems/methods, themes and a collection map appear here.") }}</p>
   </div>
   {% endif %}
 </div>{# /connections pane #}
@@ -905,42 +905,42 @@
            @click.away="ctx.open = false"
            @pa-filter-papers.window="selKeys = [$event.detail.key]; filterDim = $event.detail.dim">
     <div class="flex items-center gap-2 mb-3 flex-wrap">
-      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> Papers</h2>
-      <span class="text-xs text-slate-500">(Evidence)</span>
+      <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>▤</span> {{ tr("Papers") }}</h2>
+      <span class="text-xs text-slate-500">({{ tr("Evidence") }})</span>
       {# Unread quick-filter — always available (orthogonal to the entity filters below). #}
       {% set _unread = overview.papers | rejectattr('read') | list | length %}
       <button type="button" @click="unreadOnly = !unreadOnly"
               :class="unreadOnly ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'"
-              class="rounded-full px-2 py-0.5 text-[11px] font-medium" title="Show only unread papers">
-        ○ Unread <span class="tabular-nums">{{ _unread }}</span>
+              class="rounded-full px-2 py-0.5 text-[11px] font-medium" title="{{ tr('Show only unread papers') }}">
+        ○ {{ tr("Unread") }} <span class="tabular-nums">{{ _unread }}</span>
       </button>
       {# multi-select removal: tick papers → Remove (→ Graveyard, restorable; syncs to Zotero) #}
       <form x-show="sel.length" x-cloak hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
-            hx-confirm="Remove the selected paper(s) from this collection? They go to the Graveyard (restorable) and are removed from Zotero on the next Sync.">
+            hx-confirm="{{ tr('Remove the selected paper(s) from this collection? They go to the Graveyard (restorable) and are removed from Zotero on the next Sync.') }}">
         <template x-for="id in sel" :key="id"><input type="hidden" name="paper_ids" :value="id"></template>
-        <button class="rounded bg-rose-600 text-white px-2.5 py-1 text-xs hover:bg-rose-700">Remove selected (<span x-text="sel.length"></span>)</button>
+        <button class="rounded bg-rose-600 text-white px-2.5 py-1 text-xs hover:bg-rose-700">{{ tr("Remove selected") }} (<span x-text="sel.length"></span>)</button>
       </form>
-      <button x-show="sel.length" x-cloak type="button" @click="sel = []" class="text-xs text-slate-400 hover:text-slate-700">clear</button>
+      <button x-show="sel.length" x-cloak type="button" @click="sel = []" class="text-xs text-slate-400 hover:text-slate-700">{{ tr("clear") }}</button>
       <div class="ml-auto relative">
-        <input x-model="q" type="search" placeholder="Search papers…"
-               class="w-56 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="Filter by title or author">
+        <input x-model="q" type="search" placeholder="{{ tr('Search papers…') }}"
+               class="w-56 max-w-full rounded-lg border border-slate-300 pl-3 pr-8 py-1.5 text-sm" title="{{ tr('Filter by title or author') }}">
         <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">⌕</span>
       </div>
       <button type="button" @click="$dispatch('open-add')"
-              class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="Add a paper by arXiv id / URL">＋ Add paper</button>
+              class="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50" title="{{ tr('Add a paper by arXiv id / URL') }}">＋ {{ tr("Add paper") }}</button>
     </div>
 
     {% if themelist or cxe.concept or cxe.method or cxe.problem %}
     <div class="mb-3 text-[11px]">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="text-slate-400 mr-0.5">Filter:</span>
-        <button type="button" @click="selKeys=[]; filterDim='all'; unreadOnly=false" :class="selKeys.length===0 && !unreadOnly ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">All</button>
-        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">Theme</button>{% endif %}
-        {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">Concept</button>{% endif %}
-        {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">Method</button>{% endif %}
-        {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">Problem</button>{% endif %}
-        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">Unmapped</button>
-        <span x-show="selKeys.length" x-cloak class="text-slate-400">· filtering by <span x-text="selKeys.length"></span></span>
+        <span class="text-slate-400 mr-0.5">{{ tr("Filter:") }}</span>
+        <button type="button" @click="selKeys=[]; filterDim='all'; unreadOnly=false" :class="selKeys.length===0 && !unreadOnly ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">{{ tr("All") }}</button>
+        {% if themelist %}<button type="button" @click="filterDim='theme'" :class="filterDim==='theme' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'" class="rounded px-2 py-0.5">{{ tr("Theme") }}</button>{% endif %}
+        {% if cxe.concept %}<button type="button" @click="filterDim='concept'" :class="filterDim==='concept' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="rounded px-2 py-0.5">{{ tr("Concept") }}</button>{% endif %}
+        {% if cxe.method %}<button type="button" @click="filterDim='method'" :class="filterDim==='method' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 hover:bg-sky-100'" class="rounded px-2 py-0.5">{{ tr("Method") }}</button>{% endif %}
+        {% if cxe.problem %}<button type="button" @click="filterDim='problem'" :class="filterDim==='problem' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'" class="rounded px-2 py-0.5">{{ tr("Problem") }}</button>{% endif %}
+        <button type="button" @click="toggleKey('unmapped')" :class="selKeys.includes('unmapped') ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'" class="rounded px-2 py-0.5">{{ tr("Unmapped") }}</button>
+        <span x-show="selKeys.length" x-cloak class="text-slate-400">· {{ tr("filtering by") }} <span x-text="selKeys.length"></span></span>
       </div>
       {# chips for the active dimension — click to toggle (multi-select, across/within dims) #}
       <div x-show="filterDim==='theme'" x-cloak class="flex flex-wrap gap-1.5 mt-1.5">
@@ -966,14 +966,14 @@
            x-show="(selKeys.length === 0 || selKeys.every(k => k === 'unmapped' ? ($el.dataset.ents.trim() === '') : $el.dataset.ents.split(' ').includes(k))) && (q.trim() === '' || $el.dataset.s.includes(q.trim().toLowerCase())) && (!unreadOnly || $el.dataset.read === '0')">
         <div class="flex items-center gap-1 mb-2">
           <input type="checkbox" @click.stop="toggleSel({{ p.id }})" :checked="sel.includes({{ p.id }})"
-                 class="shrink-0 accent-violet-600 cursor-pointer" title="Select for removal">
+                 class="shrink-0 accent-violet-600 cursor-pointer" title="{{ tr('Select for removal') }}">
           <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-xs font-medium tabular-nums">{{ loop.index }}</span>
-          {% if p.important %}<span class="text-[10px]" title="Core focus — the wiki orbits around this paper">⭐</span>{% endif %}
-          {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} attention points">🔥</span>{% endif %}
-          {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="New activity since you last opened the wiki">✨</span>{% endif %}
+          {% if p.important %}<span class="text-[10px]" title="{{ tr('Core focus — the wiki orbits around this paper') }}">⭐</span>{% endif %}
+          {% if p.is_hot %}<span class="text-[9px] rounded px-1 bg-orange-100 text-orange-700" title="{{ p.attention_score }} {{ tr('attention points') }}">🔥</span>{% endif %}
+          {% if p.is_new %}<span class="text-[9px] rounded px-1 bg-sky-100 text-sky-700" title="{{ tr('New activity since you last opened the wiki') }}">✨</span>{% endif %}
           <form hx-post="/c/{{ slug }}/wiki/paper/{{ p.id }}/toggle-read" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button" class="ml-auto">
-            {% if p.read %}<button class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700" title="Read — click to mark unread">✓ read</button>
-            {% else %}<button class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700" title="Mark read">○</button>{% endif %}
+            {% if p.read %}<button class="text-[10px] rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700" title="{{ tr('Read — click to mark unread') }}">✓ {{ tr("read") }}</button>
+            {% else %}<button class="text-[10px] rounded px-1.5 py-0.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-700" title="{{ tr('Mark read') }}">○</button>{% endif %}
           </form>
         </div>
         <a href="/c/{{ slug }}/p/{{ p.id }}" class="block text-sm font-medium text-slate-900 leading-snug line-clamp-3 hover:underline">{{ p.title }}</a>
@@ -989,16 +989,16 @@
     <div x-show="ctx.open" x-cloak @click="ctx.open=false"
          :style="`top:${ctx.y}px; left:${Math.min(ctx.x, window.innerWidth-200)}px`"
          class="fixed z-50 w-48 rounded-lg border border-slate-200 bg-white shadow-lg py-1 text-sm">
-      <a :href="`/c/{{ slug }}/p/${ctx.pid}`" class="block px-3 py-1.5 hover:bg-slate-50 text-slate-700">▤ Open paper</a>
+      <a :href="`/c/{{ slug }}/p/${ctx.pid}`" class="block px-3 py-1.5 hover:bg-slate-50 text-slate-700">▤ {{ tr("Open paper") }}</a>
       <form hx-post="/c/{{ slug }}/wiki/papers/important" hx-target="#left-panel" hx-swap="innerHTML" @submit="ctx.open=false">
         <input type="hidden" name="paper_id" :value="ctx.pid">
-        <button class="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-slate-700">⭐ Toggle core focus</button>
+        <button class="w-full text-left px-3 py-1.5 hover:bg-amber-50 text-slate-700">⭐ {{ tr("Toggle core focus") }}</button>
       </form>
-      <button type="button" @click="editTags()" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700">◈ Edit tags…</button>
+      <button type="button" @click="editTags()" class="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700">◈ {{ tr("Edit tags…") }}</button>
       <form hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML"
-            @submit="ctx.open=false" onsubmit="return confirm('Remove this paper from the collection? (restorable from the graveyard)')">
+            @submit="ctx.open=false" onsubmit="return confirm('{{ tr('Remove this paper from the collection? (restorable from the graveyard)') }}')">
         <input type="hidden" name="paper_ids" :value="ctx.pid">
-        <button class="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600">🗑 Remove from collection</button>
+        <button class="w-full text-left px-3 py-1.5 hover:bg-rose-50 text-rose-600">🗑 {{ tr("Remove from collection") }}</button>
       </form>
     </div>
 
@@ -1007,17 +1007,17 @@
          class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16">
       <div class="bg-white rounded-2xl shadow-2xl w-[min(440px,92vw)] max-h-[80vh] overflow-auto p-5">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-slate-900">Edit tags</h3>
+          <h3 class="text-sm font-semibold text-slate-900">{{ tr("Edit tags") }}</h3>
           <button type="button" @click="tagsOpen=false" class="grid place-items-center w-7 h-7 rounded-full border border-slate-200 text-slate-400 hover:text-slate-700">✕</button>
         </div>
-        <div id="tags-editor-body"><span class="text-sm text-slate-400">Loading…</span></div>
+        <div id="tags-editor-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
       </div>
     </div>
   </section>
   {% else %}
   <div class="rounded-xl border border-slate-200 bg-white p-5 text-center">
-    <p class="text-sm text-slate-600">No papers in this collection yet.</p>
-    <button type="button" @click="$dispatch('open-add')" class="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">＋ Add paper</button>
+    <p class="text-sm text-slate-600">{{ tr("No papers in this collection yet.") }}</p>
+    <button type="button" @click="$dispatch('open-add')" class="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">＋ {{ tr("Add paper") }}</button>
   </div>
   {% endif %}
 </div>{# /papers pane #}

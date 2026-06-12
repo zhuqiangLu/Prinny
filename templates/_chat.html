@@ -23,13 +23,13 @@
   <div x-show="compacting" x-cloak class="absolute inset-0 z-40 grid place-items-center bg-white/80 backdrop-blur-[1px]">
     <div class="flex flex-col items-center gap-2 text-slate-600">
       <svg class="w-8 h-8 animate-spin text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle><path d="M21 12a9 9 0 0 0-9-9"></path></svg>
-      <div class="text-sm font-medium">Compacting chat…</div>
-      <div class="text-[11px] text-slate-400">summarizing the conversation — one moment</div>
+      <div class="text-sm font-medium">{{ tr("Compacting chat…") }}</div>
+      <div class="text-[11px] text-slate-400">{{ tr("summarizing the conversation — one moment") }}</div>
     </div>
   </div>
   <div class="border-b border-slate-200 px-3 py-1.5 flex items-center gap-2">
     <div class="flex items-center gap-1 min-w-0" x-data="modelPicker('{{ model }}')" x-init="load()">
-      <select x-model="current" @change="setModel()" title="Model (applies to all chats)"
+      <select x-model="current" @change="setModel()" title="{{ tr('Model (applies to all chats)') }}"
               class="max-w-[11rem] truncate rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400">
         <template x-for="m in models" :key="m"><option :value="m" x-text="m"></option></template>
       </select>
@@ -37,7 +37,7 @@
     </div>
     {# context gauge inline (compact, like the topic assistant) — directional only #}
     <div class="flex items-center gap-1 text-[10px] text-slate-400 shrink-0" x-data="ctxGauge('{{ model }}')" x-init="init()"
-         title="Rough estimate of context fullness — the CLI manages real context (caching, compaction) invisibly, so this is directional only.">
+         title="{{ tr('Rough estimate of context fullness — the CLI manages real context (caching, compaction) invisibly, so this is directional only.') }}">
       <span class="block w-12 h-1.5 rounded-full bg-slate-200 overflow-hidden"><span class="block h-full" :class="pct < 75 ? 'bg-emerald-400' : pct < 90 ? 'bg-amber-400' : 'bg-rose-500'" :style="`width:${pct}%`"></span></span>
       <span class="tabular-nums" x-text="`~${pct}%`"></span>
     </div>
@@ -47,7 +47,7 @@
       {% if threads|length > 1 %}
       <details class="relative">
         <summary class="cursor-pointer rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50 list-none [&::-webkit-details-marker]:hidden">
-          Chats ({{ threads|length }}) ▾
+          {{ tr("Chats") }} ({{ threads|length }}) ▾
         </summary>
         <div class="absolute right-0 z-20 mt-1 w-64 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg p-1">
           {% for t in threads %}
@@ -63,11 +63,11 @@
       </details>
       {% endif %}
       <form method="post" action="/c/{{ slug }}/p/{{ paper_key }}/chat/new">
-        <button class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50" title="Start a new conversation">+ New</button>
+        <button class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50" title="{{ tr('Start a new conversation') }}">{{ tr("+ New") }}</button>
       </form>
       <form method="post" action="/c/{{ slug }}/p/{{ paper_key }}/chat/delete"
             onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete this conversation?\n\n• This cannot be undone.\n• The deleted chat will no longer be available to ground future wiki edits.\n• If you already turned part of this chat into a wiki edit, that wiki content is NOT removed — it stays as-is.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
-        <button class="rounded border border-rose-200 bg-white px-2 py-0.5 text-rose-600 hover:bg-rose-50" title="Delete this conversation">Delete</button>
+        <button class="rounded border border-rose-200 bg-white px-2 py-0.5 text-rose-600 hover:bg-rose-50" title="{{ tr('Delete this conversation') }}">{{ tr("Delete") }}</button>
       </form>
     </div>
     {% else %}
@@ -75,11 +75,11 @@
     <div class="ml-auto flex items-center gap-2 text-xs shrink-0">
       <button type="button" @click="compact('{{ cbase }}/chat/compact')" :disabled="compacting"
               class="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              title="Summarize the chat into an artifact and clear the history">⊟ Compact</button>
+              title="{{ tr('Summarize the chat into an artifact and clear the history') }}">⊟ {{ tr("Compact") }}</button>
       <form method="post" action="{{ cbase }}/chat/delete"
             onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Remove the current chat? This deletes the history and any compacted artifact.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
         <button class="rounded border border-rose-200 bg-white px-2 py-0.5 text-rose-600 hover:bg-rose-50"
-                title="Delete the current chat">Remove</button>
+                title="{{ tr('Delete the current chat') }}">{{ tr("Remove") }}</button>
       </form>
     </div>
     {% endif %}
@@ -87,14 +87,14 @@
 
   {% if debug and paper_key %}
   <div class="border-b border-slate-100 px-4 py-1 text-[11px] font-mono text-slate-400">
-    session: <span id="dbg-session">{{ session_id or "(none yet — send a message)" }}</span>
+    {{ tr("session:") }} <span id="dbg-session">{{ session_id or "(none yet — send a message)" }}</span>
   </div>
   {% endif %}
 
   <div id="chat-log" class="flex-1 min-h-0 overflow-auto p-4 space-y-3">
     {% if artifact_html %}
     <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-      <div class="flex items-center gap-1.5 text-xs font-medium text-amber-700 mb-1">📦 Compacted summary</div>
+      <div class="flex items-center gap-1.5 text-xs font-medium text-amber-700 mb-1">📦 {{ tr("Compacted summary") }}</div>
       <div class="prose prose-sm max-w-none text-slate-700">{{ artifact_html|safe }}</div>
     </div>
     {% endif %}
@@ -103,7 +103,7 @@
     {% endfor %}
     {% if not messages and not artifact_html %}
     <p class="text-sm text-slate-400">
-      Ask about these papers, your notes, or where the gaps are.
+      {{ tr("Ask about these papers, your notes, or where the gaps are.") }}
     </p>
     {% endif %}
   </div>
@@ -132,23 +132,23 @@
     <div x-show="ref" x-cloak class="mb-2">
       <span class="inline-flex items-center gap-1 max-w-full rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs text-violet-700">
         <span x-text="ref ? (ref.icon + ' ' + ref.label) : ''" class="truncate"></span>
-        <button type="button" @click="ref = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="Remove reference">✕</button>
+        <button type="button" @click="ref = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="{{ tr('Remove reference') }}">✕</button>
       </span>
-      <span class="ml-1 text-[11px] text-slate-400">ask about this — or just hit send</span>
+      <span class="ml-1 text-[11px] text-slate-400">{{ tr("ask about this — or just hit send") }}</span>
     </div>
 
     <!-- active command pill (from the "+" button or "/" menu) -->
     <div x-show="cmd" x-cloak class="mb-2">
       <span class="inline-flex items-center gap-1 max-w-full rounded-md border border-violet-200 bg-violet-100 px-2 py-1 text-xs font-mono text-violet-700">
         <span x-text="cmd ? cmd.c : ''" class="truncate"></span>
-        <button type="button" @click="cmd = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="Remove command">✕</button>
+        <button type="button" @click="cmd = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="{{ tr('Remove command') }}">✕</button>
       </span>
       <span class="ml-1 text-[11px] text-slate-400" x-text="cmd ? (cmd.kind === 'modifier' ? 'stays on until removed' : (cmd.hint || 'type your input…')) : ''"></span>
     </div>
 
     <!-- drag lever: pull up/down to resize the input -->
     <div class="-mt-1 mb-1.5 flex justify-center cursor-row-resize group"
-         @mousedown.prevent="startResize($event)" title="Drag to resize the input">
+         @mousedown.prevent="startResize($event)" title="{{ tr('Drag to resize the input') }}">
       <div class="h-1 w-10 rounded-full bg-slate-200 group-hover:bg-slate-400 transition-colors"></div>
     </div>
 
@@ -156,7 +156,7 @@
     <div x-show="images.length" x-cloak class="flex flex-wrap gap-2 mb-2">
       <template x-for="(img, i) in images" :key="i">
         <div class="relative">
-          <img :src="img" class="h-14 w-14 object-cover rounded border border-slate-200" alt="attachment">
+          <img :src="img" class="h-14 w-14 object-cover rounded border border-slate-200" alt="{{ tr('attachment') }}">
           <button type="button" @click="images.splice(i, 1)"
                   class="absolute -top-1.5 -right-1.5 grid place-items-center bg-slate-800 text-white rounded-full w-4 h-4 text-[10px] leading-none">×</button>
         </div>
@@ -171,17 +171,17 @@
                 @keydown.tab="if(cmdOpen){ $event.preventDefault(); acceptCmd() }"
                 @keydown.escape="if(cmdOpen){ cmdOpen = false } else if(sending){ interrupt() }"
                 @keydown.enter="if(!$event.shiftKey){ $event.preventDefault(); if(cmdOpen){ acceptCmd() } else if($el.value.trim() || images.length){ $el.form.requestSubmit() } }"
-                placeholder="{% if paper_key %}Ask about this paper, your notes, or how it compares to your collection… (/ for commands · paste an image){% else %}Ask about your papers, notes, or where the gaps are… (/ for commands){% endif %}"
+                placeholder="{% if paper_key %}{{ tr('Ask about this paper, your notes, or how it compares to your collection… (/ for commands · paste an image)') }}{% else %}{{ tr('Ask about your papers, notes, or where the gaps are… (/ for commands)') }}{% endif %}"
                 class="flex-1 resize-none rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"></textarea>
       {# Send → becomes a Stop button while a turn is in flight (click or Esc interrupts) #}
-      <button x-show="!sending" type="submit" aria-label="Send" title="Send (Enter)" :disabled="compacting"
+      <button x-show="!sending" type="submit" aria-label="{{ tr('Send') }}" title="{{ tr('Send (Enter)') }}" :disabled="compacting"
               class="shrink-0 grid place-items-center w-11 rounded bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path>
         </svg>
       </button>
-      <button x-show="sending" x-cloak type="button" @click="interrupt()" aria-label="Stop" title="Stop (Esc)"
+      <button x-show="sending" x-cloak type="button" @click="interrupt()" aria-label="{{ tr('Stop') }}" title="{{ tr('Stop (Esc)') }}"
               class="shrink-0 grid place-items-center w-11 rounded bg-rose-600 text-white hover:bg-rose-700">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
       </button>

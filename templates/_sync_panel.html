@@ -3,9 +3,7 @@
    Pull-only: the app never writes to Zotero. The Apply form re-adds the picked held papers
    and hx-posts back into #sync-modal-body so the flow stays in the modal. #}
 <p class="text-sm text-slate-500 mb-4">
-  <b>Pull</b> brings in papers added to this collection in Zotero. The app never writes back to
-  Zotero (its local API is read-only). Papers you previously removed aren’t re-added silently —
-  they’re listed below for you to pick. Needs Zotero running with the Local API enabled.
+  {{ tr("Pull brings in papers added to this collection in Zotero. The app never writes back to Zotero (its local API is read-only). Papers you previously removed aren’t re-added silently — they’re listed below for you to pick. Needs Zotero running with the Local API enabled.") }}
 </p>
 
 <div x-data="syncBar({{ 'true' if running else 'false' }}, '{{ slug }}')" x-init="init()">
@@ -13,7 +11,7 @@
   <div x-show="phase !== 'idle'" x-cloak class="mb-5 rounded-lg border border-slate-200 bg-white p-4">
     <div x-show="phase === 'running'">
       <div class="flex items-center justify-between text-sm mb-1.5">
-        <span class="font-medium text-slate-700">Pulling from Zotero…</span>
+        <span class="font-medium text-slate-700">{{ tr("Pulling from Zotero…") }}</span>
       </div>
       <div class="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
         <div class="h-full bg-slate-900 transition-all duration-300 w-1/3 animate-pulse"></div>
@@ -23,12 +21,12 @@
 
     <div x-show="phase === 'done'" class="text-sm text-emerald-800">
       ✓ Pulled — added <span class="font-medium" x-text="result?.added ?? 0"></span> new<span x-show="result?.readded">, re-added <span x-text="result?.readded"></span></span><span x-show="result?.held">, held <span x-text="result?.held"></span> previously-removed</span><span x-show="result?.removed_in_zotero">, flagged <span x-text="result?.removed_in_zotero"></span> gone from Zotero</span>.
-      <div class="mt-2"><a href="/c/{{ slug }}" class="text-slate-600 underline hover:text-slate-900">Reload collection</a></div>
+      <div class="mt-2"><a href="/c/{{ slug }}" class="text-slate-600 underline hover:text-slate-900">{{ tr("Reload collection") }}</a></div>
     </div>
 
     <div x-show="phase === 'error'" class="text-sm text-rose-700">
       <span x-text="error"></span>
-      <div class="mt-1 text-slate-500">Make sure Zotero is running with the Local API enabled (Zotero → Settings → Advanced).</div>
+      <div class="mt-1 text-slate-500">{{ tr("Make sure Zotero is running with the Local API enabled (Zotero → Settings → Advanced).") }}</div>
     </div>
   </div>
 
@@ -40,21 +38,21 @@
     <form hx-post="/c/{{ slug }}/sync" hx-target="#sync-modal-body" hx-swap="innerHTML" class="mb-3"
           x-data='{ sel: [] }'>
       <div class="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 class="font-semibold">⬇ New in Zotero ({{ n_new }})</h2>
+        <h2 class="font-semibold">⬇ {{ tr("New in Zotero") }} ({{ n_new }})</h2>
         {% if preview.incoming_new %}
         <ul class="mt-2 divide-y divide-slate-100 text-sm">
           {% for p in preview.incoming_new %}<li class="py-1.5">{{ p.title }}</li>{% endfor %}
         </ul>
-        <p class="text-xs text-slate-400 mt-1">These will be added automatically.</p>
+        <p class="text-xs text-slate-400 mt-1">{{ tr("These will be added automatically.") }}</p>
         {% else %}
-        <p class="text-sm text-slate-400 mt-1">Nothing new in Zotero.</p>
+        <p class="text-sm text-slate-400 mt-1">{{ tr("Nothing new in Zotero.") }}</p>
         {% endif %}
       </div>
 
       {% if preview.held %}
       <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-        <h2 class="font-semibold text-amber-900">Previously removed — re-add? ({{ n_held }})</h2>
-        <p class="text-xs text-amber-800 mt-1">You removed these before. Tick any you want back; the rest stay out.</p>
+        <h2 class="font-semibold text-amber-900">{{ tr("Previously removed — re-add?") }} ({{ n_held }})</h2>
+        <p class="text-xs text-amber-800 mt-1">{{ tr("You removed these before. Tick any you want back; the rest stay out.") }}</p>
         <label class="flex items-center gap-1.5 text-sm text-amber-900 mt-2 cursor-pointer">
           <input type="checkbox" class="rounded border-amber-300"
                  @change="sel = $event.target.checked ? {{ preview.held|map(attribute='zotero_key')|list|tojson }} : []"
@@ -74,17 +72,17 @@
       {% endif %}
 
       {% if preview.incoming_gone %}
-      <p class="text-xs text-amber-700 mt-3">Gone from Zotero (kept locally, flagged): {% for p in preview.incoming_gone %}{{ p.title }}{% if not loop.last %}; {% endif %}{% endfor %}</p>
+      <p class="text-xs text-amber-700 mt-3">{{ tr("Gone from Zotero (kept locally, flagged):") }} {% for p in preview.incoming_gone %}{{ p.title }}{% if not loop.last %}; {% endif %}{% endfor %}</p>
       {% endif %}
 
       {% if preview.error %}
-      <p class="text-xs text-amber-700 mt-3">Couldn’t read Zotero ({{ preview.error }}) — make sure it’s running with the Local API enabled.</p>
+      <p class="text-xs text-amber-700 mt-3">{{ tr("Couldn’t read Zotero") }} ({{ preview.error }}) — {{ tr("make sure it’s running with the Local API enabled.") }}</p>
       {% endif %}
 
       <div class="mt-4">
         <button class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-700">
-          <span x-show="!sel.length">Pull{% if n_new %} — add {{ n_new }}{% endif %}</span>
-          <span x-show="sel.length" x-cloak>Pull &amp; re-add <span x-text="sel.length"></span></span>
+          <span x-show="!sel.length">{{ tr("Pull") }}{% if n_new %} — {{ tr("add") }} {{ n_new }}{% endif %}</span>
+          <span x-show="sel.length" x-cloak>{{ tr("Pull & re-add") }} <span x-text="sel.length"></span></span>
         </button>
       </div>
     </form>

@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Triage — {{ name }}{% endblock %}
+{% block title %}{{ tr("Triage") }} — {{ name }}{% endblock %}
 {% block content %}
 <a href="/c/{{ slug }}" class="text-sm text-slate-500 hover:text-slate-900">← {{ name }}</a>
 <div class="flex items-center justify-between mt-2 mb-2">
-  <h1 class="text-xl font-semibold">Triage</h1>
+  <h1 class="text-xl font-semibold">{{ tr("Triage") }}</h1>
   <form method="post" action="/c/{{ slug }}/triage/scan">
-    <button class="text-sm rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700">Scan inbox</button>
+    <button class="text-sm rounded bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700">{{ tr("Scan inbox") }}</button>
   </form>
 </div>
 <p class="text-xs text-slate-400 mb-4">
-  Inbox:
-  {% if inbox.inbox_collection %}collection “{{ inbox.inbox_collection }}”
-  {% elif inbox.inbox_tag %}tag “{{ inbox.inbox_tag }}”
-  {% else %}not configured — set <code>inbox_collection</code> or <code>inbox_tag</code> in purpose.md frontmatter.{% endif %}
+  {{ tr("Inbox:") }}
+  {% if inbox.inbox_collection %}{{ tr("collection") }} “{{ inbox.inbox_collection }}”
+  {% elif inbox.inbox_tag %}{{ tr("tag") }} “{{ inbox.inbox_tag }}”
+  {% else %}{{ tr("not configured — set") }} <code>inbox_collection</code> {{ tr("or") }} <code>inbox_tag</code> {{ tr("in purpose.md frontmatter.") }}{% endif %}
 </p>
 
 {% if not items %}
-<p class="text-slate-500">No pending candidates.</p>
+<p class="text-slate-500">{{ tr("No pending candidates.") }}</p>
 {% else %}
 <ul class="space-y-4">
   {% for it in items %}
@@ -29,15 +29,15 @@
     {% endif %}
     {% if it.arxiv_id %}
     <div class="mt-1 text-xs text-slate-400">
-      <a href="https://arxiv.org/abs/{{ it.arxiv_id }}" target="_blank" class="hover:text-slate-700">view on arXiv ↗</a>
-      · Accept imports it into the collection (PDF pulled locally).
+      <a href="https://arxiv.org/abs/{{ it.arxiv_id }}" target="_blank" class="hover:text-slate-700">{{ tr("view on arXiv ↗") }}</a>
+      · {{ tr("Accept imports it into the collection (PDF pulled locally).") }}
     </div>
     {% endif %}
     <div class="mt-3 flex gap-2 text-sm">
-      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/pitch"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Generate pitch</button></form>
-      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/accept"><button class="rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-700">Accept</button></form>
-      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/reject"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Reject</button></form>
-      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/defer"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">Defer</button></form>
+      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/pitch"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">{{ tr("Generate pitch") }}</button></form>
+      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/accept"><button class="rounded bg-slate-900 text-white px-2 py-1 hover:bg-slate-700">{{ tr("Accept") }}</button></form>
+      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/reject"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">{{ tr("Reject") }}</button></form>
+      <form method="post" action="/c/{{ slug }}/triage/{{ it.id }}/defer"><button class="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50">{{ tr("Defer") }}</button></form>
     </div>
   </li>
   {% endfor %}

@@ -2,32 +2,32 @@
    explanation · Core ideas (uniform chips) · Binding papers (shared-by-N) · footer CTA.
    Lives in the collectionView() scope (entityOpen / tab). #}
 {% if not t %}
-<p class="text-sm text-slate-400 py-6 text-center">Couldn't load this theme.</p>
+<p class="text-sm text-slate-400 py-6 text-center">{{ tr("Couldn't load this theme.") }}</p>
 {% else %}
 {% set KS = {'problem': ('#f43f5e','bg-rose-50 text-rose-700 border-rose-200'),
              'method':  ('#0ea5e9','bg-sky-50 text-sky-700 border-sky-200'),
              'concept': ('#64748b','bg-slate-100 text-slate-600 border-slate-300'),
              'belief':  ('#f59e0b','bg-amber-50 text-amber-800 border-amber-200')} %}
-{% set ST = {'strong': ('↗','Strong','bg-emerald-50 text-emerald-700 border-emerald-200'),
-             'moderate': ('→','Moderate','bg-amber-50 text-amber-700 border-amber-200'),
-             'loose': ('·','Loose','bg-slate-50 text-slate-500 border-slate-200')}[t.strength]
+{% set ST = {'strong': ('↗',tr('Strong'),'bg-emerald-50 text-emerald-700 border-emerald-200'),
+             'moderate': ('→',tr('Moderate'),'bg-amber-50 text-amber-700 border-amber-200'),
+             'loose': ('·',tr('Loose'),'bg-slate-50 text-slate-500 border-slate-200')}[t.strength]
              or ('·','','bg-slate-50 text-slate-500 border-slate-200') %}
 <div x-data="{ editing: false }">
   <div class="flex items-start gap-3 mb-3">
     <span class="shrink-0 inline-flex items-center justify-center w-12 h-12 rounded-xl text-xl bg-violet-100 text-violet-700">◆</span>
     <div class="min-w-0 flex-1">
-      <div class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">Theme</div>
-      <h2 x-show="!editing" class="text-xl font-bold text-slate-900 leading-tight">{{ t.name or ('Theme ' ~ t.index) }}</h2>
+      <div class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">{{ tr("Theme") }}</div>
+      <h2 x-show="!editing" class="text-xl font-bold text-slate-900 leading-tight">{{ t.name or (tr('Theme') ~ ' ' ~ t.index) }}</h2>
       <div class="flex items-center gap-2 mt-1.5 flex-wrap">
         <span class="inline-flex items-center gap-0.5 text-[11px] rounded-full px-2 py-0.5 border {{ ST[2] }}">{{ ST[0] }} {{ ST[1] }}</span>
-        <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600">✎ Rename</button>
+        <button type="button" x-show="!editing" @click="editing = true" class="text-xs text-slate-400 hover:text-violet-600">✎ {{ tr("Rename") }}</button>
       </div>
       <form x-show="editing" x-cloak hx-post="/c/{{ slug }}/wiki/themes/{{ t.sig }}/rename" hx-target="#left-panel" hx-swap="innerHTML"
             @submit="entityOpen = false" class="flex items-center gap-1 mt-1.5">
-        <input name="name" value="{{ t.name or '' }}" placeholder="Theme name" maxlength="48"
+        <input name="name" value="{{ t.name or '' }}" placeholder="{{ tr('Theme name') }}" maxlength="48"
                class="text-sm border border-slate-300 rounded px-1.5 py-0.5 flex-1" x-init="$nextTick(() => $el.focus())">
-        <button class="text-xs rounded px-2 py-0.5 bg-emerald-600 text-white hover:bg-emerald-700">Save</button>
-        <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+        <button class="text-xs rounded px-2 py-0.5 bg-emerald-600 text-white hover:bg-emerald-700">{{ tr("Save") }}</button>
+        <button type="button" @click="editing = false" class="text-xs text-slate-400 hover:text-slate-600">{{ tr("Cancel") }}</button>
       </form>
     </div>
   </div>
@@ -41,7 +41,7 @@
   {% if t.explanation %}<p class="text-sm text-slate-600 leading-relaxed mb-4">{{ t.explanation }}</p>{% endif %}
 
   <div class="flex items-center gap-2 mb-2">
-    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Core ideas</span>
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ tr("Core ideas") }}</span>
     <span class="text-[10px] rounded-full bg-slate-100 text-slate-500 px-1.5 py-0.5">{{ t.n_ideas }}</span>
   </div>
   <div class="flex flex-wrap gap-1.5 mb-4">
@@ -54,15 +54,15 @@
 
   {% if t.key_papers %}
   <div class="flex items-baseline justify-between mb-1.5">
-    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Binding papers</span>
-    <span class="text-[11px] text-slate-400">{{ t.n_papers }} papers · {{ t.cohesion.shared_papers }} shared</span>
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{{ tr("Binding papers") }}</span>
+    <span class="text-[11px] text-slate-400">{{ t.n_papers }} {{ tr("papers") }} · {{ t.cohesion.shared_papers }} {{ tr("shared") }}</span>
   </div>
   <div class="space-y-1.5 mb-4">
     {% for k in t.key_papers %}
     <a href="/c/{{ slug }}/p/{{ k.id }}" target="_blank" class="flex items-center gap-2 rounded-lg border border-slate-100 hover:bg-slate-50 px-2.5 py-2">
       <span class="text-slate-300 shrink-0">▤</span>
       <span class="flex-1 min-w-0 text-[13px] text-slate-800 truncate">{{ k.title }}</span>
-      <span class="text-[11px] text-slate-400 shrink-0">shared by {{ k.binds }}</span>
+      <span class="text-[11px] text-slate-400 shrink-0">{{ tr("shared by") }} {{ k.binds }}</span>
     </a>
     {% endfor %}
   </div>
@@ -70,7 +70,7 @@
 
   <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
     <button type="button" @click="entityOpen = false; tab = 'papers'; $dispatch('pa-filter-papers', { key: 'theme:{{ t.index }}', dim: 'theme' })"
-            class="rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">Explore this theme →</button>
+            class="rounded-lg bg-slate-900 text-white px-3.5 py-1.5 text-sm hover:bg-slate-700">{{ tr("Explore this theme →") }}</button>
   </div>
 </div>
 {% endif %}
