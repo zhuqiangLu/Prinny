@@ -223,7 +223,7 @@
               <label class="block text-sm font-medium mb-1">{{ tr("Zotero HTTP API base") }}</label>
               <input type="text" name="zotero_api_base" value="{{ config.zotero_api_base }}"
                      class="w-full rounded border border-slate-300 px-3 py-2" />
-              <p class="text-xs text-slate-500 mt-1">{{ tr("Preferred when reachable; SQLite is the fallback.") }}</p>
+              <p class="text-xs text-slate-500 mt-1">{{ tr("Host and port only (e.g. http://localhost:23119) — don't add /api; the app appends it. Preferred when reachable; SQLite is the fallback.") }}</p>
             </div>
             <p class="text-xs text-slate-500">{{ tr("The app reads from Zotero and never writes back (Zotero's local API is read-only). Use ⇅ Pull on a collection to bring in newly-added papers.") }}</p>
           </div>

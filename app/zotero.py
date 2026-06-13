@@ -15,6 +15,7 @@ Zotero is running (it keeps the DB locked under WAL otherwise).
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import urllib.parse
@@ -25,6 +26,19 @@ from pathlib import Path
 import httpx
 
 from .config import load_config
+
+log = logging.getLogger("paper_agent.zotero")
+
+
+def _strip_api_suffix(base: str) -> str:
+    """Normalize a Zotero base URL to host:port only. Every request path we build already
+    starts with ``/api/...``, so strip a trailing ``/api`` or ``/api/`` a user may have
+    pasted (Zotero's local API lives at /api, so it's a natural thing to append) — otherwise
+    the URL doubles to ``/api/api/...`` and 404s."""
+    b = (base or "").rstrip("/")
+    if b.lower().endswith("/api"):
+        b = b[:-4]
+    return b
 
 
 @dataclass(frozen=True)
@@ -128,8 +142,12 @@ class LocalZotero(ZoteroBackend):
         write_api_key: str | None = None,
     ) -> None:
         self.sqlite_path = sqlite_path
-        self.api_base = api_base.rstrip("/")
-        self.write_api_base = (write_api_base or api_base).rstrip("/")
+        # The base is host:port ONLY — every request path we build already starts with
+        # "/api/...". Tolerate a user who pasted ".../api" or ".../api/" (a very natural
+        # mistake, since Zotero's local API lives at /api) so we don't double it into
+        # "/api/api/..." (a 404 that silently degrades to the locked-SQLite fallback).
+        self.api_base = _strip_api_suffix(api_base)
+        self.write_api_base = _strip_api_suffix(write_api_base or api_base)
         self.write_api_key = write_api_key or ""
         self._http_usable: bool | None = None
 
@@ -145,8 +163,13 @@ class LocalZotero(ZoteroBackend):
         try:
             r = self._http_get("/api/users/0/collections", timeout=2.0)
             self._http_usable = r.status_code == 200
-        except httpx.HTTPError:
+            if not self._http_usable:
+                log.warning("Zotero local API at %s/api/users/0/collections returned HTTP %s "
+                            "(expected 200) — falling back to SQLite", self.api_base, r.status_code)
+        except httpx.HTTPError as exc:
             self._http_usable = False
+            log.warning("Zotero local API at %s not reachable (%s) — falling back to SQLite",
+                        self.api_base, exc)
         return self._http_usable
 
     def _http_get(self, path: str, timeout: float) -> httpx.Response:

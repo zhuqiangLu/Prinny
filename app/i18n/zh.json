@@ -246,6 +246,7 @@
   "Highlight scheme": "高亮方案",
   "Highlights": "高亮",
   "Home": "首页",
+  "Host and port only (e.g. http://localhost:23119) — don't add /api; the app appends it. Preferred when reachable; SQLite is the fallback.": "仅填主机和端口（如 http://localhost:23119）——不要加 /api，应用会自动追加。可达时优先使用；SQLite 为回退方案。",
   "Hottest (7d)": "最活跃（7天）",
   "How the paper sub-agent keeps conversation memory. Try both.": "论文子智能体如何保留对话记忆。两种都试试。",
   "How this note can ground the wiki. auto = reasoning if you wrote in Thoughts, else seed.": "此笔记如何为 wiki 提供依据。auto = 若你在“想法”中写了内容则视为推理依据，否则视为种子。",
