@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import sqlite3
 import urllib.parse
@@ -141,7 +142,9 @@ class LocalZotero(ZoteroBackend):
         write_api_base: str | None = None,
         write_api_key: str | None = None,
     ) -> None:
-        self.sqlite_path = sqlite_path
+        # Expand ~ / env vars: SQLite's file: URI does NOT expand them, so a config value
+        # like "~/Zotero/zotero.sqlite" would fail with "unable to open database file".
+        self.sqlite_path = str(Path(os.path.expandvars(sqlite_path)).expanduser()) if sqlite_path else sqlite_path
         # The base is host:port ONLY — every request path we build already starts with
         # "/api/...". Tolerate a user who pasted ".../api" or ".../api/" (a very natural
         # mistake, since Zotero's local API lives at /api) so we don't double it into
