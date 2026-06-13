@@ -426,6 +426,10 @@
                 const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
                 if (!line) continue;
                 let ev; try { ev = JSON.parse(line); } catch (e) { continue; }
+                // Follow the stream ONLY if you're already at the bottom — if you've
+                // scrolled up to re-read earlier text, don't yank you back down. Measure
+                // BEFORE appending the new token (which grows the scroll height).
+                const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
                 // The activity row keeps animating until 'done' — so narration text the
                 // agent emits before a tool call never looks like a finished answer.
                 if (ev.type === "status") statusEl.textContent = ev.text;
@@ -436,7 +440,7 @@
                   const dbg = document.getElementById("dbg-session");   // debug: live session id
                   if (dbg && ev.session_id) dbg.textContent = ev.session_id;
                 }
-                log.scrollTop = log.scrollHeight;
+                if (stick) log.scrollTop = log.scrollHeight;
               }
             }
           } catch (e) {
@@ -447,6 +451,9 @@
             this.sending = false; this.controller = null;
           }
           stopWorking();                                  // stream ended: remove the activity row
+          // Was the reader following the bottom when the stream ended? (captured before the
+          // markdown re-render below changes the height) — only then do we scroll at the end.
+          const stickEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
           // re-render the final text as markdown (same renderer as server-side bubbles)
           if (acc.trim()) {
             try {
@@ -461,7 +468,7 @@
           // Offer "capture to thoughts" on a completed reply (same affordance as the
           // collection chat's server-rendered turns; streamed paper replies are built here).
           if (acc.trim() && !aborted) this.appendCapture(a, acc);
-          log.scrollTop = log.scrollHeight;
+          if (stickEnd) log.scrollTop = log.scrollHeight;
         },
         // Append the "＋ capture to thoughts" widget after a streamed assistant bubble.
         // Built in JS (DOM, so the reply text needn't be HTML-escaped) and handed to
