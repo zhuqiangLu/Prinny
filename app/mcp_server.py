@@ -368,7 +368,7 @@ _TOOLS = [
      "description": "What the user previously KEPT vs PASSED ON for suggested reading in this collection. Use it to prefer accepted-like papers, deprioritise rejected-like ones, and avoid re-pitching.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "list_papers",
-     "description": "List the collection's papers as {id, ref, title}. Pass `id` to get_paper_context / read_paper_text to open a specific paper; use `ref` to cite supporting_papers in propose_wiki_edit.",
+     "description": "List the collection's papers as {id, ref, title}. `id` is an INTERNAL handle for get_paper_context / read_paper_text and must NEVER be shown to the user — always refer to a paper by its title. Use `ref` to cite supporting_papers in propose_wiki_edit.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "propose_wiki_edit",
      "description": ("Propose a TYPED edit to this collection's wiki. This does NOT write — it creates a "

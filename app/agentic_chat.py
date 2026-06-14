@@ -46,6 +46,8 @@ _SYSTEM = (
     "get_unreasoned_seeds, list_papers, get_paper_context, read_paper_text) when the question "
     "genuinely needs specifics from THIS collection — then ground claims in what you find and "
     "say when it isn't covered. Prefer the fewest tool calls that answer the question (often zero). "
+    "ALWAYS refer to a paper by its TITLE (a short form is fine) when talking to the user — NEVER "
+    "show the internal numeric paper id (e.g. '245'); those ids are ONLY for calling tools. "
     "CROSS-PAPER questions (contradictions, connections, similarities among papers the user has "
     "read): use search_fragments (it covers notes, thoughts, AND highlights) and list_papers to "
     "find candidate papers, then get_paper_context(paper_id) to read the user's notes/highlights "
