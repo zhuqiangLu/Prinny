@@ -1,18 +1,14 @@
 # Prinny — your paper reading sidekick 
 <img width="2170" height="725" alt="image" src="https://github.com/user-attachments/assets/2eac12c2-99df-4ad4-ba64-236d14559f06" />
 
-**Turn papers, highlights, notes, and conversations into a living mental model of your research field.**
 
-> **Philosophical anchor:** the LLM is an editor and research assistant, not the author.
-> It never silently rewrites your wiki — every agent-proposed change is something **you
-> review and accept**. You do the reading; the tool helps you organize what you wrote and
-> surfaces gaps.
-
+> I often forget why I highlighted something in a paper, and sometimes I even get lost in my own notes. My note-taking is pretty inconsistent, with ideas and observations scattered across different papers and conversations. On top of that, good research ideas are surprisingly easy to forget after a few days. So I built this small tool to help me organize highlights, notes, and ideas, while also recommending papers worth reading next.
 
 **Key Feature**
 * You read papers, agents organize your highlights and ideas
 * Continuously update your wiki based on your understanding
 * Find the papers best match for your interest
+* 有中文界面
   
 
 **TODO**  
