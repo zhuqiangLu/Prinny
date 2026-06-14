@@ -2208,15 +2208,17 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
                 "status": "running", "slug": slug,
                 "label": "Drafting note additions" if has_note else "Drafting note"}
             _alog = logging.getLogger("paper_agent.autodraft")
-            title = (paper["title"] or "")[:60]
+            title = (paper["title"] or "")[:40]
             try:
                 fields, error = _draft_note_fields(
                     slug, paper_id, paper["title"], existing=note if has_note else None)
                 if error:
                     # Don't fail silently — the job vanishing with no review looked like a bug.
-                    # Surface it; don't set the watermark, so a transient timeout can retry.
+                    # Surface WHY (trimmed) + log it; don't set the watermark so a transient
+                    # timeout can retry.
                     _alog.warning("autodraft error for paper %s: %s", paper_id, error)
-                    notify.add(f"Note draft failed: {title}", link=f"/c/{slug}/p/{paper_id}",
+                    reason = " ".join(str(error).split())[:80]
+                    notify.add(f"Note draft failed ({reason}): {title}", link=f"/c/{slug}/p/{paper_id}",
                                collection=slug, ok=False)
                     return
                 md = notes_mod._serialize_body(fields.get("summary", ""),
