@@ -156,8 +156,33 @@ class _CliEngine(Engine):
             raise EngineError(f"{self.name}: timed out after {CLI_TIMEOUT}s.") from exc
         logger.info("%s exit=%s latency=%.2fs", self.name, proc.returncode, time.monotonic() - t0)
         if proc.returncode != 0:
-            raise EngineError(f"{self.name} exited {proc.returncode}: {proc.stderr.strip()[:300]}")
+            # claude-code with --output-format stream-json often writes the actual error to
+            # STDOUT (a {"type":"result","is_error":true,...} line), leaving stderr empty —
+            # so fall back to stdout (and the last JSON error message in it) for a useful detail.
+            detail = proc.stderr.strip() or _last_stream_error(proc.stdout) or proc.stdout.strip()
+            raise EngineError(f"{self.name} exited {proc.returncode}: {detail[:300]}")
         return proc
+
+
+def _last_stream_error(stdout: str) -> str:
+    """Pull a human error out of claude-code stream-json stdout when the process failed:
+    the `result` line's error text, or the last assistant/system text. '' if none."""
+    msg = ""
+    for line in (stdout or "").splitlines():
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("is_error") or ev.get("type") == "result":
+            cand = ev.get("result") or ev.get("error") or ev.get("message") or ""
+            if isinstance(cand, dict):
+                cand = cand.get("message") or cand.get("text") or ""
+            if cand:
+                msg = str(cand)
+    return msg.strip()
 
 
 def claude_turn_events(lines):
