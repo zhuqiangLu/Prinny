@@ -1052,6 +1052,19 @@ def settings_post(
     old_colors = [c["color"] for c in config_highlight_scheme()]
     scheme = _parse_highlight_scheme(highlight_scheme)
     new_colors = [c["color"] for c in scheme]
+    # Critical paths/bases must never be CLEARED by a save — an empty value here means
+    # "not submitted" (e.g. a partial POST), not "blank it out". Blanking the Zotero
+    # path/base or the PDF store breaks reads (e.g. SQLite opens an empty DB → "no such
+    # table: items"). Empty → keep the current value (or fall back to the default).
+    from .config import DEFAULTS as _DEFAULTS
+    _cur = load_config()
+
+    def _keep(val: str, key: str) -> str:
+        return val.strip() if (val or "").strip() else (_cur.get(key) or _DEFAULTS.get(key, ""))
+
+    zotero_sqlite_path = _keep(zotero_sqlite_path, "zotero_sqlite_path")
+    zotero_api_base = _keep(zotero_api_base, "zotero_api_base")
+    pdf_store_path = _keep(pdf_store_path, "pdf_store_path")
     cfg = save_config(
         {
             "engine": engine,
