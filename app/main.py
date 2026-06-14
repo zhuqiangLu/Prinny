@@ -37,6 +37,7 @@ from . import (
     note_drafts,
     notes as notes_mod,
     paper_chat,
+    planner,
     pdf_store,
     sync as sync_mod,
     theme as theme_mod,
@@ -130,6 +131,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    planner.start_scheduler()        # daily plan draft (due-check loop; no-op under pytest)
 
 
 @app.on_event("shutdown")
@@ -281,6 +283,41 @@ def _topic_sources(t: dict) -> list[dict]:
         out.append({"slug": cs, "name": c["name"] if c else cs,
                     "n_papers": (c.get("paper_count") if c else None), "missing": c is None})
     return out
+
+
+@app.get("/planner", response_class=HTMLResponse)
+def planner_page(request: Request) -> HTMLResponse:
+    """Personal meta-journal + daily plan (standalone, top-level)."""
+    job = planner.get_job()
+    if job and job.get("status") in ("done", "failed"):
+        planner.clear_job()
+    return templates.TemplateResponse(request, "planner.html", {
+        "today": planner.get_day(),
+        "history": planner.recent_days(14, before=planner._today()),
+        "job": job if job and job.get("status") == "running" else None,
+        "job_error": job.get("error") if job and job.get("status") == "failed" else None,
+        "planner_hour": planner._planner_hour(),
+    })
+
+
+@app.post("/planner/log")
+def planner_save_log(text: str = Form("")) -> RedirectResponse:
+    planner.save_log(planner._today(), text)
+    return RedirectResponse("/planner", status_code=303)
+
+
+@app.post("/planner/generate")
+def planner_generate(request: Request) -> RedirectResponse:
+    planner.start_plan_async()
+    return RedirectResponse("/planner", status_code=303)
+
+
+@app.get("/planner/status", response_class=JSONResponse)
+def planner_status() -> JSONResponse:
+    job = planner.get_job()
+    if not job:
+        return JSONResponse({"status": "idle"})
+    return JSONResponse({"status": job.get("status", "running"), "error": job.get("error")})
 
 
 @app.get("/topics", response_class=HTMLResponse)

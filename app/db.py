@@ -22,6 +22,17 @@ from .config import DB_PATH, ensure_dirs
 log = logging.getLogger("paper_agent.db")
 
 SCHEMA = """
+-- Personal meta-journal / daily planner (standalone, top-level). Isolated: it reads
+-- collections/topics read-only but they never reference it. One row per calendar day:
+-- the user's freeform log + the agent's drafted plan (JSON).
+CREATE TABLE IF NOT EXISTS planner_days (
+  day TEXT PRIMARY KEY,                          -- 'YYYY-MM-DD' (local date)
+  log TEXT NOT NULL DEFAULT '',                  -- the user's freeform note for the day
+  plan TEXT NOT NULL DEFAULT '',                 -- agent-drafted plan as JSON ({} when none)
+  generated_at TIMESTAMP,                        -- when the plan was last drafted (NULL = never)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- App-owned paper store. id is the app identity used in URLs and all FKs.
 CREATE TABLE IF NOT EXISTS papers (
   id INTEGER PRIMARY KEY,

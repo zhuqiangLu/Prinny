@@ -177,6 +177,11 @@
     </div>
     {% set NAV_MAX = 6 %}
     <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-5 text-sm">
+      <div>
+        <a href="/planner" class="flex items-center gap-2 rounded-md px-2 py-1.5 {% if request.url.path == '/planner' %}bg-slate-100 font-medium text-slate-900{% else %}text-slate-700 hover:bg-slate-100{% endif %}">
+          <span class="text-violet-400 shrink-0">☷</span><span class="flex-1 truncate">{{ tr("Planner") }}</span>
+        </a>
+      </div>
       <div x-data="{ more: (function(){ try { return localStorage.getItem('pa.moreCol') === '1'; } catch(e){ return false; } })() }">
         <div class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{{ tr("Collections") }}</div>
         {% for c in nav.collections %}

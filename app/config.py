@@ -100,6 +100,9 @@ DEFAULTS: dict[str, str] = {
     # UI + agent-output language (Settings → Appearance). 'en' | 'zh'. Drives both the
     # translated UI chrome and the language the agent writes its prose in.
     "language": "en",
+    # Daily planner: hour of day (0-23, local time) after which the scheduled agent drafts
+    # the day's plan (it catches up whenever the app is next running past this hour).
+    "planner_hour": "18",
     # Branding / appearance (editable in Settings → Appearance).
     "app_name": "Prinny",
     "workspace_title": "Research Workspace",
