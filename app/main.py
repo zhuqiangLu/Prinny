@@ -285,31 +285,43 @@ def _topic_sources(t: dict) -> list[dict]:
     return out
 
 
-@app.get("/planner", response_class=HTMLResponse)
-def planner_page(request: Request) -> HTMLResponse:
-    """Personal meta-journal + daily plan (standalone, top-level)."""
+def _planner_ctx() -> dict:
+    """Shared context for the planner page + its HTMX body fragment. Observes a finished
+    job once (then clears it) so a re-render returns to the idle state."""
     job = planner.get_job()
     if job and job.get("status") in ("done", "failed"):
         planner.clear_job()
-    return templates.TemplateResponse(request, "planner.html", {
+    return {
         "today": planner.get_day(),
         "history": planner.recent_days(14, before=planner._today()),
         "job": job if job and job.get("status") == "running" else None,
         "job_error": job.get("error") if job and job.get("status") == "failed" else None,
         "planner_hour": planner._planner_hour(),
-    })
+    }
 
 
-@app.post("/planner/log")
-def planner_save_log(text: str = Form("")) -> RedirectResponse:
+@app.get("/planner", response_class=HTMLResponse)
+def planner_page(request: Request) -> HTMLResponse:
+    """Personal meta-journal + daily plan — full page (the popup loads /planner/panel)."""
+    return templates.TemplateResponse(request, "planner.html", _planner_ctx())
+
+
+@app.get("/planner/panel", response_class=HTMLResponse)
+def planner_panel(request: Request) -> HTMLResponse:
+    """The planner body, for the popup (and HTMX re-renders)."""
+    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
+
+
+@app.post("/planner/log", response_class=HTMLResponse)
+def planner_save_log(request: Request, text: str = Form("")) -> HTMLResponse:
     planner.save_log(planner._today(), text)
-    return RedirectResponse("/planner", status_code=303)
+    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
 
 
-@app.post("/planner/generate")
-def planner_generate(request: Request) -> RedirectResponse:
+@app.post("/planner/generate", response_class=HTMLResponse)
+def planner_generate(request: Request) -> HTMLResponse:
     planner.start_plan_async()
-    return RedirectResponse("/planner", status_code=303)
+    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
 
 
 @app.get("/planner/status", response_class=JSONResponse)
