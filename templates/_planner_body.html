@@ -1,69 +1,112 @@
-{# Planner body — swappable fragment used by the full page AND the popup. Forms hx-post
-   and swap THIS div (#planner-body) in place, so it works identically in either context. #}
-{% macro plan_block(plan) %}
-  {% if plan.done %}
-  <div class="mb-3"><div class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 mb-1">✓ {{ tr("Done") }}</div>
-    <ul class="space-y-0.5 text-sm text-slate-700">{% for x in plan.done %}<li>· {{ x }}</li>{% endfor %}</ul></div>
+{# Planner body — a daily board: a META card (live activity + agent roll-up) on top, then
+   the user's own cards. Swappable fragment (#planner-body): every form hx-posts and swaps
+   this div, so it works identically in the popup and the full page. #}
+
+{% macro meta_card(d, is_today) %}
+{% set s = d.summary %}
+{% set a = d.activity %}
+<section class="rounded-xl border border-violet-200 bg-violet-50/40 p-4 mb-3">
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-sm font-semibold text-slate-900">✦ {{ tr("Daily summary") }}</span>
+    <span class="text-xs text-slate-400">{{ d.day }}</span>
+    {% if is_today %}
+    <form hx-post="/planner/generate" hx-target="#planner-body" hx-swap="outerHTML" hx-disabled-elt="find button" class="ml-auto">
+      <button class="rounded border border-violet-300 bg-white text-violet-700 px-2.5 py-1 text-xs hover:bg-violet-50 disabled:opacity-50"
+              title="{{ tr('Roll up today from your cards + activity (also runs automatically each evening).') }}">✦ {{ s.summary and tr("Refresh") or tr("Summarize today") }}</button>
+    </form>
+    {% endif %}
+  </div>
+  {# live, deterministic activity — always shown #}
+  <div class="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-2">
+    <span class="rounded-full bg-white border border-slate-200 px-2 py-0.5">📄 <b class="tabular-nums">{{ a.papers_read }}</b> {{ tr("papers read") }}</span>
+    {% for c in a.collections %}
+    <a href="/c/{{ c.slug }}" class="rounded-full bg-white border border-slate-200 px-2 py-0.5 hover:bg-slate-50">{{ c.name }}: {{ c.read }}{{ tr(" read") }}{% if c.added %} · {{ c.added }}{{ tr(" added") }}{% endif %}</a>
+    {% endfor %}
+  </div>
+  {% if s.summary %}<p class="text-sm text-slate-700 leading-snug mb-2">{{ s.summary }}</p>{% endif %}
+  {% if s.collections %}
+  <div class="mb-2"><div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-0.5">{{ tr("By collection") }}</div>
+    <ul class="space-y-0.5 text-sm text-slate-700">{% for c in s.collections %}<li>· {% if c.slug %}<a href="/c/{{ c.slug }}" class="font-medium text-violet-700 hover:underline">{{ c.name }}</a>{% else %}<b>{{ c.name }}</b>{% endif %} — {{ c.note }}</li>{% endfor %}</ul></div>
   {% endif %}
-  {% if plan.leftover %}
-  <div class="mb-3"><div class="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1">↻ {{ tr("Leftover") }}</div>
-    <ul class="space-y-0.5 text-sm text-slate-700">{% for x in plan.leftover %}<li>· {{ x.text }}{% if x.age_days and x.age_days > 1 %} <span class="text-[11px] text-amber-600">({{ tr("slipping") }} {{ x.age_days }}d)</span>{% endif %}</li>{% endfor %}</ul></div>
+  {% if s.experiments %}
+  <div class="mb-2"><div class="text-[11px] font-semibold uppercase tracking-wide text-sky-700 mb-0.5">🧪 {{ tr("Experiment plan") }}</div>
+    <ul class="space-y-0.5 text-sm text-slate-700">{% for x in s.experiments %}<li>· {{ x }}</li>{% endfor %}</ul></div>
   {% endif %}
-  {% if plan.blocked %}
-  <div class="mb-3"><div class="text-[11px] font-semibold uppercase tracking-wide text-rose-700 mb-1">⛔ {{ tr("Blocked") }}</div>
-    <ul class="space-y-0.5 text-sm text-slate-700">{% for x in plan.blocked %}<li>· {{ x }}</li>{% endfor %}</ul></div>
+  {% if s.leftover %}
+  <div class="mb-2"><div class="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-0.5">↻ {{ tr("Leftover") }}</div>
+    <ul class="space-y-0.5 text-sm text-slate-700">{% for x in s.leftover %}<li>· {{ x.text }}{% if x.age_days and x.age_days > 1 %} <span class="text-[11px] text-amber-600">({{ tr("slipping") }} {{ x.age_days }}d)</span>{% endif %}</li>{% endfor %}</ul></div>
   {% endif %}
-  {% if plan.tomorrow %}
-  <div class="mb-3"><div class="text-[11px] font-semibold uppercase tracking-wide text-violet-700 mb-1">→ {{ tr("Tomorrow") }}</div>
-    <ul class="space-y-0.5 text-sm text-slate-800">{% for x in plan.tomorrow %}<li>· {{ x }}</li>{% endfor %}</ul></div>
+  {% if s.tomorrow %}
+  <div><div class="text-[11px] font-semibold uppercase tracking-wide text-violet-700 mb-0.5">→ {{ tr("Tomorrow") }}</div>
+    <ul class="space-y-0.5 text-sm text-slate-800">{% for x in s.tomorrow %}<li>· {{ x }}</li>{% endfor %}</ul></div>
   {% endif %}
-  {% if plan.reading %}
-  <div><div class="text-[11px] font-semibold uppercase tracking-wide text-sky-700 mb-1">📖 {{ tr("Reading") }}</div>
-    <ul class="space-y-1 text-sm text-slate-700">{% for x in plan.reading %}
-      <li>· {% if x.link %}<a href="{{ x.link }}" class="text-violet-700 hover:underline">{{ x.label }}</a>{% else %}{{ x.label }}{% endif %}{% if x.why %} <span class="text-xs text-slate-500">— {{ x.why }}</span>{% endif %}</li>
-    {% endfor %}</ul></div>
-  {% endif %}
+  {% if is_today and not s.summary %}<p class="text-xs text-slate-400">{{ tr("Add a card or read some papers, then Summarize today for the roll-up.") }}</p>{% endif %}
+</section>
+{% endmacro %}
+
+{% macro card_view(c) %}
+{% set KCLR = {'plan':'border-violet-200 bg-violet-50/40', 'note':'border-slate-200 bg-white'} %}
+<div x-data="{ edit: {{ 'true' if (not c.title and not c.body) else 'false' }} }"
+     class="flex-1 min-w-[200px] max-w-[300px] rounded-lg border {{ KCLR.get(c.kind, KCLR['note']) }} p-3">
+  <div x-show="!edit" x-cloak>
+    <div class="flex items-start gap-2 mb-1">
+      <span class="text-[10px] rounded px-1.5 py-0.5 {{ c.kind == 'plan' and 'bg-violet-100 text-violet-700' or 'bg-slate-100 text-slate-600' }}">{{ c.kind == 'plan' and tr('plan') or tr('note') }}</span>
+      {% if c.title %}<p class="text-sm font-medium text-slate-900 leading-snug flex-1 min-w-0">{{ c.title }}</p>{% endif %}
+      <button type="button" @click="edit = true" class="ml-auto text-slate-300 hover:text-slate-700 text-xs" title="{{ tr('Edit') }}">✎</button>
+    </div>
+    {% if c.body %}<p class="text-sm text-slate-700 leading-snug whitespace-pre-wrap">{{ c.body }}</p>{% endif %}
+  </div>
+  <form x-show="edit" x-cloak hx-post="/planner/card/{{ c.id }}" hx-target="#planner-body" hx-swap="outerHTML" class="space-y-1.5">
+    <div class="flex items-center gap-1.5">
+      <select name="kind" class="rounded border border-slate-300 px-1 py-0.5 text-[11px]">
+        <option value="note" {% if c.kind != 'plan' %}selected{% endif %}>{{ tr("note") }}</option>
+        <option value="plan" {% if c.kind == 'plan' %}selected{% endif %}>{{ tr("plan") }}</option>
+      </select>
+      <input name="title" value="{{ c.title }}" placeholder="{{ tr('Title (optional)') }}" class="flex-1 min-w-0 rounded border border-slate-300 px-1.5 py-0.5 text-xs">
+    </div>
+    <textarea name="body" rows="3" class="w-full rounded border border-slate-300 px-1.5 py-1 text-sm">{{ c.body }}</textarea>
+    <div class="flex items-center gap-1.5">
+      <button class="rounded bg-slate-900 text-white px-2 py-0.5 text-xs hover:bg-slate-700">{{ tr("Save") }}</button>
+      <button type="button" x-show="{{ 'false' if (not c.title and not c.body) else 'true' }}" @click="edit = false" class="text-xs text-slate-400 hover:text-slate-700">{{ tr("Cancel") }}</button>
+      <button type="button" hx-post="/planner/card/{{ c.id }}/delete" hx-target="#planner-body" hx-swap="outerHTML"
+              class="ml-auto text-xs text-slate-300 hover:text-rose-600" title="{{ tr('Delete') }}">🗑</button>
+    </div>
+  </form>
+</div>
 {% endmacro %}
 
 <div id="planner-body">
   {% if job_error %}
-  <div class="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-    <b>{{ tr("Planning failed.") }}</b> {{ job_error }}
+  <div class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+    <b>{{ tr("Summary failed.") }}</b> {{ job_error }}
   </div>
   {% endif %}
 
-  {# today's freeform log #}
-  <section class="rounded-xl border border-slate-200 bg-white p-5 mb-4">
-    <label class="block text-xs font-medium text-slate-500 mb-1">{{ tr("Today's log") }} <span class="text-slate-400">· {{ today.day }}</span></label>
-    <form hx-post="/planner/log" hx-target="#planner-body" hx-swap="outerHTML" id="planner-log-form">
-      <textarea name="text" rows="6" spellcheck="false"
-                placeholder="{{ tr('e.g. Read 2 papers on KV-cache compression; drafted the beliefs for long-video; still need to run the ablation; blocked on the dataset download.') }}"
-                class="w-full rounded border border-slate-300 px-3 py-2 text-sm">{{ today.log }}</textarea>
-    </form>
-    <div class="mt-2 flex items-center gap-2">
-      <button type="submit" form="planner-log-form" class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700">{{ tr("Save") }}</button>
-      <form hx-post="/planner/generate" hx-target="#planner-body" hx-swap="outerHTML" hx-disabled-elt="find button">
-        <button class="rounded border border-violet-300 bg-white text-violet-700 px-3 py-1.5 text-sm hover:bg-violet-50 disabled:opacity-50"
-                title="{{ tr('Summarize today and draft tomorrow now (also runs automatically each evening). Save first if you just edited.') }}">✦ {{ tr("Plan now") }}</button>
-      </form>
-      <span class="ml-auto text-xs text-slate-400">{{ tr("Auto-drafts daily after") }} {{ "%02d:00"|format(planner_hour) }}</span>
-    </div>
-  </section>
+  {{ meta_card(today, True) }}
 
-  {# drafting overlay — polls status, then re-fetches THIS body in place (no full reload) #}
   {% if job %}
   <div x-data="{ poll() { const t = setInterval(async () => { try { const r = await fetch('/planner/status'); const d = await r.json(); if (d.status !== 'running') { clearInterval(t); if (window.htmx) htmx.ajax('GET', '/planner/panel', { target: '#planner-body', swap: 'outerHTML' }); } } catch(e){} }, 1500); } }" x-init="poll()"
-       class="mb-4 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
-    <span class="inline-block animate-spin">⟳</span> {{ tr("Drafting your plan…") }}
+       class="mb-3 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+    <span class="inline-block animate-spin">⟳</span> {{ tr("Rolling up your day…") }}
   </div>
   {% endif %}
 
-  {# today's drafted plan #}
-  {% if today.plan and (today.plan.done or today.plan.leftover or today.plan.blocked or today.plan.tomorrow or today.plan.reading) %}
-  <section class="rounded-xl border border-violet-200 bg-violet-50/40 p-5 mb-4">
-    <h2 class="text-sm font-semibold text-slate-900 mb-3">✦ {{ tr("Plan") }} <span class="font-normal text-slate-400">· {{ tr("agent draft — edit your log and re-plan anytime") }}</span></h2>
-    {{ plan_block(today.plan) }}
-  </section>
+  {# the user's own cards #}
+  <div class="flex items-center gap-2 mb-2">
+    <h2 class="text-sm font-semibold text-slate-700">{{ tr("Cards") }}</h2>
+    <form hx-post="/planner/card" hx-target="#planner-body" hx-swap="outerHTML" hx-vals='{"kind":"note"}' class="ml-auto">
+      <button class="rounded border border-slate-300 bg-white text-slate-700 px-2.5 py-1 text-xs hover:bg-slate-50">＋ {{ tr("Note") }}</button>
+    </form>
+    <form hx-post="/planner/card" hx-target="#planner-body" hx-swap="outerHTML" hx-vals='{"kind":"plan"}'>
+      <button class="rounded border border-violet-300 bg-white text-violet-700 px-2.5 py-1 text-xs hover:bg-violet-50">＋ {{ tr("Plan") }}</button>
+    </form>
+  </div>
+  {% if today.cards %}
+  <div class="flex flex-wrap gap-2 mb-4">
+    {% for c in today.cards %}{{ card_view(c) }}{% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-400 mb-4">{{ tr("No cards yet. Add a note or plan for today.") }}</p>
   {% endif %}
 
   {# earlier days #}
@@ -74,12 +117,13 @@
     <div x-data="{ open: false }" class="rounded-lg border border-slate-200 bg-white">
       <button @click="open = !open" class="w-full flex items-center gap-2 px-4 py-2.5 text-left">
         <span class="text-sm font-medium text-slate-700">{{ d.day }}</span>
-        <span class="text-xs text-slate-400 truncate flex-1">{{ d.log|truncate(80) }}</span>
+        <span class="text-xs text-slate-400 flex-1 truncate">{{ d.summary.summary or (d.cards|length ~ ' cards') }}</span>
+        <span class="text-[11px] text-slate-400 tabular-nums">📄 {{ d.activity.papers_read }}</span>
         <span class="text-slate-400" x-text="open ? '▴' : '▾'"></span>
       </button>
       <div x-show="open" x-cloak class="border-t border-slate-100 px-4 py-3">
-        {% if d.log %}<p class="text-sm text-slate-700 whitespace-pre-wrap mb-3">{{ d.log }}</p>{% endif %}
-        {% if d.plan %}{{ plan_block(d.plan) }}{% endif %}
+        {% if d.summary.summary or d.summary.collections or d.summary.experiments or d.summary.tomorrow %}{{ meta_card(d, False) }}{% endif %}
+        {% if d.cards %}<div class="flex flex-wrap gap-2">{% for c in d.cards %}{{ card_view(c) }}{% endfor %}</div>{% endif %}
       </div>
     </div>
     {% endfor %}

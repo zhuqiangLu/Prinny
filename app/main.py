@@ -297,35 +297,54 @@ def _planner_ctx() -> dict:
         planner.clear_job()
     return {
         "today": planner.get_day(),
-        "history": planner.recent_days(14, before=planner._today()),
+        "history": planner.recent_summaries(14, before=planner._today()),
         "job": job if job and job.get("status") == "running" else None,
         "job_error": job.get("error") if job and job.get("status") == "failed" else None,
         "planner_hour": planner._planner_hour(),
     }
 
 
+def _planner_body(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
+
+
 @app.get("/planner", response_class=HTMLResponse)
 def planner_page(request: Request) -> HTMLResponse:
-    """Personal meta-journal + daily plan — full page (the popup loads /planner/panel)."""
+    """Personal daily board — full page (the popup loads /planner/panel)."""
     return templates.TemplateResponse(request, "planner.html", _planner_ctx())
 
 
 @app.get("/planner/panel", response_class=HTMLResponse)
 def planner_panel(request: Request) -> HTMLResponse:
-    """The planner body, for the popup (and HTMX re-renders)."""
-    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
+    """The planner body, for the popup (and all HTMX re-renders)."""
+    return _planner_body(request)
 
 
-@app.post("/planner/log", response_class=HTMLResponse)
-def planner_save_log(request: Request, text: str = Form("")) -> HTMLResponse:
-    planner.save_log(planner._today(), text)
-    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
+@app.post("/planner/card", response_class=HTMLResponse)
+def planner_add_card(request: Request, kind: str = Form("note")) -> HTMLResponse:
+    """Create a new (empty) card for today — it renders in edit mode for the user to fill in."""
+    planner.add_card(planner._today(), kind=kind)
+    return _planner_body(request)
+
+
+@app.post("/planner/card/{cid}", response_class=HTMLResponse)
+def planner_edit_card(request: Request, cid: int, title: str = Form(""),
+                      body: str = Form(""), kind: str = Form("")) -> HTMLResponse:
+    planner.update_card(cid, title, body, kind or None)
+    return _planner_body(request)
+
+
+@app.post("/planner/card/{cid}/delete", response_class=HTMLResponse)
+def planner_delete_card(request: Request, cid: int) -> HTMLResponse:
+    planner.delete_card(cid)
+    return _planner_body(request)
 
 
 @app.post("/planner/generate", response_class=HTMLResponse)
 def planner_generate(request: Request) -> HTMLResponse:
-    planner.start_plan_async()
-    return templates.TemplateResponse(request, "_planner_body.html", _planner_ctx())
+    """Draft (or refresh) today's meta summary from the cards + the day's activity."""
+    planner.start_summary_async()
+    return _planner_body(request)
 
 
 @app.get("/planner/status", response_class=JSONResponse)

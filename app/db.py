@@ -27,11 +27,25 @@ SCHEMA = """
 -- the user's freeform log + the agent's drafted plan (JSON).
 CREATE TABLE IF NOT EXISTS planner_days (
   day TEXT PRIMARY KEY,                          -- 'YYYY-MM-DD' (local date)
-  log TEXT NOT NULL DEFAULT '',                  -- the user's freeform note for the day
-  plan TEXT NOT NULL DEFAULT '',                 -- agent-drafted plan as JSON ({} when none)
-  generated_at TIMESTAMP,                        -- when the plan was last drafted (NULL = never)
+  log TEXT NOT NULL DEFAULT '',                  -- legacy v1 freeform note (unused by the card UI)
+  plan TEXT NOT NULL DEFAULT '',                 -- agent meta-summary as JSON ({} when none)
+  generated_at TIMESTAMP,                        -- when the meta summary was last drafted (NULL = never)
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- The day's individual cards — each a small note or plan the user creates. The agent's
+-- meta summary (planner_days.plan) rolls these up alongside the day's workspace activity.
+CREATE TABLE IF NOT EXISTS planner_cards (
+  id INTEGER PRIMARY KEY,
+  day TEXT NOT NULL,                             -- 'YYYY-MM-DD' (local date) this card belongs to
+  kind TEXT NOT NULL DEFAULT 'note',             -- 'note' | 'plan'
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_planner_cards_day ON planner_cards(day);
 
 -- App-owned paper store. id is the app identity used in URLs and all FKs.
 CREATE TABLE IF NOT EXISTS papers (

@@ -1,4 +1,4 @@
-"""Personal daily planner (app/planner.py): journal store, agent draft, scheduler gate."""
+"""Personal daily planner (app/planner.py, v2 cards): card CRUD, activity, meta summary."""
 import json
 
 import pytest
@@ -12,75 +12,75 @@ def plandb(tmp_path, monkeypatch):
     db = tmp_path / "app.sqlite"
     init_db(db)
     monkeypatch.setattr(planner, "connect", lambda: connect(db))
+    # activity_today + digest read collections/topics; stub them to an empty workspace.
+    monkeypatch.setattr(planner, "activity_today",
+                        lambda day=None: {"papers_read": 0, "read_titles": [], "collections": []})
+    monkeypatch.setattr(planner, "_state_digest", lambda: "")
     return db
 
 
-def test_save_and_get_log(plandb):
-    planner.save_log("2026-06-14", "did X; still need Y")
-    d = planner.get_day("2026-06-14")
-    assert d["log"] == "did X; still need Y" and d["plan"] == {} and d["generated_at"] is None
+def test_card_crud(plandb):
+    cid = planner.add_card("2026-06-15", kind="plan", title="T", body="run ablation")
+    cards = planner.list_cards("2026-06-15")
+    assert len(cards) == 1 and cards[0]["kind"] == "plan" and cards[0]["body"] == "run ablation"
+    planner.update_card(cid, "T2", "run ablation today", kind="note")
+    c = planner.list_cards("2026-06-15")[0]
+    assert c["title"] == "T2" and c["kind"] == "note" and "today" in c["body"]
+    planner.delete_card(cid)
+    assert planner.list_cards("2026-06-15") == []
 
 
-def test_recent_days_orders_newest_first(plandb):
-    for day in ("2026-06-10", "2026-06-12", "2026-06-11"):
-        planner.save_log(day, f"log {day}")
-    days = [d["day"] for d in planner.recent_days(10)]
-    assert days == ["2026-06-12", "2026-06-11", "2026-06-10"]
-    assert planner.recent_days(10, before="2026-06-11") == \
-        planner.recent_days(10, before="2026-06-11")  # deterministic
-    assert [d["day"] for d in planner.recent_days(10, before="2026-06-11")] == ["2026-06-10"]
+def test_add_card_defaults_unknown_kind_to_note(plandb):
+    planner.add_card("2026-06-15", kind="bogus")
+    assert planner.list_cards("2026-06-15")[0]["kind"] == "note"
 
 
-def test_generate_plan_empty_when_no_logs(plandb, monkeypatch):
-    monkeypatch.setattr(planner, "_state_digest", lambda: "")
-    res = planner.generate_plan("2026-06-14")
+def test_generate_summary_empty_with_no_cards_no_activity(plandb):
+    res = planner.generate_summary("2026-06-15")
     assert res["empty"] is True and res["ok"] is False
 
 
-def test_generate_plan_drafts_and_stores(plandb, monkeypatch):
-    planner.save_log("2026-06-14", "read 2 papers; still need the ablation")
-    monkeypatch.setattr(planner, "_state_digest", lambda: "COLLECTIONS:\n- LV (/c/lv; 5 papers)")
+def test_generate_summary_rolls_up_cards(plandb, monkeypatch):
+    planner.add_card("2026-06-15", kind="plan", title="", body="finish the KV-cache ablation")
+    monkeypatch.setattr(planner, "activity_today",
+                        lambda day=None: {"papers_read": 3, "read_titles": ["A", "B", "C"],
+                                          "collections": [{"slug": "lv", "name": "LV", "read": 3, "added": 1}]})
     captured = {}
     def fake_complete(messages, model=None):
-        captured["sys"] = messages[0]["content"]
         captured["user"] = messages[-1]["content"]
         return json.dumps({
-            "done": ["read 2 papers"],
-            "leftover": [{"text": "run the ablation", "age_days": 1}],
-            "blocked": [],
-            "tomorrow": ["run the ablation", "skim LV new papers"],
-            "reading": [{"label": "LV collection", "why": "5 papers", "link": "/c/lv"}],
-            "junk_field": "ignored",
-        })
+            "summary": "Read 3 papers; pushed the ablation.",
+            "collections": [{"slug": "lv", "name": "LV", "note": "3 read"}],
+            "experiments": ["Ablate the memory module only"],
+            "leftover": [{"text": "finish the KV-cache ablation", "age_days": 1}],
+            "tomorrow": ["write up results"], "junk": "x"})
     monkeypatch.setattr(planner.llm, "complete", fake_complete)
-    res = planner.generate_plan("2026-06-14")
+    res = planner.generate_summary("2026-06-15")
     assert res["ok"] is True
-    plan = planner.get_day("2026-06-14")["plan"]
-    assert plan["done"] == ["read 2 papers"]
-    assert plan["leftover"][0]["text"] == "run the ablation"
-    assert plan["reading"][0]["link"] == "/c/lv"
-    assert "junk_field" not in plan                      # validator drops unknown keys
-    assert "still need the ablation" in captured["user"]   # the user's log reached the prompt
+    s = planner.get_day("2026-06-15")["summary"]
+    assert s["summary"].startswith("Read 3")
+    assert s["collections"][0]["slug"] == "lv" and s["experiments"]
+    assert "junk" not in s                                  # validator drops unknown keys
+    assert "Papers read today: 3" in captured["user"]       # real activity reached the prompt
+    assert "finish the KV-cache ablation" in captured["user"]   # the card reached the prompt
 
 
-def test_validate_caps_and_coerces():
-    big = {"tomorrow": [f"t{i}" for i in range(50)], "done": ["a", {"text": "b"}, 7, ""]}
-    out = planner._validate(big)
-    assert len(out["tomorrow"]) <= planner._TODO_MAX
-    assert out["done"] == ["a", "b"]                      # str + dict.text kept; junk dropped
+def test_get_day_shape(plandb):
+    d = planner.get_day("2026-06-15")
+    assert set(d) == {"day", "cards", "summary", "generated_at", "activity"}
+    assert d["cards"] == [] and d["summary"] == {} and d["activity"]["papers_read"] == 0
 
 
 def test_scheduler_due_gate(plandb, monkeypatch):
-    # before the configured hour → not due, even with a log
-    planner.save_log(planner._today(), "something")
+    planner.add_card(planner._today(), body="something")
     monkeypatch.setattr(planner, "_planner_hour", lambda: 23)
 
     class _Dt:
         @staticmethod
         def now():
             import datetime as _d
-            return _d.datetime(2026, 6, 14, 9, 0, 0)  # 09:00 < 23:00
+            return _d.datetime(2026, 6, 15, 9, 0, 0)
     monkeypatch.setattr(planner, "datetime", _Dt)
-    assert planner._due() is False
-    monkeypatch.setattr(planner, "_planner_hour", lambda: 8)   # now 09:00 >= 08:00
-    assert planner._due() is True
+    assert planner._due() is False                          # 09:00 < 23:00
+    monkeypatch.setattr(planner, "_planner_hour", lambda: 8)
+    assert planner._due() is True                           # 09:00 >= 08:00, has a card, no summary
