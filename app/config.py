@@ -140,7 +140,7 @@ DEFAULT_HIGHLIGHT_SCHEME = [
     {"color": "#ffd400", "label": "methodology"},
     {"color": "#6fb3ff", "label": "insight"},
     {"color": "#ff0000", "label": "limitation"},
-    {"color": "#00e1ff", "label": "interesting"},
+    {"color": "#c800ff", "label": "motivation"},
 ]
 
 

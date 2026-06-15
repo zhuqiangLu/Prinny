@@ -86,6 +86,53 @@
     return lines;
   }
 
+  // Agent highlights are stored anchorless (page + quoted text, no rects). Best-effort:
+  // locate the quote in the page's text layer and synthesize PDF-point rects the same way a
+  // user selection does. Returns null (→ no overlay; the highlight still lists + cites) on
+  // any miss. Defensive throughout — a bad anchor must never break the page or real highlights.
+  function anchorAgentRects(pv, text) {
+    try {
+      const tl = pv.div.querySelector(".textLayer");
+      if (!tl) return null;
+      let hay = ""; const cmap = [];                 // cmap[i] = {node, off} for hay char i
+      for (const sp of tl.querySelectorAll("span")) {
+        const node = sp.firstChild; const t = sp.textContent || "";
+        if (!node) continue;
+        for (let k = 0; k < t.length; k++) cmap.push({ node, off: k });
+        hay += t;
+      }
+      if (!hay) return null;
+      let ns = ""; const omap = [];                  // normalized → original index
+      for (let i = 0; i < hay.length; i++) {
+        const c = hay[i];
+        if (/\s/.test(c)) { if (ns.endsWith(" ")) continue; ns += " "; omap.push(i); }
+        else { ns += c.toLowerCase(); omap.push(i); }
+      }
+      const needle = (text || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (needle.length < 4) return null;
+      const at = ns.indexOf(needle);
+      if (at < 0) return null;
+      const a0 = cmap[omap[at]], b0 = cmap[omap[Math.min(ns.length - 1, at + needle.length - 1)]];
+      if (!a0 || !b0) return null;
+      const range = win.document.createRange();
+      range.setStart(a0.node, a0.off); range.setEnd(b0.node, b0.off + 1);
+      const vp = pv.viewport;
+      const originEl = pv.canvas || pv.div.querySelector(".canvasWrapper") ||
+                       pv.div.querySelector(".textLayer") || pv.div;
+      const pr = originEl.getBoundingClientRect();
+      const rects = [];
+      for (const cr of range.getClientRects()) {
+        if (cr.width < 1 || cr.height < 1) continue;
+        const x1 = cr.left - pr.left, y1 = cr.top - pr.top;
+        const p1 = vp.convertToPdfPoint(x1, y1);
+        const p2 = vp.convertToPdfPoint(x1 + cr.width, y1 + cr.height);
+        rects.push([Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]),
+                    Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])]);
+      }
+      return rects.length ? rects : null;
+    } catch (e) { return null; }
+  }
+
   function drawPage(pageNumber) {
     const pv = pdfViewer.getPageView(pageNumber - 1);
     if (!pv || !pv.div || !pv.viewport) return;
@@ -94,6 +141,11 @@
     const vp = pv.viewport;
     const mine = annotations.filter((a) => a.page === pageNumber - 1);
     mine.forEach((a) => {
+      // Anchorless agent highlight → try to locate its quote in the text layer (cache the result).
+      if ((!a.position || !(a.position.rects || []).length) && a.by_agent && a.selected_text) {
+        const found = anchorAgentRects(pv, a.selected_text);
+        if (found) { a.position = a.position || {}; a.position.rects = found; }
+      }
       const boxes = (a.position && a.position.rects || []).map((rect) => {
         const [x1, y1, x2, y2] = vp.convertToViewportRectangle(rect);
         return { left: Math.min(x1, x2), top: Math.min(y1, y2), right: Math.max(x1, x2), bottom: Math.max(y1, y2) };
@@ -103,13 +155,18 @@
         d.style.cssText =
           `position:absolute;left:${b.left}px;top:${b.top}px;` +
           `width:${b.right - b.left}px;height:${b.bottom - b.top}px;` +
-          `background:${hexToRgba(a.color || defaultColor, 0.32)};` +
+          // agent highlights: lighter fill + a dashed outline in their color, so they read as
+          // machine-suggested vs. the user's own solid ones.
+          `background:${hexToRgba(a.color || defaultColor, a.by_agent ? 0.18 : 0.32)};` +
           `border-radius:1px;pointer-events:auto;` +
           (a.origin === "app" ? "cursor:pointer;" : "cursor:default;") +
-          (a.origin === "zotero" ? "outline:1px dashed rgba(0,0,0,.35);" : "");
-        d.title = a.origin === "app"
-          ? (a.note_text || a.selected_text || "click to recolor / delete")
-          : (a.note_text || a.selected_text || "");
+          (a.by_agent ? `outline:1.5px dashed ${hexToRgba(a.color || defaultColor, 0.85)};` :
+           (a.origin === "zotero" ? "outline:1px dashed rgba(0,0,0,.35);" : ""));
+        d.title = a.by_agent
+          ? "✦ agent — " + (a.selected_text || "") + " (click to recolor / delete)"
+          : (a.origin === "app"
+             ? (a.note_text || a.selected_text || "click to recolor / delete")
+             : (a.note_text || a.selected_text || ""));
         if (a.origin === "app") {
           d.dataset.annId = a.id;
           d.addEventListener("click", (ev) => { ev.stopPropagation(); openEditPopup(a, ev); });

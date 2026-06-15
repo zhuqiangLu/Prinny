@@ -37,6 +37,7 @@ from . import (
     note_drafts,
     notes as notes_mod,
     paper_chat,
+    paper_summary,
     planner,
     pdf_store,
     sync as sync_mod,
@@ -165,6 +166,9 @@ def _active_jobs() -> list[dict]:
     for job in list(_AUTODRAFT_JOBS.values()):
         if (job or {}).get("status") == "running":
             out.append({"label": job.get("label", "Drafting note"), "slug": job.get("slug", "")})
+    for job in list(paper_summary._JOBS.values()):
+        if (job or {}).get("status") == "running":
+            out.append({"label": job.get("label", "Summarizing"), "slug": job.get("slug", "")})
     return out
 
 
@@ -2277,6 +2281,33 @@ def paper_autodraft(slug: str, paper_id: int) -> Response:
     return Response(status_code=204)
 
 
+@app.post("/c/{slug}/p/{paper_id}/summarize", response_class=JSONResponse)
+def paper_summarize(slug: str, paper_id: int) -> JSONResponse:
+    """Auto-summarize the paper grounded in agent-created, color-coded highlights (one per
+    scheme meaning). Runs in the background; the page polls /summarize/status, then reloads
+    to show the new highlights + the staged summary draft."""
+    _require_collection(slug)
+    p = library.get_paper(paper_id)
+    if p is None:
+        return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+    started = paper_summary.start_async(slug, paper_id, p.get("title", ""))
+    return JSONResponse({"ok": True, "started": started})
+
+
+@app.get("/c/{slug}/p/{paper_id}/summarize/status", response_class=JSONResponse)
+def paper_summarize_status(slug: str, paper_id: int) -> JSONResponse:
+    job = paper_summary.get_job(paper_id)
+    return JSONResponse({"status": (job or {}).get("status", "idle")})
+
+
+@app.post("/c/{slug}/p/{paper_id}/highlights/clear-agent", response_class=JSONResponse)
+def paper_clear_agent_highlights(slug: str, paper_id: int) -> JSONResponse:
+    """Bulk-remove the agent-created highlights for this paper."""
+    _require_collection(slug)
+    n = ann_mod.delete_agent(paper_id, slug)
+    return JSONResponse({"ok": True, "removed": n})
+
+
 @app.post("/c/{slug}/p/{paper_id}/cite-lookup", response_class=JSONResponse)
 def paper_cite_lookup(slug: str, paper_id: int, cite: str = Form("")) -> JSONResponse:
     """Resolve an in-text citation clicked in the PDF to a paper (via this paper's own
@@ -2563,6 +2594,13 @@ def annotations_create(slug: str, paper_id: int, payload: dict = Body(...)) -> d
         note_text=payload.get("note_text", ""),
     )
     return ann_mod.to_client(ann)
+
+
+@app.post("/annotations/{ann_id}/keep", response_class=JSONResponse)
+def annotation_keep(ann_id: int) -> JSONResponse:
+    """Promote an agent highlight to one of your own (counts toward attention/Focus)."""
+    ann = ann_mod.keep_agent(ann_id)
+    return JSONResponse(ann_mod.to_client(ann) if ann else {"error": "not found"})
 
 
 @app.patch("/annotations/{ann_id}")

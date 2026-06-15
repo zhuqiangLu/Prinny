@@ -525,6 +525,12 @@ def _migrate(con: sqlite3.Connection) -> None:
     # also count as an "attention" signal in duplicate merge). Guarded so _migrate is safe
     # on a partial DB (the table exists after SCHEMA in init_db).
     tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "annotations" in tables:
+        acols = {r[1] for r in con.execute("PRAGMA table_info(annotations)")}
+        if "by_agent" not in acols:
+            # Agent-created highlights (auto-summary). Tagged so they render distinctly,
+            # stay out of the user's attention/Focus signal until kept, and are bulk-clearable.
+            con.execute("ALTER TABLE annotations ADD COLUMN by_agent INTEGER NOT NULL DEFAULT 0")
     # notes_fts tokenizer upgrade → trigram (CJK-safe). A pre-existing index built with the
     # default tokenizer can't match Chinese phrases; recreate it with trigram and rebuild
     # from the content table. Idempotent: skipped once the SQL already says 'trigram'.

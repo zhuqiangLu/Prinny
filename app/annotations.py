@@ -70,6 +70,7 @@ def create(
     position_json: str,
     selected_text: str = "",
     note_text: str = "",
+    by_agent: int = 0,
 ) -> dict:
     con = connect()
     try:
@@ -77,10 +78,11 @@ def create(
             """
             INSERT INTO annotations
               (paper_id, collection_slug, origin, kind, color, page,
-               position_json, selected_text, note_text)
-            VALUES (?, ?, 'app', ?, ?, ?, ?, ?, ?)
+               position_json, selected_text, note_text, by_agent)
+            VALUES (?, ?, 'app', ?, ?, ?, ?, ?, ?, ?)
             """,
-            (paper_id, slug, kind, color, page, position_json, selected_text, note_text),
+            (paper_id, slug, kind, color, page, position_json, selected_text, note_text,
+             1 if by_agent else 0),
         )
         con.commit()
         return _row(con, cur.lastrowid)
@@ -141,6 +143,33 @@ def list_all(paper_id: int, slug: str | None = None) -> list[dict]:
     return out
 
 
+def delete_agent(paper_id: int, slug: str) -> int:
+    """Remove all agent-created highlights for a paper (bulk 'clear agent highlights' /
+    re-run before a fresh auto-summary). Returns the count removed."""
+    con = connect()
+    try:
+        cur = con.execute(
+            "DELETE FROM annotations WHERE paper_id=? AND collection_slug=? AND by_agent=1",
+            (paper_id, slug))
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def keep_agent(ann_id: int) -> dict | None:
+    """Promote an agent highlight to a user highlight (flip by_agent → 0) so it counts
+    toward attention/Focus like one you made yourself."""
+    con = connect()
+    try:
+        con.execute("UPDATE annotations SET by_agent=0, updated_at=? WHERE id=? AND origin='app'",
+                    (_now(), ann_id))
+        con.commit()
+        return _row(con, ann_id)
+    finally:
+        con.close()
+
+
 def update(ann_id: int, *, color: str | None = None, note_text: str | None = None) -> dict | None:
     con = connect()
     try:
@@ -188,4 +217,5 @@ def to_client(ann: dict) -> dict:
         "position": position,
         "selected_text": ann.get("selected_text") or "",
         "note_text": ann.get("note_text") or "",
+        "by_agent": bool(ann.get("by_agent")),
     }
