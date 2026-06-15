@@ -1017,6 +1017,26 @@ def log_open(slug: str, paper_id: int, cap: int = 100) -> None:
         con.close()
 
 
+def last_opened(slug: str) -> dict | None:
+    """The most recently opened paper in this collection ({id, title}), for a 'Continue
+    reading' jump. Skips papers that have since been removed. None if nothing logged."""
+    con = connect()
+    try:
+        row = con.execute(
+            """SELECT p.id, p.title FROM reading_log rl
+               JOIN papers p ON p.id = rl.paper_id
+               JOIN collection_papers cp
+                 ON cp.paper_id = rl.paper_id AND cp.collection_slug = rl.collection_slug
+               WHERE rl.collection_slug = ?
+                 AND NOT EXISTS (SELECT 1 FROM pending_removals pr
+                     WHERE pr.collection_slug = rl.collection_slug AND pr.paper_id = rl.paper_id)
+               ORDER BY rl.opened_at DESC, rl.paper_id DESC LIMIT 1""",
+            (slug,)).fetchone()
+        return {"id": row["id"], "title": row["title"]} if row else None
+    finally:
+        con.close()
+
+
 def previous_in_log(slug: str, paper_id: int) -> int | None:
     """The paper one step OLDER than ``paper_id`` in the reading log (browser-style back),
     or None if it's the oldest / not logged."""

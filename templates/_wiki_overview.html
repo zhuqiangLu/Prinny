@@ -914,6 +914,11 @@
               class="rounded-full px-2 py-0.5 text-[11px] font-medium" title="{{ tr('Show only unread papers') }}">
         ○ {{ tr("Unread") }} <span class="tabular-nums">{{ _unread }}</span>
       </button>
+      {% if continue_reading %}
+      <a href="/c/{{ slug }}/p/{{ continue_reading.id }}"
+         class="rounded-full bg-violet-600 text-white px-2.5 py-0.5 text-[11px] font-medium hover:bg-violet-700"
+         title="{{ tr('Resume the last paper you opened') }}: {{ continue_reading.title }}">▶ {{ tr("Continue reading") }}</a>
+      {% endif %}
       {# multi-select removal: tick papers → Remove (→ Graveyard, restorable; syncs to Zotero) #}
       <form x-show="sel.length" x-cloak hx-post="/c/{{ slug }}/wiki/papers/remove" hx-target="#left-panel" hx-swap="innerHTML" hx-disabled-elt="find button"
             hx-confirm="{{ tr('Remove the selected paper(s) from this collection? They go to the Graveyard (restorable) and are removed from Zotero on the next Sync.') }}">

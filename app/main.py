@@ -2962,6 +2962,7 @@ def _wiki_panel(request: Request, slug: str, gaps=None,
          "col": library.get_collection(slug),
          "collection_name": (library.get_collection(slug) or {}).get("name", slug),
          "paper_count": len(library.list_papers(slug)),   # empty → prompt to add, not draft
+         "continue_reading": library.last_opened(slug),    # most-recently-opened → "Continue reading"
          "dup_count": len(library.find_duplicate_groups(slug)),
          "graveyard_count": library.graveyard_count(slug),
          "thesis_undo": wiki.has_thesis_undo(slug),
