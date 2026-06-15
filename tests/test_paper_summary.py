@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from app import paper_summary, annotations as ann_mod, note_drafts, library
+from app import paper_summary, annotations as ann_mod, note_drafts, library, notes
 from app.db import connect, init_db
 
 SCHEME = [
@@ -51,8 +51,12 @@ def test_summarize_creates_highlights_and_draft_and_drops_fabricated(db, monkeyp
 
     draft = note_drafts.get("c", 1)
     assert draft and "compress long-video KV caches" in draft  # the readable summary prose
-    assert "2 key passages highlighted" in draft               # footer notes the highlights
     assert "(p.1)" not in draft                                # NOT a rigid citation list
+    # The draft must round-trip through the accept parser into the note's Summary field
+    # (bare prose would be silently dropped — the bug this guards).
+    parsed = notes._parse_body(draft)
+    assert "compress long-video KV caches" in parsed["summary"]
+    assert not parsed["thoughts"] and not parsed["key_quotes"]  # agent summarizes; thoughts are yours
 
 
 def test_rerun_replaces_agent_highlights(db, monkeypatch):

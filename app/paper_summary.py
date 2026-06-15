@@ -56,14 +56,13 @@ def _page_texts(paper_id: int) -> list[str]:
     return pages
 
 
-def _render_md(summary: str, n_highlights: int) -> str:
-    """The note draft = the readable summary prose, with a small footer noting how many
-    passages were highlighted in the PDF (the highlights are a parallel output, not the
-    summary's structure)."""
-    md = (summary or "").strip()
-    if n_highlights and md:
-        md += f"\n\n*✦ {n_highlights} key passage{'s' if n_highlights != 1 else ''} highlighted in the PDF.*"
-    return md.strip()
+def _render_md(summary: str) -> str:
+    """The staged note draft = the readable summary under a ``## Summary`` section, so the
+    existing accept flow (notes._parse_body) reads it back into the note's Summary field.
+    (Bare prose would be dropped by the parser, which only captures text under ## headers.)
+    Thoughts/Key Quotes are left to the user — the agent summarizes; it doesn't author your take."""
+    from . import notes as notes_mod
+    return notes_mod._serialize_body((summary or "").strip(), "", "")
 
 
 def summarize_from_highlights(slug: str, paper_id: int) -> dict:
@@ -139,7 +138,7 @@ def summarize_from_highlights(slug: str, paper_id: int) -> dict:
         ann_mod.create(slug, paper_id, kind="highlight", color=h["color"], page=h["page"] - 1,
                        position_json=json.dumps({"pageIndex": h["page"] - 1, "rects": []}),
                        selected_text=h["quote"], by_agent=1)
-    note_drafts.stage(slug, paper_id, _render_md(summary, len(hls)))
+    note_drafts.stage(slug, paper_id, _render_md(summary))
     return {"ok": True, "error": None, "n_highlights": len(hls)}
 
 
