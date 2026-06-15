@@ -56,20 +56,14 @@ def _page_texts(paper_id: int) -> list[str]:
     return pages
 
 
-def _render_md(overall: str, points: list[dict], meanings: list[str]) -> str:
-    """Structured summary markdown: an overall TL;DR, then one section per scheme meaning,
-    each bullet citing the highlighted quote + page."""
-    parts = []
-    if overall.strip():
-        parts.append(overall.strip())
-    for m in meanings:
-        pts = [p for p in points if _norm(p["meaning"]) == _norm(m)]
-        if not pts:
-            continue
-        parts.append(f"**{m.capitalize()}**")
-        for p in pts:
-            parts.append(f"- {p['claim']} — “{p['quote']}” (p.{p['page']})")
-    return "\n\n".join(parts).strip()
+def _render_md(summary: str, n_highlights: int) -> str:
+    """The note draft = the readable summary prose, with a small footer noting how many
+    passages were highlighted in the PDF (the highlights are a parallel output, not the
+    summary's structure)."""
+    md = (summary or "").strip()
+    if n_highlights and md:
+        md += f"\n\n*✦ {n_highlights} key passage{'s' if n_highlights != 1 else ''} highlighted in the PDF.*"
+    return md.strip()
 
 
 def summarize_from_highlights(slug: str, paper_id: int) -> dict:
@@ -93,14 +87,15 @@ def summarize_from_highlights(slug: str, paper_id: int) -> dict:
     excerpt = "\n\n".join(f"[p.{i}]\n{t[:_PAGE_CHARS]}"
                           for i, t in enumerate(pages, start=1) if t.strip())
     skill = (agent_skills.skill_body("paper-summary")
-             or 'Summarize the paper. For EACH meaning, quote the exact supporting passage from '
-                'the paper text. STRICT JSON: {"overall":"…","points":[{"meaning","claim","quote","page"}]}.')
+             or 'Read the paper: write a readable summary AND pick a few verbatim passages to '
+                'highlight (one per meaning where supported). STRICT JSON: '
+                '{"summary":"…","highlights":[{"meaning","quote","page"}]}.')
     skill += i18n.output_directive()
     user = (f"PAPER: {paper.get('title','')}\n\n"
-            f"HIGHLIGHT MEANINGS (give a grounded point for each where the paper supports it): "
+            f"HIGHLIGHT MEANINGS (mark a passage for each the paper supports): "
             + ", ".join(meanings) + "\n\n"
             "PAPER TEXT (page-tagged — quote VERBATIM from it, and report the page):\n"
-            + excerpt + "\n\nReturn the STRICT JSON now.")
+            + excerpt + "\n\nWrite the summary and pick the highlights. Return the STRICT JSON now.")
     try:
         out = llm.complete([{"role": "system", "content": skill},
                             {"role": "user", "content": user}], model=agent_model())
@@ -111,19 +106,19 @@ def summarize_from_highlights(slug: str, paper_id: int) -> dict:
     if not data:
         return {"ok": False, "error": "The summarizer produced no usable output.", "n_highlights": 0}
 
-    # Validate + ANTI-HALLUCINATION: keep a point only if its quote actually occurs in the
-    # paper text (so an agent highlight is never placed on an invented passage), and resolve
-    # its real page.
+    # Validate the highlights + ANTI-HALLUCINATION: keep one only if its quote actually occurs
+    # in the paper text (so an agent highlight is never placed on an invented passage), and
+    # resolve its real page. (Accept both 'highlights' and the legacy 'points' key.)
     page_norm = [_norm(t) for t in pages]
-    points: list[dict] = []
-    for pt in (data.get("points") or [])[:_POINTS_MAX]:
+    hls: list[dict] = []
+    seen = set()
+    for pt in (data.get("highlights") or data.get("points") or [])[:_POINTS_MAX]:
         meaning = (pt.get("meaning") or "").strip()
         quote = " ".join((pt.get("quote") or "").split()).strip()
-        claim = (pt.get("claim") or "").strip()
-        if not (meaning and quote and claim) or _norm(meaning) not in color_by:
+        if not (meaning and quote) or _norm(meaning) not in color_by:
             continue
         probe = _norm(quote)[:80]
-        if not probe:
+        if not probe or probe in seen:
             continue
         hinted = pt.get("page") if isinstance(pt.get("page"), int) else 0
         found = hinted if (1 <= hinted <= len(pages) and probe in page_norm[hinted - 1]) else 0
@@ -131,20 +126,21 @@ def summarize_from_highlights(slug: str, paper_id: int) -> dict:
             found = next((i for i, pn in enumerate(page_norm, start=1) if probe in pn), 0)
         if not found:
             continue                         # quote not in the paper → drop (don't highlight a fabrication)
-        points.append({"meaning": meaning, "claim": claim, "quote": quote, "page": found,
-                       "color": color_by[_norm(meaning)]})
+        seen.add(probe)
+        hls.append({"meaning": meaning, "quote": quote, "page": found,
+                    "color": color_by[_norm(meaning)]})
+
+    summary = (data.get("summary") or data.get("overall") or "").strip()
+    if not summary and not hls:
+        return {"ok": False, "error": "The summarizer produced nothing usable.", "n_highlights": 0}
 
     ann_mod.delete_agent(paper_id, slug)     # re-run replaces the prior agent highlights
-    for p in points:
-        ann_mod.create(slug, paper_id, kind="highlight", color=p["color"], page=p["page"] - 1,
-                       position_json=json.dumps({"pageIndex": p["page"] - 1, "rects": []}),
-                       selected_text=p["quote"], by_agent=1)
-    md = _render_md(data.get("overall", ""), points, meanings)
-    if not md.strip():
-        return {"ok": False, "error": "Nothing groundable in the paper for the scheme meanings.",
-                "n_highlights": 0}
-    note_drafts.stage(slug, paper_id, md)
-    return {"ok": True, "error": None, "n_highlights": len(points)}
+    for h in hls:
+        ann_mod.create(slug, paper_id, kind="highlight", color=h["color"], page=h["page"] - 1,
+                       position_json=json.dumps({"pageIndex": h["page"] - 1, "rects": []}),
+                       selected_text=h["quote"], by_agent=1)
+    note_drafts.stage(slug, paper_id, _render_md(summary, len(hls)))
+    return {"ok": True, "error": None, "n_highlights": len(hls)}
 
 
 # --- background job ---------------------------------------------------------

@@ -33,12 +33,12 @@ def test_summarize_creates_highlights_and_draft_and_drops_fabricated(db, monkeyp
              "Our key insight is that frame redundancy is high in long video."]
     monkeypatch.setattr(paper_summary, "_page_texts", lambda pid: pages)
     monkeypatch.setattr(paper_summary.llm, "complete", lambda m, model=None: json.dumps({
-        "overall": "A method to compress long-video KV caches.",
-        "points": [
-            {"meaning": "methodology", "claim": "Contrastive compression", "quote": "contrastive method to compress KV caches", "page": 1},
-            {"meaning": "insight", "claim": "Frames are redundant", "quote": "frame redundancy is high in long video", "page": 2},
-            {"meaning": "motivation", "claim": "INVENTED", "quote": "this sentence is not anywhere in the paper at all", "page": 1},
-            {"meaning": "not_in_scheme", "claim": "x", "quote": "We propose", "page": 1},
+        "summary": "A method to compress long-video KV caches via contrastive selection.",
+        "highlights": [
+            {"meaning": "methodology", "quote": "contrastive method to compress KV caches", "page": 1},
+            {"meaning": "insight", "quote": "frame redundancy is high in long video", "page": 2},
+            {"meaning": "motivation", "quote": "this sentence is not anywhere in the paper at all", "page": 1},
+            {"meaning": "not_in_scheme", "quote": "We propose", "page": 1},
         ]}))
     res = paper_summary.summarize_from_highlights("c", 1)
     assert res["ok"] is True and res["n_highlights"] == 2     # fabricated + off-scheme dropped
@@ -50,16 +50,16 @@ def test_summarize_creates_highlights_and_draft_and_drops_fabricated(db, monkeyp
     assert all((h["selected_text"] or "") for h in hls)
 
     draft = note_drafts.get("c", 1)
-    assert draft and "Methodology" in draft and "Insight" in draft
-    assert "(p.1)" in draft and "(p.2)" in draft               # cites pages
-    assert "INVENTED" not in draft
+    assert draft and "compress long-video KV caches" in draft  # the readable summary prose
+    assert "2 key passages highlighted" in draft               # footer notes the highlights
+    assert "(p.1)" not in draft                                # NOT a rigid citation list
 
 
 def test_rerun_replaces_agent_highlights(db, monkeypatch):
     monkeypatch.setattr(paper_summary, "_page_texts", lambda pid: ["the proposed method works well"])
     monkeypatch.setattr(paper_summary.llm, "complete", lambda m, model=None: json.dumps({
-        "overall": "x", "points": [{"meaning": "methodology", "claim": "c",
-                                     "quote": "the proposed method", "page": 1}]}))
+        "summary": "x", "highlights": [{"meaning": "methodology",
+                                        "quote": "the proposed method", "page": 1}]}))
     paper_summary.summarize_from_highlights("c", 1)
     paper_summary.summarize_from_highlights("c", 1)
     assert len(ann_mod.list_app(1, "c")) == 1                 # not duplicated
