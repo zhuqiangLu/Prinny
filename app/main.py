@@ -551,9 +551,15 @@ def topic_chat(request: Request, slug: str, message: str = Form(""),
             ref = json.loads(ref_json)
         except (ValueError, TypeError):
             ref = None
-    # A card reference chip → name the section in the agent's question; the chat shows
-    # only the clean chip. The topic agent already has the full investigation in context.
-    if ref and ref.get("label"):
+    # A reference chip. An ENTITY chip (experiment/hypothesis/assumption) injects that entity's
+    # full detail so the agent can reason about / edit it; a section chip just names the section.
+    # The topic agent already has the full investigation in context.
+    entity_ref = bool(ref and ref.get("kind") in ("experiment", "hypothesis", "assumption"))
+    if entity_ref:
+        focus = topic_view.focus_entity_block(slug, ref)
+        user_text = (focus + "\n\n" + message.strip()) if focus else message
+        original = _ref_display(ref, message)
+    elif ref and ref.get("label"):
         lbl = ref.get("label", "")
         user_text = (f"Regarding the “{lbl}” of this topic: {message.strip()}" if message.strip()
                      else f"Tell me about the “{lbl}” of this topic.")
@@ -564,10 +570,15 @@ def topic_chat(request: Request, slug: str, message: str = Form(""),
     thread_id = get_or_create_thread(f"topic:{slug}", None)
     history = get_messages(thread_id, limit=10)
     mcp_slug = (t.get("collections") or [None])[0]
-    error, assistant_text = None, ""
+    error, assistant_text, applied = None, "", None
     try:
         msgs = topic_view.chat_messages(slug, history, user_text)
         assistant_text = agentic_chat.answer_topic(msgs, mcp_slug, images=images)
+        # Direct-apply any clear edits the message asked for (experiments/hypotheses/assumptions).
+        if topic_view.chat_edit_relevant(message, ref):
+            res = topic_view.apply_chat_actions(slug, message, assistant_text, ref)
+            if res["any"]:
+                applied = res["changes"]
         add_message(thread_id, "user", original, [{"type": "topic", "id": slug}], images=images)
         add_message(thread_id, "assistant", assistant_text, [])
     except llm.LLMError as exc:
@@ -580,8 +591,18 @@ def topic_chat(request: Request, slug: str, message: str = Form(""),
         {"slug": slug, "user_html": render_md(original, slug), "user_images": images,
          "assistant_html": render_md(assistant_text, slug) if assistant_text else "",
          "assistant_text": assistant_text, "error": error, "suggestion": None,
-         "usage": llm.usage(), "agentic": True},
+         "usage": llm.usage(), "agentic": True, "applied_changes": applied,
+         "applied_undo": f"/t/{slug}/chat/undo-edit" if applied else None},
     )
+
+
+@app.post("/t/{slug}/chat/undo-edit", response_class=HTMLResponse)
+def topic_chat_undo_edit(slug: str) -> HTMLResponse:
+    res = topic_view.undo_chat_edit(slug)
+    if res.get("ok"):
+        msg = i18n.t("✓ Reverted {n} change(s).").format(n=res["n"])
+        return HTMLResponse(f'<span class="text-emerald-700">{msg}</span>')
+    return HTMLResponse(f'<span class="text-slate-500">{res.get("error") or i18n.t("Nothing to undo.")}</span>')
 
 
 @app.post("/t/{slug}/chat/compact")
@@ -813,6 +834,30 @@ def topic_experiment_analyze(request: Request, slug: str, eid: int) -> HTMLRespo
     step; stores the analysis and re-renders the popup."""
     topic_view.analyze_experiment(slug, eid)
     return _experiment_popup(request, slug, eid)
+
+
+@app.post("/t/{slug}/finding/propose", response_class=HTMLResponse)
+def topic_finding_propose(request: Request, slug: str, finding: str = Form(""),
+                          eid: str = Form("")) -> HTMLResponse:
+    """Agent reasons how one experimental finding updates the topic's argument; returns the
+    review fragment (writes nothing). ``eid`` sources the finding from a logged experiment."""
+    if eid.strip():
+        x = topics_mod.get_experiment(slug, eid.strip()) if eid.strip().isdigit() else None
+        if x:
+            finding = (x.get("title", "") + ": " + (x.get("result") or "")).strip(": ").strip()
+            if (x.get("analysis") or "").strip():
+                finding += "\n\nMy reading: " + x["analysis"].strip()
+    res = topic_view.propose_finding(slug, finding)
+    return templates.TemplateResponse(request, "_finding_review.html",
+                                      {"slug": slug, "res": res,
+                                       "interp_html": render_md(res.get("proposal", {}).get("interpretation", ""), "")
+                                       if res.get("ok") and res["proposal"].get("interpretation") else ""})
+
+
+@app.post("/t/{slug}/finding/apply")
+def topic_finding_apply(slug: str) -> RedirectResponse:
+    topic_view.apply_finding(slug)
+    return RedirectResponse(f"/t/{slug}", status_code=303)
 
 
 @app.post("/t/{slug}/notes")

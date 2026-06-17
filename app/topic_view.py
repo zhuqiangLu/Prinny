@@ -311,6 +311,145 @@ def undo_basics_edit(slug: str) -> dict:
     return {"ok": True}
 
 
+# ---- fold a single experimental finding into the topic (propose → apply) -----
+# A finding "not relevant to the current hypothesis" gets reasoned against the whole
+# argument: which hypotheses change status, whether it warrants a NEW hypothesis/assumption,
+# and the finding restated as the researcher's own (un-cited) evidence. Proposes a diff the
+# user reviews; nothing is written until apply_finding. The pending proposal is held in
+# memory keyed by slug (one at a time, latest wins) so apply needn't re-run the LLM.
+_FINDING_PENDING: dict[str, dict] = {}
+_FOLD_STATUS = ("supported", "mixed", "challenged", "unknown")
+
+
+def propose_finding(slug: str, finding: str) -> dict:
+    """One LLM call → a focused proposal for how this finding updates the topic.
+    Returns ``{ok, error, finding, proposal}``; writes nothing (stashes the proposal)."""
+    t = topics.get_topic(slug)
+    if not t:
+        return {"ok": False, "error": "Topic not found."}
+    finding = (finding or "").strip()
+    if len(finding) < 10:
+        return {"ok": False, "error": "Describe the finding first (a sentence or two)."}
+
+    hyps = t.get("hypotheses") or []
+    hyp_lines = "\n".join(f"H{i}: {h['text']} [{h.get('status', 'unknown')}]"
+                          for i, h in enumerate(hyps, 1)) or "(none yet)"
+    asm_lines = "\n".join(f"- {a['text']}" for a in (t.get("assumptions") or [])) or "(none yet)"
+    system = (agent_skills.skill_body("topic-fold-finding")
+              or 'Output STRICT JSON: {interpretation, revise_hypotheses:[{H,new_status,why}], '
+                 'new_hypotheses:[{statement,status}], new_assumptions:[".."], '
+                 'evidence:[{claim,H,direction}]}. Ground everything in the finding; invent nothing.')
+    system += i18n.output_directive()
+    user = (f"RESEARCH QUESTION:\n{t['question']}\n\n"
+            f"CURRENT ASSUMPTIONS:\n{asm_lines}\n\n"
+            f"CURRENT HYPOTHESES:\n{hyp_lines}\n\n"
+            f"THE FINDING (the researcher's own result):\n{finding}\n\n"
+            "Work out how this finding updates the argument. Return the STRICT JSON now.")
+    from .config import agent_model
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}],
+                                          model=agent_model())) or {}
+    except Exception:  # noqa: BLE001
+        return {"ok": False, "error": "The LLM call failed."}
+
+    n = len(hyps)
+
+    def _hidx(v):
+        try:
+            i = int(str(v).strip().lstrip("Hh#")) - 1
+        except (TypeError, ValueError):
+            return None
+        return i if 0 <= i < n else None
+
+    revise = []
+    seen_rev = set()
+    for r in (data.get("revise_hypotheses") or []):
+        if not isinstance(r, dict):
+            continue
+        idx = _hidx(r.get("H"))
+        st = (r.get("new_status") or "").strip()
+        if idx is None or idx in seen_rev or st not in _FOLD_STATUS:
+            continue
+        if st == hyps[idx].get("status"):
+            continue                                # no actual change → skip
+        seen_rev.add(idx)
+        revise.append({"hyp_id": hyps[idx]["id"], "h_label": f"H{idx + 1}",
+                       "text": hyps[idx]["text"], "old_status": hyps[idx].get("status", "unknown"),
+                       "new_status": st, "why": (r.get("why") or "").strip()[:240]})
+
+    new_hyps = []
+    for h in (data.get("new_hypotheses") or [])[:4]:
+        stmt = (h.get("statement") or h.get("text") or "").strip() if isinstance(h, dict) else str(h).strip()
+        if len(stmt) < 8:
+            continue
+        st = (h.get("status") if isinstance(h, dict) else "") or "unknown"
+        new_hyps.append({"statement": stmt[:400], "status": st if st in _FOLD_STATUS else "unknown"})
+
+    new_asm = []
+    for a in (data.get("new_assumptions") or [])[:4]:
+        s = (a if isinstance(a, str) else "").strip()
+        if s:
+            new_asm.append(s[:300])
+
+    evidence = []
+    for e in (data.get("evidence") or [])[:4]:
+        if not isinstance(e, dict):
+            continue
+        claim = (e.get("claim") or "").strip()
+        if len(claim) < 8:
+            continue
+        idx = _hidx(e.get("H"))
+        direction = (e.get("direction") or "supporting").strip()
+        evidence.append({"claim": claim[:400],
+                         "hyp_id": hyps[idx]["id"] if idx is not None else None,
+                         "h_label": f"H{idx + 1}" if idx is not None else None,
+                         "kind": "counter" if direction == "counter" else "supporting"})
+
+    interpretation = (data.get("interpretation") or "").strip()[:400]
+    proposal = {"interpretation": interpretation, "revise": revise,
+                "new_hyps": new_hyps, "new_asm": new_asm, "evidence": evidence}
+    proposal["empty"] = not (revise or new_hyps or new_asm or evidence)
+    _FINDING_PENDING[slug] = {"finding": finding, "proposal": proposal}
+    return {"ok": True, "finding": finding, "proposal": proposal}
+
+
+def apply_finding(slug: str) -> dict:
+    """Apply the pending fold-in proposal: revise hypothesis statuses, add new hypotheses /
+    assumptions / evidence, and record the finding as a topic note so it persists and informs
+    future regenerations. Returns ``{ok, error, counts}``."""
+    pending = _FINDING_PENDING.pop(slug, None)
+    if not pending:
+        return {"ok": False, "error": "Nothing to apply — propose a finding first."}
+    p = pending["proposal"]
+    counts = {"revised": 0, "hypotheses": 0, "assumptions": 0, "evidence": 0}
+    for r in p.get("revise", []):
+        if topics.set_hypothesis_status(slug, r["hyp_id"], r["new_status"]):
+            counts["revised"] += 1
+    for h in p.get("new_hyps", []):
+        if topics.add_hypothesis(slug, h["statement"], status=h.get("status", "unknown")):
+            counts["hypotheses"] += 1
+    for a in p.get("new_asm", []):
+        if topics.add_assumption(slug, a):
+            counts["assumptions"] += 1
+    for e in p.get("evidence", []):
+        # The researcher's own data: filed as supporting/counter but UNVERIFIED (not paper-
+        # grounded), which also makes it survive a regenerate via the preserve-unverified path.
+        if topics.add_evidence(slug, kind=e.get("kind", "supporting"), claim=e["claim"],
+                               hypothesis_id=e.get("hyp_id"), unverified=True):
+            counts["evidence"] += 1
+    # Persist the finding itself so it survives a regenerate and feeds the next investigation.
+    topics.add_note(slug, "Finding: " + pending["finding"])
+    topics.log_event(slug, "finding folded in",
+                     f"{counts['revised']} revised · {counts['hypotheses']} new hyp · "
+                     f"{counts['evidence']} evidence")
+    return {"ok": True, "counts": counts}
+
+
+def has_pending_finding(slug: str) -> bool:
+    return slug in _FINDING_PENDING
+
+
 # ---- v2: generate the full scientific investigation (one LLM call) ----------
 
 _HYP_STATUS = ("supported", "mixed", "challenged", "unknown")
@@ -347,6 +486,29 @@ def _topic_digest(collections: list[str]) -> tuple[str, dict]:
                 lines.append(f"[{ref}] {p.get('title','')}" + (f" — {ab}" if ab else ""))
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks), refmap
+
+
+def _findings_block(t: dict) -> str:
+    """The researcher's OWN evidence: experiment results (+ any agent analysis) and topic
+    notes. Fed into the investigation so hypotheses reflect what the experiments showed —
+    not just what the papers say. These are first-class, un-cited evidence (the user's data)."""
+    lines = []
+    for x in (t.get("experiments") or []):
+        res = (x.get("result") or "").strip()
+        if not res:
+            continue
+        head = x.get("title", "").strip() or "experiment"
+        meta = " · ".join(p for p in (x.get("method", "").strip(), x.get("metric", "").strip()) if p)
+        entry = f"- EXPERIMENT: {head}" + (f" ({meta})" if meta else "") + f"\n  RESULT: {res[:600]}"
+        an = (x.get("analysis") or "").strip()
+        if an:
+            entry += f"\n  MY READING: {an[:400]}"
+        lines.append(entry)
+    for n in (t.get("notes") or [])[:10]:
+        body = (n.get("body") or "").strip()
+        if body:
+            lines.append(f"- NOTE: {body[:500]}")
+    return "\n".join(lines)
 
 
 def _confidence(hypotheses: list[dict]) -> dict | None:
@@ -691,10 +853,15 @@ def generate_investigation(slug: str, stage_cb=None) -> dict:
         return {"ok": False, "error": "Linked collections have no papers/field model yet."}
 
     valid_refs = "\n".join(f"- {r}" for r in list(refmap)[:120]) or "(none)"
+    findings = _findings_block(t)
     user = (f"RESEARCH QUESTION:\n{t['question']}\n\n"
             + (f"DESCRIPTION:\n{t['description']}\n\n" if t.get("description") else "")
             + "LINKED COLLECTIONS (field summaries + papers):\n\n" + digest
-            + "\n\nVALID PAPER REFS (cite evidence ONLY with these exact tokens):\n"
+            + (("\n\nMY OWN FINDINGS (the researcher's experiment results + notes — treat these "
+                "as first-class evidence; they need NO paper citation. Let them shape the "
+                "hypotheses' status and, where a finding points beyond the papers, add a new "
+                "hypothesis or assumption for it):\n" + findings) if findings else "")
+            + "\n\nVALID PAPER REFS (cite paper-based evidence ONLY with these exact tokens):\n"
             + valid_refs)
     stage("drafting")
     system = (agent_skills.skill_body("topic-investigate")
@@ -1020,6 +1187,15 @@ def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
         parts.append(f"EVIDENCE: {ns} supporting, {nc} counter, {nm} missing (gaps).")
     if t.get("unknowns"):
         parts.append("OPEN UNKNOWNS:\n" + "\n".join(f"- {u['text']}" for u in t["unknowns"]))
+    if t.get("experiments"):
+        exl = []
+        for x in t["experiments"]:
+            line = f"- [{x.get('status', 'planned')}] {x['title']}"
+            if (x.get("result") or "").strip():
+                line += f" — result: {x['result'][:300]}"
+            exl.append(line)
+        parts.append("EXPERIMENTS (the researcher's own studies + any logged results):\n"
+                     + "\n".join(exl))
     if rel and rel.get("analyzed") and rel.get("items"):
         parts.append("RELEVANT IDEAS (from the linked collections): "
                      + ", ".join(i["label"] for i in rel["items"][:15]))
@@ -1038,3 +1214,189 @@ def chat_messages(slug: str, history: list[dict], user_msg: str) -> list[dict]:
                  "the fewest tool calls (often zero).")
     return ([{"role": "system", "content": "\n\n".join(parts) + i18n.output_directive()}]
             + history + [{"role": "user", "content": user_msg}])
+
+
+# ---- chat-driven edits to the investigation (direct-apply on a clear command) -------
+# The topic chat can EDIT experiments / hypotheses / assumptions when the user gives a clear
+# instruction. A structured extraction pass turns the message into concrete edits, applied
+# directly (the user opted out of a review card). Guardrails live in code, not the prompt:
+# a logged experiment RESULT is never touched, statuses are clamped, only given ids are valid.
+# Each batch is captured for a one-click Undo.
+_CHAT_EDIT_UNDO: dict[str, list] = {}
+_EXP_STATUS = ("planned", "running", "done")
+
+# Cheap gate: only run the (second) extraction LLM call when the message plausibly asks for an
+# edit, or an entity chip is attached — so ordinary questions stay a single call.
+_EDIT_CUES = ("set ", "mark ", "change ", "update ", "rename ", "rewrite ", "reword ",
+              "make it", "make this", "status", "done", "running", "planned", "supported",
+              "challenged", "mixed", "analyze", "analyse", "analysis", "method", "metric",
+              "rephrase", "edit ", "title")
+
+
+def chat_edit_relevant(user_text: str, ref: dict | None) -> bool:
+    if ref and (ref.get("kind") in ("experiment", "hypothesis", "assumption")):
+        return True
+    low = (user_text or "").lower()
+    return any(c in low for c in _EDIT_CUES)
+
+
+def focus_entity_block(slug: str, ref: dict | None) -> str:
+    """When the user attached an experiment/hypothesis/assumption chip, return a context block
+    with that entity's full detail so the conversational answer can reason about it."""
+    if not (ref and ref.get("kind") in ("experiment", "hypothesis", "assumption") and ref.get("key")):
+        return ""
+    t = topics.get_topic(slug)
+    if not t:
+        return ""
+    try:
+        key = int(ref["key"])
+    except (TypeError, ValueError):
+        return ""
+    if ref["kind"] == "experiment":
+        x = next((e for e in t["experiments"] if e["id"] == key), None)
+        if not x:
+            return ""
+        bits = [f"EXPERIMENT IN FOCUS: {x['title']} (status: {x.get('status', 'planned')})"]
+        if x.get("method"):
+            bits.append(f"Method: {x['method']}")
+        if x.get("metric"):
+            bits.append(f"Metric: {x['metric']}")
+        if (x.get("result") or "").strip():
+            bits.append(f"Logged result: {x['result']}")
+        if (x.get("analysis") or "").strip():
+            bits.append(f"Existing analysis: {x['analysis']}")
+        return "\n".join(bits)
+    if ref["kind"] == "hypothesis":
+        h = next((y for y in t["hypotheses"] if y["id"] == key), None)
+        return f"HYPOTHESIS IN FOCUS: {h['text']} (status: {h.get('status', 'unknown')})" if h else ""
+    a = next((y for y in t["assumptions"] if y["id"] == key), None)
+    return f"ASSUMPTION IN FOCUS: {a['text']}" if a else ""
+
+
+def apply_chat_actions(slug: str, user_text: str, answer_text: str,
+                       ref: dict | None = None) -> dict:
+    """Extract + DIRECTLY APPLY any clear edits the chat message asked for. Returns
+    ``{changes: [human strings], any: bool}``. A logged result is never modified."""
+    t = topics.get_topic(slug)
+    if not t:
+        return {"changes": [], "any": False}
+    exps = {x["id"]: x for x in t["experiments"]}
+    hyps = {h["id"]: h for h in t["hypotheses"]}
+    asms = {a["id"]: a for a in t["assumptions"]}
+    if not (exps or hyps or asms):
+        return {"changes": [], "any": False}
+
+    ent = []
+    if exps:
+        ent.append("EXPERIMENTS:\n" + "\n".join(
+            f"  id={x['id']} | {x['title']} | status={x.get('status', 'planned')}"
+            + (f" | method={x['method']}" if x.get("method") else "")
+            + (f" | metric={x['metric']}" if x.get("metric") else "")
+            + (" | (has a logged result — do NOT edit the result)" if (x.get("result") or "").strip() else "")
+            for x in exps.values()))
+    if hyps:
+        ent.append("HYPOTHESES:\n" + "\n".join(
+            f"  id={h['id']} | {h['text']} | status={h.get('status', 'unknown')}" for h in hyps.values()))
+    if asms:
+        ent.append("ASSUMPTIONS:\n" + "\n".join(f"  id={a['id']} | {a['text']}" for a in asms.values()))
+
+    system = (agent_skills.skill_body("topic-chat-edit")
+              or 'Extract concrete edits the user asked for. STRICT JSON: {experiments:'
+                 '[{id,title?,method?,metric?,status?,analysis?,analyze?}], hypotheses:'
+                 '[{id,text?,status?}], assumptions:[{id,text?}]}. Never touch a result; '
+                 'empty lists if nothing is clearly requested.')
+    system += i18n.output_directive()
+    focus = ""
+    if ref and ref.get("kind") in ("experiment", "hypothesis", "assumption") and ref.get("key"):
+        focus = (f"\n\nFOCUS: the user attached {ref['kind']} id={ref['key']} — “it”/“this” in "
+                 "the message refers to that entity.")
+    user = ("USER MESSAGE:\n" + (user_text or "") + focus + "\n\n"
+            "ASSISTANT REPLY (context for any analysis to save):\n" + (answer_text or "")[:2000]
+            + "\n\nCURRENT ENTITIES (edit ONLY these ids):\n" + "\n\n".join(ent)
+            + "\n\nReturn the STRICT JSON of edits the user clearly asked for.")
+    from .config import agent_model
+    try:
+        data = _extract_json(llm.complete([{"role": "system", "content": system},
+                                           {"role": "user", "content": user}],
+                                          model=agent_model())) or {}
+    except Exception:  # noqa: BLE001
+        return {"changes": [], "any": False}
+
+    changes, undo = [], []
+
+    def _txt(v):
+        return v.strip() if isinstance(v, str) and v.strip() else None
+
+    for e in (data.get("experiments") or []):
+        if not isinstance(e, dict):
+            continue
+        x = exps.get(e.get("id"))
+        if not x:
+            continue
+        kw, before, parts = {}, {}, []
+        for f in ("title", "method", "metric"):
+            nv = _txt(e.get(f))
+            if nv is not None and nv != (x.get(f) or ""):
+                kw[f] = nv; before[f] = x.get(f, ""); parts.append(f"{f}→“{nv[:40]}”")
+        st = (e.get("status") or "").strip()
+        if st in _EXP_STATUS and st != x.get("status"):
+            kw["status"] = st; before["status"] = x.get("status"); parts.append(f"status→{st}")
+        # analysis: explicit text, or analyze:true → save the conversational answer
+        an = _txt(e.get("analysis")) or (answer_text.strip() if e.get("analyze") and answer_text.strip() else None)
+        if an:
+            kw["analysis"] = an; before["analysis"] = x.get("analysis", ""); parts.append("analysis saved")
+        if kw and topics.set_experiment(slug, x["id"], **kw):
+            changes.append(f"Experiment “{x['title'][:40]}”: " + ", ".join(parts))
+            undo.append(("experiment", x["id"], before))
+
+    for h in (data.get("hypotheses") or []):
+        if not isinstance(h, dict):
+            continue
+        y = hyps.get(h.get("id"))
+        if not y:
+            continue
+        st = (h.get("status") or "").strip()
+        txt = _txt(h.get("text"))
+        if st in _HYP_STATUS and st != y.get("status"):
+            if topics.set_hypothesis_status(slug, y["id"], st):
+                changes.append(f"Hypothesis “{y['text'][:40]}”: status→{st}")
+                undo.append(("hypothesis_status", y["id"], y.get("status", "unknown")))
+        if txt and txt != y["text"] and topics.edit_hypothesis(slug, y["id"], txt):
+            changes.append(f"Hypothesis reworded → “{txt[:50]}”")
+            undo.append(("hypothesis_text", y["id"], y["text"]))
+
+    for a in (data.get("assumptions") or []):
+        if not isinstance(a, dict):
+            continue
+        z = asms.get(a.get("id"))
+        txt = _txt(a.get("text")) if z else None
+        if z and txt and txt != z["text"] and topics.edit_assumption(slug, z["id"], txt):
+            changes.append(f"Assumption reworded → “{txt[:50]}”")
+            undo.append(("assumption_text", z["id"], z["text"]))
+
+    if undo:
+        _CHAT_EDIT_UNDO[slug] = undo
+        topics.log_event(slug, "chat edit", f"{len(undo)} change(s) via chat")
+    return {"changes": changes, "any": bool(changes)}
+
+
+def has_chat_edit_undo(slug: str) -> bool:
+    return slug in _CHAT_EDIT_UNDO
+
+
+def undo_chat_edit(slug: str) -> dict:
+    """Revert the last batch of chat-applied edits (restore each field's prior value)."""
+    batch = _CHAT_EDIT_UNDO.pop(slug, None)
+    if not batch:
+        return {"ok": False, "error": "Nothing to undo."}
+    for kind, eid, before in batch:
+        if kind == "experiment":
+            topics.set_experiment(slug, eid, **{k: v for k, v in before.items()})
+        elif kind == "hypothesis_status":
+            topics.set_hypothesis_status(slug, eid, before)
+        elif kind == "hypothesis_text":
+            topics.edit_hypothesis(slug, eid, before)
+        elif kind == "assumption_text":
+            topics.edit_assumption(slug, eid, before)
+    topics.log_event(slug, "chat edit undone", f"{len(batch)} change(s)")
+    return {"ok": True, "n": len(batch)}

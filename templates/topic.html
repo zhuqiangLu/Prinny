@@ -368,9 +368,9 @@
           <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HSTAT.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
           <span class="shrink-0 text-[11px] text-emerald-600 tabular-nums" title="{{ tr('supporting') }}">👍{{ h.support_count }}</span>
           <span class="shrink-0 text-[11px] text-rose-600 tabular-nums" title="{{ tr('counter') }}">👎{{ h.counter_count }}</span>
-          <button type="button" data-ask-label="H{{ loop.index }}: {{ h.text }}"
-                  @click.stop="$dispatch('pa-ask', {kind:'topic', label: $el.dataset.askLabel, icon:'💬'})"
-                  class="shrink-0 text-[11px] text-slate-300 hover:text-violet-600" title="{{ tr('Ask the assistant about this hypothesis') }}">💬</button>
+          <button type="button" data-ask-label="H{{ loop.index }}: {{ h.text }}" data-ask-key="{{ h.id }}"
+                  @click.stop="$dispatch('pa-ask', {kind:'hypothesis', key:$el.dataset.askKey, label: $el.dataset.askLabel, icon:'🧪'})"
+                  class="shrink-0 text-[11px] text-slate-300 hover:text-violet-600" title="{{ tr('Discuss / edit this hypothesis in chat') }}">💬</button>
           <form method="post" action="/t/{{ t.slug }}/hypotheses/{{ h.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600" title="{{ tr('Delete') }}">✕</button></form>
         </div>
         <div class="mt-2 pl-7 flex items-center gap-3 text-[11px] text-slate-400">
@@ -400,9 +400,22 @@
     </div>
 
     {# ============================ EXPERIMENTS ============================ #}
-    <div x-show="tab==='investigation' && inv==='experiments'" x-cloak class="space-y-3" x-data="{ add: false }">
+    <div x-show="tab==='investigation' && inv==='experiments'" x-cloak class="space-y-3" x-data="{ add: false, fold: false }">
       <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2"><span>⚗</span> {{ tr("Experiments") }}
-        <button @click="add=!add" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">＋ {{ tr("Add experiment") }}</button></h2>
+        <button @click="fold=!fold" class="ml-auto text-sm rounded-lg border border-violet-300 bg-white px-3 py-1 font-medium text-violet-700 hover:bg-violet-50">✦ {{ tr("Fold in a finding") }}</button>
+        <button @click="add=!add" class="text-sm rounded-lg border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 hover:bg-slate-50">＋ {{ tr("Add experiment") }}</button></h2>
+
+      {# Fold a finding (often not tied to a hypothesis) into the topic: the agent reasons how
+         it updates the hypotheses / assumptions / evidence, you review, then apply. #}
+      <div x-show="fold" x-cloak class="rounded-xl border border-violet-200 bg-violet-50/40 p-3 space-y-2">
+        <p class="text-[12px] text-slate-600">{{ tr("Describe a result you got — even if it doesn't fit a current hypothesis. The agent will propose how it strengthens or reshapes the topic; you review before anything is saved.") }}</p>
+        <form hx-post="/t/{{ t.slug }}/finding/propose" hx-target="#fold-review" hx-swap="innerHTML" hx-disabled-elt="find button">
+          <textarea name="finding" rows="3" required placeholder="{{ tr('e.g. Adapting only the memory module recovered 94% of full-adaptation accuracy at a tenth of the cost.') }}" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea>
+          <div class="mt-1.5"><button class="rounded-lg bg-violet-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-violet-500">✦ {{ tr("Reason about this") }} <span class="htmx-indicator">…</span></button></div>
+        </form>
+        <div id="fold-review"></div>
+      </div>
+
       <form x-show="add" x-cloak method="post" action="/t/{{ t.slug }}/experiments" class="rounded-lg border border-slate-200 p-3 space-y-2">
         <input name="title" required placeholder="{{ tr('Experiment title (e.g. Adapt memory module only)') }}" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
         <input name="method" placeholder="{{ tr('Method / setup') }}" class="w-full rounded border border-slate-300 px-3 py-1.5 text-sm">
@@ -417,6 +430,9 @@
           <p class="flex-1 text-sm font-medium text-slate-800">{{ x.title }}</p>
           {% if x.result %}<span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 bg-violet-50 text-violet-600 border border-violet-200" title="{{ tr('Result logged') }}{{ ' · ' + tr('analyzed') if x.analysis }}">📋{% if x.analysis %} ✦{% endif %}</span>{% endif %}
           <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
+          <button type="button" data-ask-label="⚗ {{ x.title }}" data-ask-key="{{ x.id }}"
+                  @click.stop="$dispatch('pa-ask', {kind:'experiment', key:$el.dataset.askKey, label:$el.dataset.askLabel, icon:'⚗'})"
+                  class="shrink-0 text-slate-300 hover:text-violet-600" title="{{ tr('Edit / analyze in chat') }}">💬</button>
           <form method="post" action="/t/{{ t.slug }}/experiments/{{ x.id }}/delete" class="shrink-0" @click.stop><button class="text-[11px] text-slate-300 hover:text-rose-600">✕</button></form>
         </div>
         <div class="mt-1.5 pl-6 text-[12px] text-slate-600 space-y-0.5">

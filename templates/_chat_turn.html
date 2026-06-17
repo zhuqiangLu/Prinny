@@ -19,6 +19,26 @@
 {% else %}
 {% with m = {"role": "assistant", "html": assistant_html} %}{% include "_chat_bubble.html" %}{% endwith %}
 
+{# Edits the chat applied to the investigation this turn (direct-apply + one-click Undo). #}
+{% if applied_changes %}
+<div class="flex justify-start" x-data="{ undone: false }">
+  <div class="max-w-[90%] w-full rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5 text-sm">
+    <div class="flex items-center gap-1.5 text-xs font-medium text-emerald-700 mb-1">✓ {{ tr("Applied to your topic") }}</div>
+    <ul class="space-y-0.5 text-[13px] text-slate-700">
+      {% for c in applied_changes %}<li class="flex items-start gap-1.5"><span class="text-emerald-500 mt-0.5">•</span><span>{{ c }}</span></li>{% endfor %}
+    </ul>
+    <div class="mt-1.5 flex items-center gap-2">
+      {% if applied_undo %}
+      <button type="button" x-show="!undone" hx-post="{{ applied_undo }}" hx-target="find .undo-status" hx-swap="innerHTML"
+              @click="undone = true" class="rounded border border-slate-300 text-slate-600 px-2.5 py-0.5 text-xs hover:bg-white">↩ {{ tr("Undo") }}</button>
+      {% endif %}
+      <span class="text-[11px] text-slate-400">{{ tr("Reload the topic to see the changes.") }}</span>
+      <span class="undo-status text-xs"></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# Inline wiki-edit proposals the agent made this turn (propose-and-gate) #}
 {% if proposals %}
 <div class="flex justify-start">

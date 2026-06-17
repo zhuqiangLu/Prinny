@@ -301,10 +301,12 @@ def set_collections(slug: str, collections: list[str]) -> bool:
         con.close()
 
 
-def add_hypothesis(slug: str, text: str) -> bool:
+def add_hypothesis(slug: str, text: str, status: str = "unknown") -> bool:
     text = (text or "").strip()
     if not text:
         return False
+    if status not in ("supported", "mixed", "challenged", "unknown"):
+        status = "unknown"
     con = connect()
     try:
         tid = _topic_id(con, slug)
@@ -312,11 +314,29 @@ def add_hypothesis(slug: str, text: str) -> bool:
             return False
         pos = (con.execute("SELECT COALESCE(MAX(position),0)+1 FROM topic_hypotheses "
                            "WHERE topic_id=?", (tid,)).fetchone()[0])
-        con.execute("INSERT INTO topic_hypotheses(topic_id, text, position) VALUES(?,?,?)",
-                    (tid, text, pos))
+        con.execute("INSERT INTO topic_hypotheses(topic_id, text, status, position) VALUES(?,?,?,?)",
+                    (tid, text, status, pos))
         _touch(con, slug)
         con.commit()
         return True
+    finally:
+        con.close()
+
+
+def set_hypothesis_status(slug: str, hid: int, status: str) -> bool:
+    """Set a hypothesis's status (supported / mixed / challenged / unknown)."""
+    if status not in ("supported", "mixed", "challenged", "unknown"):
+        return False
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        cur = con.execute("UPDATE topic_hypotheses SET status=? WHERE id=? AND topic_id=?",
+                          (status, hid, tid))
+        _touch(con, slug)
+        con.commit()
+        return cur.rowcount > 0
     finally:
         con.close()
 
@@ -434,6 +454,24 @@ def delete_assumption(slug: str, aid: int) -> bool:
     return _delete_row(slug, "topic_assumptions", aid)
 
 
+def edit_assumption(slug: str, aid: int, text: str) -> bool:
+    text = (text or "").strip()
+    if not text:
+        return False
+    con = connect()
+    try:
+        tid = _topic_id(con, slug)
+        if tid is None:
+            return False
+        cur = con.execute("UPDATE topic_assumptions SET text=? WHERE id=? AND topic_id=?",
+                          (text, aid, tid))
+        _touch(con, slug)
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def add_unknown(slug: str, text: str, priority: str = "medium") -> bool:
     if priority not in ("high", "medium", "low"):
         priority = "medium"
@@ -486,7 +524,8 @@ def delete_experiment(slug: str, eid: int) -> bool:
 
 def set_experiment(slug: str, eid: int, *, result: str | None = None,
                    analysis: str | None = None, status: str | None = None,
-                   method: str | None = None, metric: str | None = None) -> bool:
+                   method: str | None = None, metric: str | None = None,
+                   title: str | None = None) -> bool:
     """Update an experiment's logged result / agent analysis / status / plan fields."""
     sets, args = [], []
     if result is not None:
@@ -499,6 +538,8 @@ def set_experiment(slug: str, eid: int, *, result: str | None = None,
         sets.append("method=?"); args.append(method)
     if metric is not None:
         sets.append("metric=?"); args.append(metric)
+    if title is not None and title.strip():
+        sets.append("title=?"); args.append(title.strip())
     if not sets:
         return False
     con = connect()

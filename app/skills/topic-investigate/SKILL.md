@@ -39,6 +39,13 @@ Question → Assumptions → Hypotheses → Evidence → Unknowns → Experiment
 - **Ground in the linked collections.** Build the argument from what those papers actually
   say. The question may point beyond them — that's exactly what `missing_evidence` and
   `unknowns` capture.
+- **The researcher's own findings are first-class evidence.** If a `MY OWN FINDINGS` block is
+  given (their experiment results + notes), weigh it as heavily as the literature. It does NOT
+  need a paper citation. Let it move a hypothesis's `status`/counts; if a finding supports or
+  challenges a claim the papers don't cover, encode it as a hypothesis (with the right status)
+  and/or an `assumption`, and raise the open question it implies in `unknowns`. A finding that
+  points somewhere none of the current hypotheses cover SHOULD become a new hypothesis — don't
+  force it onto an ill-fitting one. Never invent a result the researcher didn't report.
 - **next_steps**: 3-5 concrete actions ("Find papers on X", "Review counter-evidence for H2",
   "Design experiment for H3"), each `{title, detail}`.
 - **key_terms**: 5-10 short noun-phrase chips drawn from the assumptions/hypotheses/evidence.

@@ -313,3 +313,144 @@ def test_generate_async_job_lifecycle(topicdb, monkeypatch):
     assert topics.get_topic(slug)["hypotheses"]                # it actually wrote
     topic_view.clear_generate_job(slug)
     assert topic_view.get_generate_job(slug) is None
+
+
+def test_regenerate_feeds_logged_findings_into_the_prompt(topicdb, monkeypatch):
+    """Part A: a regenerate must SHOW the agent the researcher's own experiment results +
+    notes (not just the papers), so the investigation can reflect what the experiments found."""
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "H1", "status": "unknown", "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[],
+        experiments=[{"title": "Ablate KV cache", "method": "m", "metric": "acc", "hyp_index": 0}],
+        generated={"generated_at": "2026-01-01 00:00:00"})
+    eid = topics.get_topic(slug)["experiments"][0]["id"]
+    topics.set_experiment(slug, eid, result="accuracy dropped only 2% under 4x compression")
+    topics.add_note(slug, "Latency is the real bottleneck, not accuracy.")
+
+    seen = {}
+
+    def capture(messages, model=None):
+        seen["user"] = messages[-1]["content"]
+        return json.dumps({"assumptions": ["A."], "hypotheses": [
+            {"statement": "Compression is cheap.", "status": "supported",
+             "support_count": 1, "counter_count": 0}]})
+
+    monkeypatch.setattr(topic_view.llm, "complete", capture)
+    assert topic_view.generate_investigation(slug)["ok"] is True
+    assert "MY OWN FINDINGS" in seen["user"]
+    assert "accuracy dropped only 2%" in seen["user"]      # the experiment result is fed in
+    assert "Latency is the real bottleneck" in seen["user"]  # and the note
+
+
+def test_fold_finding_proposes_then_applies(topicdb, monkeypatch):
+    """Part B: a tangential finding → the agent proposes status revisions + a NEW hypothesis +
+    evidence; nothing is written until apply, which also records the finding as a durable note."""
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=[],
+        hypotheses=[{"text": "Full-model adaptation is required.", "status": "unknown",
+                     "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[],
+        generated={"generated_at": "2026-01-01 00:00:00"})
+    hid = topics.get_topic(slug)["hypotheses"][0]["id"]
+
+    payload = {
+        "interpretation": "Memory-only adaptation suffices.",
+        "revise_hypotheses": [{"H": 1, "new_status": "challenged", "why": "Memory-only worked."}],
+        "new_hypotheses": [{"statement": "The backbone need not adapt at test time.", "status": "mixed"}],
+        "new_assumptions": ["Adaptation cost is dominated by the backbone."],
+        "evidence": [{"claim": "Memory-only adaptation recovered 94% accuracy.", "H": 1, "direction": "counter"}],
+    }
+    monkeypatch.setattr(topic_view.llm, "complete", lambda *a, **k: json.dumps(payload))
+
+    res = topic_view.propose_finding(slug, "Adapting only the memory module recovered 94% of accuracy.")
+    assert res["ok"] is True and res["proposal"]["empty"] is False
+    assert res["proposal"]["revise"][0]["new_status"] == "challenged"
+    # Nothing written yet.
+    t0 = topics.get_topic(slug)
+    assert t0["hypotheses"][0]["status"] == "unknown" and len(t0["hypotheses"]) == 1
+    assert not t0["evidence"] and not t0["notes"]
+
+    assert topic_view.apply_finding(slug)["ok"] is True
+    t = topics.get_topic(slug)
+    assert next(h for h in t["hypotheses"] if h["id"] == hid)["status"] == "challenged"  # revised
+    assert any(h["text"].startswith("The backbone need not adapt") for h in t["hypotheses"])  # new hyp
+    assert any(a["text"].startswith("Adaptation cost") for a in t["assumptions"])             # new assumption
+    ev = t["evidence"][0]
+    assert ev["kind"] == "counter" and ev["unverified"] and ev["paper_id"] is None            # own data
+    assert any(n["body"].startswith("Finding:") for n in t["notes"])                          # durable note
+    assert topic_view.has_pending_finding(slug) is False                                      # consumed
+
+
+def test_fold_finding_drops_a_too_short_finding(topicdb):
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    assert topic_view.propose_finding(slug, "nope")["ok"] is False
+    assert topic_view.apply_finding(slug)["ok"] is False         # nothing pending
+
+
+def test_chat_edit_relevance_gate():
+    assert topic_view.chat_edit_relevant("set the status to done", None) is True
+    assert topic_view.chat_edit_relevant("hello, what's the weather", None) is False
+    # an attached entity chip always triggers extraction
+    assert topic_view.chat_edit_relevant("anything", {"kind": "experiment", "key": "1"}) is True
+
+
+def test_chat_applies_edits_directly_and_protects_result(topicdb, monkeypatch):
+    """Part 2: a clear chat instruction edits experiments/hypotheses/assumptions directly,
+    saves an analysis from the answer, NEVER overwrites a logged result, and is undoable."""
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=["The backbone dominates cost."],
+        hypotheses=[{"text": "Full-model adaptation is required.", "status": "unknown",
+                     "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[],
+        experiments=[{"title": "Adapt memory only", "method": "m", "metric": "acc", "hyp_index": 0}],
+        generated={"generated_at": "2026-01-01 00:00:00"})
+    t0 = topics.get_topic(slug)
+    eid, hid = t0["experiments"][0]["id"], t0["hypotheses"][0]["id"]
+    aid = t0["assumptions"][0]["id"]
+    topics.set_experiment(slug, eid, result="ACCURACY=94%")          # the user's own data
+
+    payload = {
+        "experiments": [{"id": eid, "status": "done", "analyze": True,
+                         "result": "FABRICATED — must be ignored"}],
+        "hypotheses": [{"id": hid, "status": "challenged"}],
+        "assumptions": [{"id": aid, "text": "The backbone dominates adaptation cost."}],
+    }
+    monkeypatch.setattr(topic_view.llm, "complete", lambda *a, **k: json.dumps(payload))
+
+    res = topic_view.apply_chat_actions(slug, "mark it done and analyze it; H1 is challenged",
+                                        "Memory-only adaptation suffices, so full adaptation isn't required.",
+                                        {"kind": "experiment", "key": str(eid)})
+    assert res["any"] is True and len(res["changes"]) == 3
+
+    t = topics.get_topic(slug)
+    x = t["experiments"][0]
+    assert x["status"] == "done"
+    assert x["result"] == "ACCURACY=94%"                              # result protected — NOT overwritten
+    assert "Memory-only adaptation suffices" in x["analysis"]         # analysis saved from the answer
+    assert next(h for h in t["hypotheses"] if h["id"] == hid)["status"] == "challenged"
+    assert next(a for a in t["assumptions"] if a["id"] == aid)["text"].endswith("adaptation cost.")
+
+    # Undo restores every field.
+    assert topic_view.has_chat_edit_undo(slug) is True
+    assert topic_view.undo_chat_edit(slug)["ok"] is True
+    t2 = topics.get_topic(slug)
+    assert t2["experiments"][0]["status"] == "planned" and not t2["experiments"][0]["analysis"]
+    assert next(h for h in t2["hypotheses"] if h["id"] == hid)["status"] == "unknown"
+    assert topic_view.has_chat_edit_undo(slug) is False
+
+
+def test_chat_edit_ignores_unknown_ids(topicdb, monkeypatch):
+    slug = topics.create_topic("T", "Q?", collections=["vlms"])
+    topics.replace_investigation(
+        slug, assumptions=[], hypotheses=[{"text": "H1", "status": "unknown",
+                                           "support_count": 0, "counter_count": 0}],
+        evidence=[], unknowns=[], experiments=[],
+        generated={"generated_at": "2026-01-01 00:00:00"})
+    monkeypatch.setattr(topic_view.llm, "complete",
+                        lambda *a, **k: json.dumps({"hypotheses": [{"id": 99999, "status": "done"}]}))
+    res = topic_view.apply_chat_actions(slug, "set status", "", None)
+    assert res["any"] is False                                        # bogus id → nothing applied

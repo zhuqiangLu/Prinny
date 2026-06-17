@@ -14,6 +14,9 @@
       <div class="flex items-center gap-2 mt-1.5 text-[11px] text-slate-400 flex-wrap">
         <span class="rounded px-1.5 py-0.5 {{ EXP.get(x.status,'bg-slate-100 text-slate-600') }}">{{ x.status }}</span>
         {% if hyp %}<span>{{ tr("tests") }} <span class="text-violet-700">H{{ hyp_idx }}</span>: {{ hyp.text|truncate(60) }}</span>{% endif %}
+        <button type="button" data-ask-label="⚗ {{ x.title }}" data-ask-key="{{ x.id }}"
+                @click="hypOpen=false; $dispatch('pa-ask', {kind:'experiment', key:$el.dataset.askKey, label:$el.dataset.askLabel, icon:'⚗'})"
+                class="ml-auto rounded border border-violet-200 bg-violet-50 px-2 py-0.5 text-violet-700 hover:bg-violet-100">💬 {{ tr("Discuss in chat") }}</button>
       </div>
     </div>
   </div>
@@ -50,6 +53,17 @@
   <div class="rounded-lg border border-violet-100 bg-violet-50/40 p-3 prose prose-sm max-w-none text-slate-700 prose-p:my-1 prose-strong:text-slate-900">{{ analysis_html|safe }}</div>
   {% else %}
   <p class="text-[12px] text-slate-400">{{ tr("Log the result, then click") }} <b>{{ tr("Analyze") }}</b> {{ tr("— the agent will judge whether it supports the hypothesis and suggest the next step.") }}</p>
+  {% endif %}
+
+  {# Fold this result into the whole topic (beyond the single hypothesis it was filed under). #}
+  {% if x.result.strip() %}
+  <div class="mt-4 pt-3 border-t border-slate-100">
+    <form hx-post="/t/{{ slug }}/finding/propose" hx-target="#hyp-modal-body" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="eid" value="{{ x.id }}">
+      <button class="rounded-lg border border-violet-200 bg-violet-50 text-violet-700 px-3 py-1.5 text-sm hover:bg-violet-100">✦ {{ tr("Fold this result into the topic") }} <span class="htmx-indicator">…</span></button>
+    </form>
+    <p class="text-[11px] text-slate-400 mt-1">{{ tr("Reason about how this result updates your hypotheses & assumptions — not just the one it tests.") }}</p>
+  </div>
   {% endif %}
 </div>
 {% endif %}

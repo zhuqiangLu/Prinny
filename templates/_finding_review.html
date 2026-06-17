@@ -1,0 +1,90 @@
+{# Fold-in-finding review. Agent proposes how one finding updates the topic; user reviews
+   then Applies (a normal POST → topic reload). Rendered inline (Experiments tab) or into
+   #hyp-modal-body (experiment popup). Nothing is written until Apply. #}
+{% set HS = {'supported':'bg-emerald-100 text-emerald-700','mixed':'bg-amber-100 text-amber-700',
+             'challenged':'bg-rose-100 text-rose-700','unknown':'bg-slate-100 text-slate-500'} %}
+{% if not res.ok %}
+<div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ res.error or tr("The agent couldn't read that finding.") }}</div>
+{% else %}
+{% set p = res.proposal %}
+<div class="space-y-3">
+  <div class="flex items-center gap-2">
+    <span class="text-[11px] font-semibold uppercase tracking-wide text-violet-600">✦ {{ tr("Proposed update from your finding") }}</span>
+    <span class="text-[11px] text-slate-400">{{ tr("Review — nothing is saved until you apply.") }}</span>
+  </div>
+
+  {% if interp_html %}
+  <div class="rounded-lg border border-violet-100 bg-violet-50/50 p-3 prose prose-sm max-w-none text-slate-700 prose-p:my-0.5">{{ interp_html|safe }}</div>
+  {% endif %}
+
+  {% if p.empty %}
+  <p class="text-sm text-slate-500">{{ tr("The agent didn't find a confident change to make from this finding. You can refine the finding and try again, or it's already reflected.") }}</p>
+  {% else %}
+
+  {% if p.revise %}
+  <div>
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("Hypotheses to re-rate") }}</div>
+    <ul class="space-y-1.5">
+      {% for r in p.revise %}
+      <li class="rounded-lg border border-slate-200 p-2.5 text-[13px]">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-semibold text-violet-600">{{ r.h_label }}</span>
+          <span class="text-[10px] rounded px-1.5 py-0.5 {{ HS.get(r.old_status,'bg-slate-100 text-slate-500') }}">{{ r.old_status }}</span>
+          <span class="text-slate-400">→</span>
+          <span class="text-[10px] rounded px-1.5 py-0.5 {{ HS.get(r.new_status,'bg-slate-100 text-slate-500') }}">{{ r.new_status }}</span>
+        </div>
+        <p class="text-slate-700 mt-1 leading-snug">{{ r.text }}</p>
+        {% if r.why %}<p class="text-[12px] text-slate-500 mt-0.5">{{ r.why }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if p.new_hyps %}
+  <div>
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("New hypotheses") }}</div>
+    <ul class="space-y-1.5">
+      {% for h in p.new_hyps %}
+      <li class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5 text-[13px] flex items-start gap-2">
+        <span class="text-emerald-600 mt-0.5">＋</span>
+        <p class="flex-1 text-slate-700 leading-snug">{{ h.statement }}</p>
+        <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ HS.get(h.status,'bg-slate-100 text-slate-500') }}">{{ h.status }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if p.new_asm %}
+  <div>
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("New assumptions") }}</div>
+    <ul class="space-y-1">
+      {% for a in p.new_asm %}<li class="text-[13px] text-slate-700 flex items-start gap-2"><span class="text-slate-400 mt-0.5">＋</span><span>{{ a }}</span></li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if p.evidence %}
+  <div>
+    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">{{ tr("Evidence to file (your own data)") }}</div>
+    <ul class="space-y-1.5">
+      {% for e in p.evidence %}
+      <li class="rounded-lg border border-slate-200 p-2.5 text-[13px] flex items-start gap-2">
+        <span class="shrink-0 text-[10px] rounded px-1.5 py-0.5 {{ 'bg-emerald-100 text-emerald-700' if e.kind=='supporting' else 'bg-rose-100 text-rose-700' }}">{{ tr('supports') if e.kind=='supporting' else tr('counters') }}{% if e.h_label %} {{ e.h_label }}{% endif %}</span>
+        <p class="flex-1 text-slate-700 leading-snug">{{ e.claim }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="flex items-center gap-2 pt-1">
+    <form method="post" action="/t/{{ slug }}/finding/apply">
+      <button class="rounded-lg bg-violet-600 text-white px-4 py-1.5 text-sm font-medium hover:bg-violet-500">{{ tr("Apply to topic") }}</button>
+    </form>
+    <button type="button" @click="location.reload()" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">{{ tr("Cancel") }}</button>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
