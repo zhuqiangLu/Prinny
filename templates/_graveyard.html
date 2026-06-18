@@ -15,18 +15,18 @@
       <label class="flex items-center gap-1.5 text-slate-600 cursor-pointer">
         <input type="checkbox" class="rounded border-slate-300" :checked="all()" @change="toggleAll($event)"
                :indeterminate.camel="sel.length > 0 && !all()">
-        <span x-text="sel.length ? `${sel.length} selected` : 'Select all'"></span>
+        <span x-text="sel.length ? paT('{count} selected', {count: sel.length}) : paT('Select all')"></span>
       </label>
       <div class="ml-auto flex items-center gap-2">
         <button type="button" @click="go('/c/{{ slug }}/graveyard/restore')" :disabled="!sel.length"
                 class="rounded border border-slate-300 bg-white px-3 py-1 hover:bg-slate-50 disabled:opacity-40">↩ {{ tr("Restore") }}</button>
         {% if kind == 'grave' %}
         <button type="button" :disabled="!sel.length"
-                @click="go('/c/{{ slug }}/graveyard/delete', `Permanently delete ${sel.length} paper(s)? They leave the Graveyard and won't be re-added by a Pull. Your notes/chat/highlights are kept and you can still Restore them.`)"
+                @click="go('/c/{{ slug }}/graveyard/delete', paT('Permanently delete {count} paper(s)? They leave the Graveyard and will not be re-added by a Pull. Your notes/chat/highlights are kept and you can still Restore them.', {count: sel.length}))"
                 class="rounded border border-rose-300 bg-white px-3 py-1 text-rose-700 hover:bg-rose-50 disabled:opacity-40">🗑 {{ tr("Permanently delete") }}</button>
         {% else %}
         <button type="button" :disabled="!sel.length"
-                @click="go('/c/{{ slug }}/graveyard/purge', `Purge ${sel.length} paper(s)? This forgets their metadata AND your work (notes, chat, highlights) for good. A future Pull may re-add them as brand-new papers. This cannot be undone.`)"
+                @click="go('/c/{{ slug }}/graveyard/purge', paT('Purge {count} paper(s)? This forgets their metadata AND your work (notes, chat, highlights) for good. A future Pull may re-add them as brand-new papers. This cannot be undone.', {count: sel.length}))"
                 class="rounded border-2 border-rose-500 bg-rose-50 px-3 py-1 font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-40">⚠ {{ tr("Purge metadata") }}</button>
         {% endif %}
       </div>

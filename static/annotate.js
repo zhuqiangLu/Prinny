@@ -45,6 +45,7 @@
   function escapeHtml(s) {
     return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
+  const t = (s, vars) => (window.paT ? window.paT(s, vars) : s);
 
   // --- drawing -------------------------------------------------------------
   function ensureLayer(pageDiv) {
@@ -266,9 +267,9 @@
     editPop.className = "hidden fixed z-50 rounded shadow bg-white border border-slate-200 px-1.5 py-1 flex items-center gap-1";
     editPop.innerHTML =
       PALETTE.map(([hex, name]) => `<button data-color="${hex}" title="${name}" style="background:${hex}" class="w-4 h-4 rounded-sm border border-slate-300"></button>`).join("") +
-      `<button data-act="ask" title="ask the chat about this highlight" class="px-1 text-sm text-slate-600 hover:text-violet-700">💬</button>` +
-      `<button data-act="note" title="note" class="px-1 text-sm text-slate-600 hover:text-slate-900">✎</button>` +
-      `<button data-act="del" title="delete" class="px-1 text-sm text-rose-600 hover:text-rose-800">🗑</button>`;
+      `<button data-act="ask" title="${t("ask the chat about this highlight")}" class="px-1 text-sm text-slate-600 hover:text-violet-700">💬</button>` +
+      `<button data-act="note" title="${t("note")}" class="px-1 text-sm text-slate-600 hover:text-slate-900">✎</button>` +
+      `<button data-act="del" title="${t("delete")}" class="px-1 text-sm text-rose-600 hover:text-rose-800">🗑</button>`;
     document.body.appendChild(editPop);
     editPop.addEventListener("click", async (e) => {
       const a = editPop._ann; if (!a) return;
@@ -297,15 +298,15 @@
     noteEd = document.createElement("div");
     noteEd.className = "hidden fixed z-50 w-64 rounded-lg shadow-lg bg-white border border-slate-200 p-2";
     noteEd.innerHTML =
-      `<textarea data-note rows="3" placeholder="Note… (Enter to save · Shift+Enter = newline · Esc to cancel)"
+      `<textarea data-note rows="3" placeholder="${t("Note… (Enter to save · Shift+Enter = newline · Esc to cancel)")}"
                  class="w-full resize-none rounded border border-slate-300 px-2 py-1 text-sm"></textarea>
        <div data-sw class="hidden mt-1.5 flex items-center gap-1">
-         <span class="text-xs text-slate-400 mr-1">color</span>
+         <span class="text-xs text-slate-400 mr-1">${t("color")}</span>
          ${PALETTE.map(([hex, name]) => `<button type="button" data-color="${hex}" title="${name}" style="background:${hex}" class="w-4 h-4 rounded-sm border border-slate-300"></button>`).join("")}
        </div>
        <div class="mt-2 flex justify-end gap-1 text-sm">
-         <button type="button" data-act="cancel" class="px-2 py-0.5 rounded text-slate-500 hover:bg-slate-100">Cancel</button>
-         <button type="button" data-act="save" class="px-2 py-0.5 rounded bg-slate-900 text-white hover:bg-slate-700">Save</button>
+         <button type="button" data-act="cancel" class="px-2 py-0.5 rounded text-slate-500 hover:bg-slate-100">${t("Cancel")}</button>
+         <button type="button" data-act="save" class="px-2 py-0.5 rounded bg-slate-900 text-white hover:bg-slate-700">${t("Save")}</button>
        </div>`;
     document.body.appendChild(noteEd);
     const ta = noteEd.querySelector("[data-note]");
@@ -444,8 +445,8 @@
         `<button data-act="filter" data-color="${val}" class="px-2 py-0.5 rounded text-xs border ${active ? 'border-slate-800 bg-slate-100 text-slate-800' : 'border-slate-200 text-slate-500'} hover:bg-slate-50">` +
         (color ? `<span class="inline-block w-2.5 h-2.5 rounded-sm align-middle mr-1" style="background:${color}"></span>` : '') + `${label}</button>`;
       let header = `<div class="flex items-center gap-1 flex-wrap mb-3">
-        <span class="text-xs text-slate-400 mr-1">filter:</span>
-        ${chip(!filterColor, 'all', '', '')}
+        <span class="text-xs text-slate-400 mr-1">${t("filter:")}</span>
+        ${chip(!filterColor, t('all'), '', '')}
         ${PALETTE.map(([hex, name]) => chip(filterColor && sameColor({ color: filterColor }, hex), name, hex, hex)).join('')}
       </div>`;
 
@@ -453,22 +454,22 @@
       let batch = '';
       if (selected.size) {
         const sw = PALETTE.map(([hex, name]) =>
-          `<button data-act="batch-color" data-color="${hex}" title="recolor → ${name}" style="background:${hex}" class="inline-block w-4 h-4 rounded-sm border border-slate-300"></button>`).join('');
+          `<button data-act="batch-color" data-color="${hex}" title="${t("recolor")} → ${name}" style="background:${hex}" class="inline-block w-4 h-4 rounded-sm border border-slate-300"></button>`).join('');
         batch = `<div class="flex items-center gap-2 mb-3 p-2 rounded bg-slate-50 border border-slate-200 text-xs">
-          <span class="text-slate-700">${selected.size} selected</span>
-          <span class="text-slate-400 ml-1">recolor:</span>${sw}
-          <button data-act="batch-delete" class="text-rose-600 hover:text-rose-800 ml-1">delete</button>
-          <button data-act="select-clear" class="ml-auto text-slate-500 hover:text-slate-800">clear</button>
+          <span class="text-slate-700">${t("{count} selected", { count: selected.size })}</span>
+          <span class="text-slate-400 ml-1">${t("recolor:")}</span>${sw}
+          <button data-act="batch-delete" class="text-rose-600 hover:text-rose-800 ml-1">${t("delete")}</button>
+          <button data-act="select-clear" class="ml-auto text-slate-500 hover:text-slate-800">${t("clear")}</button>
         </div>`;
       }
 
       if (!shown.length) {
-        const empty = filterColor ? 'No highlights of this color.' : 'No highlights yet. Select text in the PDF to add one.';
+        const empty = filterColor ? t('No highlights of this color.') : t('No highlights yet. Select text in the PDF to add one.');
         list.innerHTML = header + batch + `<p class="text-sm text-slate-400">${empty}</p>`;
         return;
       }
       const selectAllBar = `<label class="flex items-center gap-2 text-xs text-slate-500 mb-2 cursor-pointer select-none">
-        <input type="checkbox" data-act="select-all" class="cursor-pointer"> Select all${filterColor ? ' (filtered)' : ''}</label>`;
+        <input type="checkbox" data-act="select-all" class="cursor-pointer"> ${t("Select all")}${filterColor ? ' ' + t("(filtered)") : ''}</label>`;
       const rows = shown.map((a) => {
         const sw = PALETTE.map(([hex, name]) => `<button data-act="color" data-color="${hex}" title="${name}" style="background:${hex}" class="inline-block w-3 h-3 rounded-sm border border-slate-300"></button>`).join("");
         const checked = selected.has(String(a.id)) ? 'checked' : '';
@@ -477,13 +478,13 @@
             <input type="checkbox" data-act="select" class="mt-1 shrink-0" ${checked}>
             <span class="mt-1 inline-block w-3 h-3 rounded-sm shrink-0" style="background:${a.color || '#ffd400'}"></span>
             <div class="flex-1 min-w-0">
-              <div class="text-sm text-slate-700">${escapeHtml((a.selected_text || '').slice(0, 180)) || '(no text)'}</div>
+              <div class="text-sm text-slate-700">${escapeHtml((a.selected_text || '').slice(0, 180)) || t('(no text)')}</div>
               ${a.note_text ? `<div class="text-sm text-slate-500 italic">${escapeHtml(a.note_text)}</div>` : ''}
               <div class="mt-1 flex items-center gap-3 text-xs text-slate-500">
                 <span>p.${(a.page || 0) + 1}</span>
-                <button data-act="jump" class="hover:text-slate-800">jump</button>
-                <button data-act="note" class="hover:text-slate-800">note</button>
-                <button data-act="delete" class="text-rose-600 hover:text-rose-800">delete</button>
+                <button data-act="jump" class="hover:text-slate-800">${t("jump")}</button>
+                <button data-act="note" class="hover:text-slate-800">${t("note")}</button>
+                <button data-act="delete" class="text-rose-600 hover:text-rose-800">${t("delete")}</button>
                 <span class="flex gap-1 ml-auto">${sw}</span>
               </div>
             </div>
@@ -528,7 +529,7 @@
         redrawPages(pages); render(); return;
       }
       if (act === "batch-delete") {
-        if (!confirm(`Delete ${selected.size} highlight(s)?`)) return;
+        if (!confirm(t("Delete {count} highlight(s)?", { count: selected.size }))) return;
         const pages = new Set();
         for (const id of selected) {
           const a = annotations.find((x) => String(x.id) === id);
@@ -598,7 +599,7 @@
   }
   async function openCitePopup(cite, px, py) {
     const p = ensureCitePop();
-    p.innerHTML = `<div class="text-xs text-slate-500">Looking up <b>${_esc(cite)}</b>…</div>`;
+    p.innerHTML = `<div class="text-xs text-slate-500">${t("Looking up")} <b>${_esc(cite)}</b>…</div>`;
     p.style.left = Math.min(px, window.innerWidth - 300) + "px";
     p.style.top = Math.min(py + 8, window.innerHeight - 220) + "px";
     p.classList.remove("hidden");
@@ -608,33 +609,33 @@
         method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ cite }) });
       d = await r.json();
-    } catch (e) { p.innerHTML = `<div class="text-xs text-rose-600">Lookup failed.</div>`; return; }
-    if (!d.found) { p.innerHTML = `<div class="text-xs text-slate-500">Couldn't resolve “${_esc(d.cite || cite)}” to a paper.</div>`; return; }
-    let html = `<div class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">Citation · ${_esc(d.cite)}</div>`
+    } catch (e) { p.innerHTML = `<div class="text-xs text-rose-600">${t("Lookup failed.")}</div>`; return; }
+    if (!d.found) { p.innerHTML = `<div class="text-xs text-slate-500">${t("Couldn't resolve")} “${_esc(d.cite || cite)}” ${t("to a paper.")}</div>`; return; }
+    let html = `<div class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">${t("Citation")} · ${_esc(d.cite)}</div>`
       + `<div class="text-sm font-semibold text-slate-900 leading-snug">${_esc(d.title)}</div>`
       + `<div class="text-xs text-slate-500 mt-0.5">${_esc(d.authors || "")}${d.year ? " · " + _esc(d.year) : ""}</div>`;
     if (d.arxiv_id) {
-      html += `<div class="text-[11px] text-emerald-700 mt-1.5">✓ on arXiv: ${_esc(d.arxiv_id)}</div>`
-        + `<div class="mt-2 flex items-center gap-2"><button id="cite-add" class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">+ Add to collection</button>`
-        + `<a href="https://arxiv.org/abs/${encodeURIComponent(d.arxiv_id)}" target="_blank" class="text-[11px] text-slate-500 hover:underline">open ↗</a></div>`;
+      html += `<div class="text-[11px] text-emerald-700 mt-1.5">✓ ${t("on arXiv:")} ${_esc(d.arxiv_id)}</div>`
+        + `<div class="mt-2 flex items-center gap-2"><button id="cite-add" class="rounded bg-violet-600 text-white px-2.5 py-1 text-xs hover:bg-violet-700">+ ${t("Add to collection")}</button>`
+        + `<a href="https://arxiv.org/abs/${encodeURIComponent(d.arxiv_id)}" target="_blank" class="text-[11px] text-slate-500 hover:underline">${t("open")} ↗</a></div>`;
     } else {
-      html += `<div class="text-[11px] text-slate-400 mt-1.5">Not found on arXiv.</div>`;
+      html += `<div class="text-[11px] text-slate-400 mt-1.5">${t("Not found on arXiv.")}</div>`;
     }
     p.innerHTML = html;
     const btn = p.querySelector("#cite-add");
     if (btn) btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "Adding…";
+      btn.disabled = true; btn.textContent = t("Adding…");
       try {
         const r = await fetch(`/c/${slug}/p/${key}/cite-add`, {
           method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ arxiv_id: d.arxiv_id, title: d.arxiv_title || d.title,
             authors: d.authors || "", year: d.year || "", abstract: d.abstract || "" }) });
         const j = await r.json();
-        btn.textContent = j.ok ? "✓ Added" : "Failed";
+        btn.textContent = j.ok ? "✓ " + t("Added") : t("Failed");
         btn.className = "rounded bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs";
         // Confirm briefly, then dismiss — the popup was sitting open after "Added".
         if (j.ok) setTimeout(() => { if (citePop) citePop.classList.add("hidden"); }, 1200);
-      } catch (e) { btn.textContent = "Failed"; }
+      } catch (e) { btn.textContent = t("Failed"); }
     });
   }
   function setupCiteClicks() {

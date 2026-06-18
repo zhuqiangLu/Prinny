@@ -16,11 +16,11 @@
       <div class="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
         <div class="h-full bg-slate-900 transition-all duration-300 w-1/3 animate-pulse"></div>
       </div>
-      <p class="mt-2 text-xs text-slate-500 truncate" x-text="current || 'Talking to Zotero…'"></p>
+      <p class="mt-2 text-xs text-slate-500 truncate" x-text="current || paT('Talking to Zotero…')"></p>
     </div>
 
     <div x-show="phase === 'done'" class="text-sm text-emerald-800">
-      ✓ Pulled — added <span class="font-medium" x-text="result?.added ?? 0"></span> new<span x-show="result?.readded">, re-added <span x-text="result?.readded"></span></span><span x-show="result?.held">, held <span x-text="result?.held"></span> previously-removed</span><span x-show="result?.removed_in_zotero">, flagged <span x-text="result?.removed_in_zotero"></span> gone from Zotero</span>.
+      ✓ {{ tr("Pulled") }} — {{ tr("added") }} <span class="font-medium" x-text="result?.added ?? 0"></span> {{ tr("new") }}<span x-show="result?.readded">, {{ tr("re-added") }} <span x-text="result?.readded"></span></span><span x-show="result?.held">, {{ tr("held") }} <span x-text="result?.held"></span> {{ tr("previously-removed") }}</span><span x-show="result?.removed_in_zotero">, {{ tr("flagged") }} <span x-text="result?.removed_in_zotero"></span> {{ tr("gone from Zotero") }}</span>.
       <div class="mt-2"><a href="/c/{{ slug }}" class="text-slate-600 underline hover:text-slate-900">{{ tr("Reload collection") }}</a></div>
     </div>
 
@@ -57,7 +57,7 @@
           <input type="checkbox" class="rounded border-amber-300"
                  @change="sel = $event.target.checked ? {{ preview.held|map(attribute='zotero_key')|list|tojson }} : []"
                  :checked="sel.length === {{ n_held }}">
-          <span x-text="sel.length ? sel.length + ' selected' : 'Select all'"></span>
+          <span x-text="sel.length ? paT('{count} selected', {count: sel.length}) : paT('Select all')"></span>
         </label>
         <ul class="mt-2 divide-y divide-amber-100 text-sm">
           {% for p in preview.held %}

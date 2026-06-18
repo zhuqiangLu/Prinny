@@ -4,7 +4,7 @@
   <div class="flex flex-wrap gap-1 max-w-[85%] justify-end mb-1">
     {% for src in user_images %}
     <img src="{{ src }}" onclick="window.dispatchEvent(new CustomEvent('pa-lightbox', {detail: this.src}))"
-         class="h-20 w-20 object-cover rounded border border-slate-200 cursor-zoom-in hover:opacity-90" alt="attached image" title="Click to enlarge">
+         class="h-20 w-20 object-cover rounded border border-slate-200 cursor-zoom-in hover:opacity-90" alt="{{ tr('attached image') }}" title="{{ tr('Click to enlarge') }}">
     {% endfor %}
   </div>
 </div>
@@ -79,7 +79,7 @@
     <form x-show="open" x-cloak class="mt-1 space-y-1 rounded border border-slate-200 bg-slate-50 p-2 w-80"
           hx-post="/c/{{ capture_slug }}/thoughts/capture" hx-target="find .cap-status" hx-swap="innerHTML">
       <input type="hidden" name="agent_text" value="{{ assistant_text|e }}">
-      <p class="text-slate-500">Saves the reply as a <em>seed (agent)</em> — it can’t ground a wiki assertion. Add your own reasoning to make it count.</p>
+      <p class="text-slate-500">{{ tr("Saves the reply as a") }} <em>{{ tr("seed (agent)") }}</em> — {{ tr("it cannot ground a wiki assertion. Add your own reasoning to make it count.") }}</p>
       <textarea name="your_take" rows="2" placeholder="{{ tr('your take (optional → reasoning)…') }}"
                 class="w-full rounded border border-slate-300 px-2 py-1"></textarea>
       <div class="flex items-center gap-2">

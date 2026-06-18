@@ -23,6 +23,15 @@
   <script src="/static/vendor/fuse.min.js"></script>
   <!-- Format a UTC "YYYY-MM-DD HH:MM:SS" timestamp as a compact local datetime. -->
   <script>window.paFmtTime = function (ts) { if (!ts) return ""; try { return new Date(ts.replace(" ", "T") + "Z").toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ts; } };</script>
+  <script>
+    window.paI18n = {{ pa_js_catalog()|tojson }};
+    window.paT = function (text, vars) {
+      var s = (window.paI18n && window.paI18n[text]) || text;
+      if (vars) Object.keys(vars).forEach(function (k) { s = s.replaceAll("{" + k + "}", vars[k]); });
+      return s;
+    };
+    window.paN = function (n, one, many) { return n === 1 ? window.paT(one) : window.paT(many); };
+  </script>
   <!-- Cytoscape: force-directed knowledge-graph view in the wiki's Connections section -->
   <script src="/static/vendor/cytoscape.min.js"></script>
   <script defer src="/static/vendor/alpine.min.js"></script>
@@ -201,7 +210,7 @@
         <button type="button" @click="more = !more; try { localStorage.setItem('pa.moreCol', more ? '1' : '0'); } catch(e){}"
                 class="w-full flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <span x-text="more ? '▴' : '▾'"></span>
-          <span x-text="more ? 'Show less' : 'Show {{ nav.collections|length - NAV_MAX }} more'"></span>
+          <span x-text="more ? paT('Show less') : paT('Show {count} more', {count: {{ nav.collections|length - NAV_MAX }}})"></span>
         </button>
         {% endif %}
         <a href="/" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> {{ tr("New collection") }}</a>
@@ -223,7 +232,7 @@
         <button type="button" @click="more = !more; try { localStorage.setItem('pa.moreTop', more ? '1' : '0'); } catch(e){}"
                 class="w-full flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <span x-text="more ? '▴' : '▾'"></span>
-          <span x-text="more ? 'Show less' : 'Show {{ nav.topics|length - NAV_MAX }} more'"></span>
+          <span x-text="more ? paT('Show less') : paT('Show {count} more', {count: {{ nav.topics|length - NAV_MAX }}})"></span>
         </button>
         {% endif %}
         <a href="/topics" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><span>＋</span> {{ tr("New topic") }}</a>
@@ -243,7 +252,7 @@
           </span>
           <span class="min-w-0">
             <span class="block font-medium text-slate-800 leading-tight">{{ tr("To review") }}</span>
-            <span class="block text-[11px] text-violet-600 leading-tight" x-text="count + ' awaiting accept'"></span>
+            <span class="block text-[11px] text-violet-600 leading-tight" x-text="paT('{count} awaiting accept', {count: count})"></span>
           </span>
         </button>
         <div x-show="open" x-cloak @click.outside="open = false"
@@ -289,7 +298,7 @@
           <span class="min-w-0">
             <span class="block font-medium text-slate-800 leading-tight">{{ tr("Background Jobs") }}</span>
             <span class="block text-[11px] text-slate-400 leading-tight"
-                  x-text="running > 0 ? (running + ' running') : (items.length ? items.length + ' recent' : 'idle')"></span>
+                  x-text="running > 0 ? paT('{count} running', {count: running}) : (items.length ? paT('{count} recent', {count: items.length}) : paT('idle'))"></span>
           </span>
         </button>
         <div x-show="open" x-cloak @click.outside="open = false"
@@ -323,7 +332,7 @@
       <button type="button" @click="toggleTheme()"
               class="w-full flex items-center gap-2 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
         <span class="grid place-items-center w-5 shrink-0 text-slate-400" aria-hidden="true" x-text='dark ? "☀" : "☾"'>☾</span>
-        <span x-text="dark ? 'Light mode' : 'Dark mode'"></span>
+        <span x-text="dark ? paT('Light mode') : paT('Dark mode')"></span>
       </button>
       <form method="post" action="/language">
         <input type="hidden" name="lang" value="{{ 'en' if pa_lang() == 'zh' else 'zh' }}">
@@ -398,16 +407,16 @@
     <div x-show="open" x-cloak @keydown.escape.window="open = false" @click.self="open = false"
          class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-28">
       <div class="bg-white rounded-xl shadow-xl w-[min(440px,92vw)] p-5">
-        <h2 class="font-semibold text-slate-900 mb-2">Delete <span x-text="kind === 'topic' ? 'topic' : 'collection'"></span> “<span x-text="name"></span>”?</h2>
+        <h2 class="font-semibold text-slate-900 mb-2"><span x-text="paT('Delete')"></span> <span x-text="kind === 'topic' ? paT('topic') : paT('collection')"></span> “<span x-text="name"></span>”?</h2>
         <template x-if="kind === 'collection'">
           <div class="space-y-2 text-sm">
             <template x-if="blocked">
-              <p class="rounded bg-rose-50 border border-rose-200 px-2.5 py-1.5 text-rose-800 text-xs">🔒 Can't delete — used as evidence by <b x-text="topics"></b> research topic<span x-show="topics !== 1">s</span>. Unlink it there first (topic → Manage collections), then delete.</p>
+              <p class="rounded bg-rose-50 border border-rose-200 px-2.5 py-1.5 text-rose-800 text-xs">🔒 <span x-text="paT('Cannot delete — used as evidence by')"></span> <b x-text="topics"></b> <span x-text="paN(topics, 'research topic', 'research topics')"></span>. <span x-text="paT('Unlink it there first (topic → Manage collections), then delete.')"></span></p>
             </template>
             <template x-if="!blocked">
               <div class="space-y-2">
-                <p class="text-slate-600">This permanently removes this collection's <b>notes, highlights, wiki, and thoughts</b>, and purges any paper left in no other collection. <b>Zotero is untouched.</b></p>
-                <label class="block text-xs text-slate-500">Type <b class="text-slate-700" x-text="name"></b> to confirm:</label>
+                <p class="text-slate-600" x-html="paT('This permanently removes this collection <b>notes, highlights, wiki, and thoughts</b>, and purges any paper left in no other collection. <b>Zotero is untouched.</b>')"></p>
+                <label class="block text-xs text-slate-500"><span x-text="paT('Type')"></span> <b class="text-slate-700" x-text="name"></b> <span x-text="paT('to confirm:')"></span></label>
                 <input x-model="typed" @keydown.enter.prevent="submit()" spellcheck="false"
                        class="w-full rounded border border-slate-300 px-2 py-1 text-sm">
               </div>
@@ -460,7 +469,7 @@
         opts = opts || {};
         msg.textContent = message;
         cancel.style.display = "";
-        ok.textContent = opts.okText || "OK";
+        ok.textContent = opts.okText || window.paT("OK");
         ok.className = opts.danger
           ? "rounded bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700"
           : "rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700";
@@ -470,7 +479,7 @@
       window.paAlert = function (message) {
         msg.textContent = message;
         cancel.style.display = "none";
-        ok.textContent = "OK";
+        ok.textContent = window.paT("OK");
         ok.className = "rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700";
         m.classList.remove("hidden");
         return new Promise((res) => { resolver = () => res(); });

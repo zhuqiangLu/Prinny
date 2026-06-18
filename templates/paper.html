@@ -33,7 +33,7 @@
               class="group relative grid place-items-center w-9 h-9 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
         <span class="text-base leading-none" x-text="pdfDark ? '🌙' : '☀️'"></span>
         <span class="pointer-events-none absolute top-full right-0 mt-1 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">
-          {{ tr("PDF:") }} <span x-text="pdfDark ? 'dark' : 'light'"></span> {{ tr("— click to flip") }}</span>
+          {{ tr("PDF:") }} <span x-text="pdfDark ? paT('dark') : paT('light')"></span> {{ tr("— click to flip") }}</span>
       </button>
       {% endif %}
       <button type="button" @click="openJump()"
@@ -78,8 +78,8 @@
         <span class="ml-auto text-[11px] text-emerald-700 truncate max-w-[40%]" x-text="findStatus" x-init="checkFindSimilar()"></span>
         <button type="button" @click="runFindSimilar()" :disabled="findBusy"
                 class="shrink-0 px-2.5 py-1 text-xs text-violet-700 hover:bg-violet-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Find papers similar to this one → the collection's Suggested reading">
-          <span x-text="findBusy ? '⏳ Finding…' : '🔎 Find similar'"></span>
+                title="{{ tr('Find papers similar to this one → the collection\'s Suggested reading') }}">
+          <span x-text="findBusy ? '⏳ ' + paT('Finding…') : '🔎 ' + paT('Find similar')"></span>
         </button>
       </div>
 
@@ -94,10 +94,10 @@
           {# staged auto-draft (from leaving the paper with chat/highlights) — review before it's a note #}
           <div x-show="stagedDraft" x-cloak class="mb-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-sm shrink-0">
             <p class="font-medium text-violet-800 flex items-center gap-2">
-              <span x-text="stagedDraftAdditive ? '✨ Suggested additions from your recent reading' : '✨ Draft ready from your reading'"></span>
+              <span x-text="stagedDraftAdditive ? '✨ ' + paT('Suggested additions from your recent reading') : '✨ ' + paT('Draft ready from your reading')"></span>
               <span x-show="stagedDraftAt" x-cloak class="text-[10px] font-normal text-slate-500" x-text="paFmtTime(stagedDraftAt)"></span>
             </p>
-            <p class="text-xs text-slate-600 mt-0.5" x-text="stagedDraftAdditive ? 'New highlights/chat since your note. Append & edit — your note isn\'t changed until you Save.' : 'Auto-drafted from your highlights + chat. Review & edit — it only becomes your note when you Save.'"></p>
+            <p class="text-xs text-slate-600 mt-0.5" x-text="stagedDraftAdditive ? paT('New highlights/chat since your note. Append & edit — your note is not changed until you Save.') : paT('Auto-drafted from your highlights + chat. Review & edit — it only becomes your note when you Save.')"></p>
             <div class="mt-1.5 flex items-center gap-2">
               <template x-if="stagedDraftAdditive">
                 <button type="button" @click="noteMd = (noteMd.trim() ? noteMd.trimEnd() + '\n\n' : '') + stagedDraft; stagedDraft = null; showPreview = false"
@@ -128,7 +128,7 @@
           <div class="mt-3 flex flex-wrap items-center gap-2 shrink-0">
             <button @click="draft()" :disabled="busy"
                     class="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50">
-              <span x-text="busy ? 'Drafting…' : '✨ Draft from highlights + chat'"></span>
+              <span x-text="busy ? paT('Drafting…') : '✨ ' + paT('Draft from highlights + chat')"></span>
             </button>
             <span x-show="saved" x-cloak class="text-sm text-emerald-700">{{ tr("Saved.") }}</span>
             <button @click="save()" :disabled="busy"
@@ -176,7 +176,7 @@
     <!-- collapsed rail: reopen the pane -->
     <button x-show="!paneOpen" x-cloak @click="paneOpen=true"
             class="shrink-0 ml-1.5 w-9 rounded border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center"
-            title="Show panel">⟨</button>
+            title="{{ tr('Show panel') }}">⟨</button>
   </div>
 
   <!-- Jump-to-paper modal (cross-collection picker, loaded via HTMX) -->

@@ -41,7 +41,7 @@
   {% if error %}
   <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 text-sm" x-data="{ how: false }">
     <div>{{ tr("Couldn't reach Zotero") }} ({{ error }}). {{ tr("Your local collections still work; you just can't import new ones until Zotero is reachable.") }}
-      <button type="button" @click="how = !how" class="underline font-medium" x-text="how ? 'Hide steps' : 'How to fix →'"></button>
+      <button type="button" @click="how = !how" class="underline font-medium" x-text="how ? paT('Hide steps') : paT('How to fix →')"></button>
       {{ tr("or open") }} <a href="/settings" class="underline">{{ tr("Settings") }}</a>.</div>
     <div x-show="how" x-cloak class="mt-2 space-y-1.5 text-xs leading-relaxed">
       <p><b>Easiest — keep Zotero open:</b> in Zotero go to <b>Settings → Advanced → Miscellaneous</b> and tick
@@ -153,7 +153,7 @@
               <option value="eager">{{ tr("copy now") }}</option><option value="lazy">{{ tr("copy on open") }}</option>
             </select>
             <button class="ml-auto rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
-                    :disabled="!zsel.length || nameTaken(zname)" x-text="`Import ${zsel.length} paper(s)`"></button>
+                    :disabled="!zsel.length || nameTaken(zname)" x-text="paT('Import {count} paper(s)', {count: zsel.length})"></button>
           </div>
           <p class="text-xs text-slate-400 mb-1" x-show="zloading">{{ tr("Loading papers…") }}</p>
           <p class="text-xs text-rose-600 mb-1" x-text="zerr" x-show="zerr"></p>
@@ -163,7 +163,7 @@
                      :checked="zsel.length === zpapers.length"
                      :indeterminate.camel="zsel.length > 0 && zsel.length < zpapers.length"
                      @change="zsel = $event.target.checked ? zpapers.map(p => p.key) : []">
-              <span x-text="zsel.length === zpapers.length ? 'All selected' : `${zsel.length} of ${zpapers.length} selected`"></span>
+              <span x-text="zsel.length === zpapers.length ? paT('All selected') : paT('{selected} of {total} selected', {selected: zsel.length, total: zpapers.length})"></span>
             </label>
             <div class="divide-y divide-slate-100">
               <template x-for="p in zpapers" :key="p.key">
@@ -210,7 +210,7 @@
                    :checked="dpdfs.length && dsel.length === dpdfs.length"
                    :indeterminate.camel="dsel.length > 0 && dsel.length < dpdfs.length"
                    @change="dsel = $event.target.checked ? [...dpdfs] : []">
-            <span x-text="`${dpdfs.length} PDF(s) here · ` + (dsel.length === dpdfs.length ? 'all selected' : dsel.length + ' selected')"></span>
+            <span x-text="paT('{count} PDF(s) here', {count: dpdfs.length}) + ' · ' + (dsel.length === dpdfs.length ? paT('all selected') : paT('{count} selected', {count: dsel.length}))"></span>
           </label>
           <template x-for="n in dpdfs" :key="n">
             <label class="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
@@ -239,7 +239,7 @@
             <div class="flex justify-end">
               <button :disabled="!dsel.length || nameTaken(dname)"
                       class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
-                      x-text="`Import ${dsel.length} PDF(s)`"></button>
+                      x-text="paT('Import {count} PDF(s)', {count: dsel.length})"></button>
             </div>
           </form>
         </template>
@@ -357,7 +357,7 @@
               </button>
             </form>
             <form method="post" action="/c/{{ c.slug }}/delete"
-                  {% if c.topics_using %}onsubmit="event.preventDefault(); window.paAlert('Can\'t delete “{{ c.name }}” — it\'s linked to {{ c.topics_using }} research topic{{ 's' if c.topics_using != 1 }} as evidence. Unlink it from {{ 'those topics' if c.topics_using != 1 else 'that topic' }} (topic → Manage collections) first.'); return false;"{% else %}onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete “{{ c.name }}” and everything in it (notes, highlights, chat, wiki for this collection)? Papers also in another collection are kept there; your Zotero library is never touched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;"{% endif %}>
+                  {% if c.topics_using %}onsubmit="event.preventDefault(); window.paAlert(paT('Cannot delete “{name}” — it is linked to {count} research topic(s) as evidence. Unlink it from the topic first, then delete.', {name:'{{ c.name }}', count: {{ c.topics_using }}})); return false;"{% else %}onsubmit="var f=event.target; event.preventDefault(); window.paConfirm(paT('Delete “{name}” and everything in it (notes, highlights, chat, wiki for this collection)? Papers also in another collection are kept there; your Zotero library is never touched.', {name:'{{ c.name }}'}), {danger:true}).then(function(o){ if(o) f.submit(); }); return false;"{% endif %}>
               <button class="grid place-items-center w-7 h-7 rounded text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="{{ tr('Delete this collection locally') }}" aria-label="{{ tr('Delete collection') }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
                   <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H7a1 1 0 01-1-1V6m3 5v6m4-6v6"/>
@@ -405,7 +405,7 @@
         <a href="/t/{{ t.slug }}" draggable="false" class="absolute inset-0" aria-label="{{ t.title }}"></a>
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ TSTATUS.get(t.status, 'bg-slate-100 text-slate-500') }}">{{ t.status }}</span>
-          <span class="ml-auto text-[11px] text-slate-400">{{ t.n_collections }} collection{{ 's' if t.n_collections != 1 }}</span>
+          <span class="ml-auto text-[11px] text-slate-400">{{ t.n_collections }} {{ tr("collection") if t.n_collections == 1 else tr("collections") }}</span>
         </div>
         <div class="text-sm font-semibold text-slate-900 leading-snug">{{ t.title }}</div>
         <p class="text-[13px] text-slate-600 mt-1 leading-snug line-clamp-2">{{ t.question }}</p>
@@ -433,7 +433,7 @@
               </button>
             </form>
             <form method="post" action="/t/{{ t.slug }}/delete"
-                  onsubmit="var f=event.target; event.preventDefault(); window.paConfirm('Delete the topic “{{ t.title }}” and its investigation (assumptions, hypotheses, evidence, notes)? Your collections and papers are untouched.', {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
+                  onsubmit="var f=event.target; event.preventDefault(); window.paConfirm(paT('Delete the topic “{name}” and its investigation (assumptions, hypotheses, evidence, notes)? Your collections and papers are untouched.', {name:'{{ t.title }}'}), {danger:true}).then(function(o){ if(o) f.submit(); }); return false;">
               <input type="hidden" name="redirect" value="/">
               <button class="grid place-items-center w-7 h-7 rounded text-rose-600 hover:text-rose-700 hover:bg-rose-50" title="{{ tr('Delete this topic') }}" aria-label="{{ tr('Delete topic') }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">

@@ -87,6 +87,7 @@ templates.env.globals["pa_branding"] = theme_mod.branding
 # the topic object in topic.html and a loop var in base.html. Global setting; see app/i18n.py.
 templates.env.globals["tr"] = i18n.t
 templates.env.globals["pa_lang"] = i18n.current_lang
+templates.env.globals["pa_js_catalog"] = i18n.js_catalog
 
 
 def _asset_v(name: str) -> int:
@@ -262,7 +263,12 @@ def notifications_feed() -> JSONResponse:
     """Global background-job feed + running jobs + items awaiting review."""
     jobs = _active_jobs()
     review = _to_review_items()
-    return JSONResponse({**notify.feed(), "running": len(jobs), "running_jobs": jobs,
+    feed = notify.feed()
+    feed["items"] = [{**n, "message": i18n.t(n.get("message", ""))}
+                     for n in feed.get("items", [])]
+    jobs = [{**j, "label": i18n.t(j.get("label", ""))} for j in jobs]
+    review = [{**r, "kind": i18n.t(r.get("kind", ""))} for r in review]
+    return JSONResponse({**feed, "running": len(jobs), "running_jobs": jobs,
                          "to_review": len(review), "to_review_items": review})
 
 

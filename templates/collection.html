@@ -76,7 +76,7 @@
         <h2 class="font-semibold">🪦 Graveyard — “{{ name }}”</h2>
         <button type="button" @click="graveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3">Papers you removed (newest first). <b>Restore</b> brings one back. <b>Permanently delete</b> moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it; <b>Purge</b> forgets it for good.</p>
+      <p class="text-sm text-slate-500 mb-3">{{ tr("Papers you removed (newest first).") }} <b>{{ tr("Restore") }}</b> {{ tr("brings one back.") }} <b>{{ tr("Permanently delete") }}</b> {{ tr("moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it;") }} <b>{{ tr("Purge") }}</b> {{ tr("forgets it for good.") }}</p>
       <div id="graveyard-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
@@ -205,7 +205,7 @@
             <h2 class="font-semibold">{{ tr("Add papers") }}</h2>
             <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
           </div>
-          <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids), or a direct <b>.pdf</b> link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
+          <p class="text-sm text-slate-500 mb-3">{{ tr("Paste arXiv or OpenReview URLs (or ids), or a direct") }} <b>.pdf</b> {{ tr("link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.") }}</p>
           <textarea x-model="raw" rows="3" spellcheck="false" x-ref="urls"
                     placeholder="https://arxiv.org/abs/2409.14485&#10;https://openreview.net/forum?id=lh3Aa1u7kU&#10;https://example.org/papers/great-paper.pdf"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"></textarea>
@@ -224,7 +224,7 @@
                        :checked="sel.length && sel.length === selectable().length"
                        :indeterminate.camel="sel.length > 0 && sel.length < selectable().length"
                        @change="sel = $event.target.checked ? selectable() : []">
-                <span x-text="sel.length ? `${sel.length} selected` : 'Select all'"></span>
+                <span x-text="sel.length ? paT('{count} selected', {count: sel.length}) : paT('Select all')"></span>
               </label>
               <div class="rounded-lg border border-slate-200 max-h-72 overflow-auto divide-y divide-slate-100">
                 <template x-for="(e, i) in entries" :key="i">
@@ -250,7 +250,7 @@
                 <input type="hidden" name="entries" :value="JSON.stringify(sel.map(i => entries[i]))">
                 <button :disabled="!sel.length"
                         class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
-                        x-text="`Add ${sel.length} paper(s)`"></button>
+                        x-text="paT('Add {count} paper(s)', {count: sel.length})"></button>
               </form>
             </div>
           </template>

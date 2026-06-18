@@ -68,6 +68,16 @@ def t(text: str, lang: str | None = None) -> str:
     return _catalog(lang).get(text, text)
 
 
+def js_catalog(lang: str | None = None) -> dict[str, str]:
+    """Translations safe to expose to browser-side UI code.
+
+    English remains identity, so the front-end helper can use the same fallback
+    rule as ``t()`` for Alpine expressions, HTMX fragments, and standalone JS.
+    """
+    lang = lang or current_lang()
+    return dict(_catalog(lang)) if lang != "en" else {}
+
+
 # Appended to the system prompt of CONTENT-generating LLM calls (not query/JSON-only
 # calls). Tells the model to emit human-readable prose in the target language while
 # leaving machine-y bits (refs, JSON keys, code, untranslatable proper nouns) intact.
