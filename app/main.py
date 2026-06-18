@@ -10,6 +10,7 @@ Routes:
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import threading
@@ -100,6 +101,45 @@ def _asset_v(name: str) -> int:
 templates.env.globals["asset_v"] = _asset_v
 
 
+_raw_template_response = templates.TemplateResponse
+_template_response_first_param = next(iter(inspect.signature(_raw_template_response).parameters))
+
+
+def _template_response_compat(
+    request: Request,
+    name: str,
+    context: dict | None = None,
+    status_code: int = 200,
+    headers: dict | None = None,
+    media_type: str | None = None,
+    background=None,
+) -> HTMLResponse:
+    """Support both old and new Starlette TemplateResponse call signatures."""
+    ctx = dict(context or {})
+    ctx.setdefault("request", request)
+    if _template_response_first_param == "request":
+        return _raw_template_response(
+            request,
+            name,
+            ctx,
+            status_code=status_code,
+            headers=headers,
+            media_type=media_type,
+            background=background,
+        )
+    return _raw_template_response(
+        name,
+        ctx,
+        status_code=status_code,
+        headers=headers,
+        media_type=media_type,
+        background=background,
+    )
+
+
+templates.TemplateResponse = _template_response_compat
+
+
 def _pa_nav() -> dict:
     """Sidebar data for the app shell (base.html) — collections + research topics.
     Evaluated per render; degrades to empty lists if the DB isn't ready."""
@@ -127,6 +167,15 @@ templates.env.globals["pa_nav"] = _pa_nav
 
 app = FastAPI(title="Prinny")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+@app.post("/language")
+def set_language(request: Request, lang: str = Form("en"), next: str = Form("/")) -> RedirectResponse:
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    save_config({"language": lang if lang in i18n.SUPPORTED else "en"})
+    i18n.refresh()
+    response = RedirectResponse(target, status_code=303)
+    return response
 
 
 @app.on_event("startup")

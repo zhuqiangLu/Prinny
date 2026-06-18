@@ -237,7 +237,10 @@
            x-init="feed(); setInterval(() => feed(), 8000)" x-show="count > 0" x-cloak>
         <button type="button" @click="open = !open"
                 class="w-full flex items-center gap-2.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-left hover:bg-violet-100">
-          <span class="shrink-0 w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+          <span class="relative shrink-0 grid place-items-center w-5 h-5 text-violet-700" aria-hidden="true">
+            ✓
+            <span class="absolute right-0 top-0 w-2 h-2 rounded-full bg-violet-500"></span>
+          </span>
           <span class="min-w-0">
             <span class="block font-medium text-slate-800 leading-tight">{{ tr("To review") }}</span>
             <span class="block text-[11px] text-violet-600 leading-tight" x-text="count + ' awaiting accept'"></span>
@@ -279,7 +282,10 @@
                    (() => { let t; window.addEventListener('htmx:afterRequest', () => { clearTimeout(t); t = setTimeout(() => feed(), 200); }); })()">
         <button type="button" @click="toggle()"
                 class="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50">
-          <span class="shrink-0 w-2.5 h-2.5 rounded-full" :class="running > 0 ? 'bg-emerald-500 animate-pulse' : (unseen > 0 ? 'bg-emerald-500' : 'bg-slate-300')"></span>
+          <span class="relative shrink-0 grid place-items-center w-5 h-5 text-slate-500" aria-hidden="true">
+            ⏱
+            <span class="absolute right-0 top-0 w-2 h-2 rounded-full" :class="running > 0 ? 'bg-emerald-500 animate-pulse' : (unseen > 0 ? 'bg-emerald-500' : 'bg-slate-300')"></span>
+          </span>
           <span class="min-w-0">
             <span class="block font-medium text-slate-800 leading-tight">{{ tr("Background Jobs") }}</span>
             <span class="block text-[11px] text-slate-400 leading-tight"
@@ -310,10 +316,23 @@
         </div>
       </div>
       <button type="button" @click="settingsOpen = true" hx-get="/settings/form" hx-target="#settings-modal-body" hx-swap="innerHTML"
-              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100"><span>{{ tr("Settings") }}</span></button>
+              class="w-full flex items-center gap-2 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
+        <span class="grid place-items-center w-5 shrink-0 text-slate-400" aria-hidden="true">⚙</span>
+        <span>{{ tr("Settings") }}</span>
+      </button>
       <button type="button" @click="toggleTheme()"
-              class="w-full flex items-center rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
-        <span x-text="dark ? 'Light mode' : 'Dark mode'"></span></button>
+              class="w-full flex items-center gap-2 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
+        <span class="grid place-items-center w-5 shrink-0 text-slate-400" aria-hidden="true" x-text='dark ? "☀" : "☾"'>☾</span>
+        <span x-text="dark ? 'Light mode' : 'Dark mode'"></span>
+      </button>
+      <form method="post" action="/language">
+        <input type="hidden" name="lang" value="{{ 'en' if pa_lang() == 'zh' else 'zh' }}">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button class="w-full flex items-center gap-2 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">
+          <span class="grid place-items-center w-5 shrink-0 text-slate-400" aria-hidden="true">文</span>
+          <span>{{ 'English' if pa_lang() == 'zh' else '中文' }}</span>
+        </button>
+      </form>
     </div>
   </aside>
 
