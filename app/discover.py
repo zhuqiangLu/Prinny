@@ -14,10 +14,11 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote, urlparse
 
 import httpx
 
-from . import library, llm, openreview
+from . import library, llm, openreview, semantic_scholar
 from .config import COLLECTIONS_DIR
 from .wiki import _read, _wikidir
 
@@ -44,6 +45,8 @@ _RATE_LIMIT_HINT = (
     "Semantic Scholar API key in Settings (it gives you a personal quota that works "
     "even behind the shared IP)."
 )
+
+_DOI_RE = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Z0-9]+)\b", re.IGNORECASE)
 
 
 # Process-wide min-interval throttle: arXiv asks for ≤ ~1 request / 3s and 429s +
@@ -362,7 +365,7 @@ def fetch_pdf_url_metadata(url: str):
 
 
 def parse_add_input(raw: str) -> list[dict]:
-    """Parse a chunk of arXiv / OpenReview URLs (newline- or comma-separated) into entries
+    """Parse a chunk of arXiv / OpenReview / DOI / PDF URLs into entries
     with fetched metadata. Each entry: {input, kind, id, title, authors, year, ok, error}.
     Unparseable or unfetchable tokens come back with ok=False so the wizard can flag them."""
     tokens, seen, out = [t.strip() for t in re.split(r"[\n,]+", raw or "")], set(), []
@@ -390,6 +393,22 @@ def parse_add_input(raw: str) -> list[dict]:
                         "abstract": meta["abstract"] if meta else "",
                         "ok": bool(meta), "error": None if meta else "OpenReview lookup failed"})
             continue
+        doi = normalize_doi(tok)
+        if doi:
+            meta = fetch_doi_metadata(doi)
+            out.append({"input": tok, "kind": "doi", "id": doi,
+                        "doi": doi,
+                        "arxiv_id": meta.get("arxiv_id") if meta else None,
+                        "pdf_url": meta.get("pdf_url") if meta else "",
+                        "title": meta["title"] if meta else None,
+                        "authors": meta["authors"] if meta else "",
+                        "year": meta["year"] if meta else "",
+                        "abstract": (meta.get("summary") or meta.get("abstract") or "") if meta else "",
+                        "ok": bool(meta),
+                        "note": None if (meta and (meta.get("pdf_url") or meta.get("arxiv_id"))) else
+                                ("No open PDF found; metadata can still be added." if meta else None),
+                        "error": None if meta else "DOI lookup failed"})
+            continue
         if is_pdf_url(tok):
             meta = fetch_pdf_url_metadata(tok)
             if meta in ("notpdf", "notfound"):
@@ -410,8 +429,37 @@ def parse_add_input(raw: str) -> list[dict]:
             continue
         out.append({"input": tok, "kind": None, "id": None, "title": None, "authors": "",
                     "year": "", "abstract": "", "ok": False,
-                    "error": "Not an arXiv, OpenReview, or .pdf URL"})
+                    "error": "Not an arXiv, DOI, OpenReview, or .pdf URL"})
     return out
+
+
+def normalize_doi(raw: str) -> str | None:
+    """Return a canonical lowercase DOI from a doi.org URL, DOI: prefix, or bare DOI."""
+    s = (raw or "").strip().strip("<> \t\r\n")
+    if not s:
+        return None
+    if "://" in s:
+        p = urlparse(s)
+        host = (p.netloc or "").lower()
+        if host in {"doi.org", "dx.doi.org"}:
+            s = unquote(p.path.lstrip("/"))
+        else:
+            m = _DOI_RE.search(unquote(s))
+            s = m.group(1) if m else s
+    if s.lower().startswith("doi:"):
+        s = s[4:]
+    s = unquote(s).strip().rstrip(".,;")
+    m = _DOI_RE.search(s)
+    return m.group(1).lower() if m else None
+
+
+def fetch_doi_metadata(doi: str) -> dict | None:
+    """Resolve a DOI through Semantic Scholar. Returns candidate metadata plus pdf_url
+    when S2 knows an open-access PDF. Best-effort; None means the DOI did not resolve."""
+    d = normalize_doi(doi)
+    if not d:
+        return None
+    return semantic_scholar.fetch_batch([f"DOI:{d}"], require_abstract=False).get(f"DOI:{d}")
 
 
 def fetch_arxiv_metadata(raw_id: str) -> dict | None:

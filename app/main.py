@@ -1445,6 +1445,54 @@ def dir_preview(path: str = Form("")) -> dict:
         return {"error": str(exc)}
 
 
+@app.post("/collections/links-parse")
+def links_parse(urls: str = Form("")) -> dict:
+    """Parse pasted arXiv / DOI / OpenReview / direct-PDF links for the homepage import
+    wizard. This is collection-neutral; duplicate handling happens after import."""
+    return {"entries": discover.parse_add_input(urls)}
+
+
+def _default_link_collection_name(entries: list[dict]) -> str:
+    first = next((e for e in entries if e.get("ok") and (e.get("title") or "").strip()), None)
+    title = (first.get("title") if first else "") if first else ""
+    if title:
+        return title[:80]
+    return "Imported links"
+
+
+@app.post("/collections/links-import")
+def links_import(
+    name: str = Form(""), entries: str = Form("[]"), tags: str = Form("[]"),
+    draft_wiki: str = Form(""),
+) -> RedirectResponse:
+    """Create a local collection from parsed link entries and start PDF downloads when a
+    source URL is available."""
+    try:
+        parsed = json.loads(entries or "[]")
+    except (json.JSONDecodeError, TypeError):
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    selected = [e for e in parsed if isinstance(e, dict) and e.get("ok")]
+    if not selected:
+        raise HTTPException(status_code=400, detail="No importable links selected")
+
+    disp = (name or "").strip() or _default_link_collection_name(selected)
+    if name.strip():
+        _require_unique_name(disp)
+    slug = library.create_local_collection(disp)
+    try:
+        parsed_tags = json.loads(tags or "[]")
+        if isinstance(parsed_tags, list):
+            library.set_tags(slug, parsed_tags)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    triage_mod.add_entries(slug, selected)
+    if draft_wiki:
+        threading.Thread(target=library._maybe_seed_wiki, args=(slug, True), daemon=True).start()
+    return RedirectResponse(f"/c/{slug}?tab=papers", status_code=303)
+
+
 @app.post("/collections/dir-import")
 def dir_import(
     name: str = Form(""), path: str = Form(""), tags: str = Form("[]"),
@@ -1503,22 +1551,25 @@ def collection_download_all(slug: str) -> RedirectResponse:
 
 @app.post("/c/{slug}/papers/parse")
 def papers_parse(slug: str, urls: str = Form("")) -> dict:
-    """Parse a chunk of arXiv/OpenReview/direct-PDF URLs (newline/comma separated) into
+    """Parse a chunk of arXiv/DOI/OpenReview/direct-PDF URLs (newline/comma separated) into
     entries with fetched metadata, for the Add-paper wizard. Flags ones already in this
     collection."""
     _require_collection(slug)
     entries = discover.parse_add_input(urls)
     have_arxiv = {p["arxiv_id"] for p in library.list_papers(slug) if p.get("arxiv_id")}
     have_or = {p.get("openreview_id") for p in library.list_papers(slug) if p.get("openreview_id")}
+    have_doi = library.collection_dois(slug)
     have_pdf = library.collection_pdf_urls(slug)
     for e in entries:
         e["dup"] = (e["kind"] == "arxiv" and e["id"] in have_arxiv) or \
                    (e["kind"] == "openreview" and e["id"] in have_or) or \
+                   (e["kind"] == "doi" and (e["id"] or "").lower() in have_doi) or \
                    (e["kind"] == "pdf" and e["id"] in have_pdf)
         # If it's currently removed (graveyard/permanently-deleted), adding restores it.
         e["removed"] = None if e["dup"] or not e.get("ok") else library.removal_tier(
             slug, arxiv_id=e["id"] if e["kind"] == "arxiv" else None,
-            openreview_id=e["id"] if e["kind"] == "openreview" else None)
+            openreview_id=e["id"] if e["kind"] == "openreview" else None,
+            doi=e["id"] if e["kind"] == "doi" else None)
     return {"entries": entries}
 
 

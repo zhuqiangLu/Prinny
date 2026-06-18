@@ -660,9 +660,10 @@ def duplicate_collection(slug: str) -> str | None:
 # --- papers ---------------------------------------------------------------------
 def _has_pdf(d: dict) -> bool:
     """A PDF is showable if it's already cached OR there's a source to lazily fetch
-    (a Zotero key, an arXiv id, or an OpenReview id)."""
+    (a Zotero key, an arXiv id, an OpenReview id, or an explicit PDF URL)."""
     return (d.get("pdf_state") == "cached" or bool(d.get("zotero_key"))
-            or bool(d.get("arxiv_id")) or bool(d.get("openreview_id")))
+            or bool(d.get("arxiv_id")) or bool(d.get("openreview_id"))
+            or bool(d.get("pdf_url")))
 
 
 def get_paper(paper_id: int) -> dict | None:
@@ -708,6 +709,21 @@ def collection_pdf_urls(slug: str) -> set[str]:
         con.close()
 
 
+def collection_dois(slug: str) -> set[str]:
+    """The DOI of every non-removed member of this collection, normalized lowercase."""
+    con = connect()
+    try:
+        rows = con.execute(
+            """SELECT p.doi FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
+               WHERE cp.collection_slug = ? AND COALESCE(p.doi,'') <> ''
+                 AND NOT EXISTS (SELECT 1 FROM pending_removals pr
+                     WHERE pr.collection_slug = cp.collection_slug AND pr.paper_id = cp.paper_id)""",
+            (slug,)).fetchall()
+        return {(r["doi"] or "").strip().lower() for r in rows if (r["doi"] or "").strip()}
+    finally:
+        con.close()
+
+
 def _decorate_paper(d: dict) -> dict:
     """Add the derived UI fields a paper row needs (PDF availability + live download state)."""
     d["has_pdf"] = _has_pdf(d)
@@ -725,7 +741,8 @@ def get_collection_paper(slug: str, paper_id: int) -> dict | None:
     try:
         r = con.execute(
             """SELECT p.id, p.title, p.authors, p.year, p.origin, p.sync_status,
-                      p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id, p.added_at,
+                      p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id,
+                      p.doi, p.pdf_url, p.added_at,
                       cp.source_flag, cp.read_at, cp.important
                FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
                WHERE cp.collection_slug=? AND cp.paper_id=?""",
@@ -752,7 +769,8 @@ def list_papers(slug: str) -> list[dict]:
         rows = con.execute(
             """
             SELECT p.id, p.title, p.authors, p.year, p.origin, p.sync_status,
-                   p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id, p.added_at,
+                   p.pdf_state, p.zotero_key, p.arxiv_id, p.openreview_id,
+                   p.doi, p.pdf_url, p.added_at,
                    cp.source_flag, cp.read_at, cp.important
             FROM collection_papers cp JOIN papers p ON p.id = cp.paper_id
             WHERE cp.collection_slug = ?
@@ -1147,7 +1165,7 @@ def restore_removal(slug: str, paper_id: int) -> None:
 
 
 def removal_tier(slug: str, *, arxiv_id: str | None = None, openreview_id: str | None = None,
-                 zotero_key: str | None = None) -> str | None:
+                 zotero_key: str | None = None, doi: str | None = None) -> str | None:
     """If a paper (matched by any natural key) is currently removed from ``slug``, return its
     tier ('graveyard' or 'deleted'); else None. Silent (merged-away) removals return None —
     they're not user-facing. Used so the Add wizard can say a paste would *restore* a paper."""
@@ -1155,7 +1173,7 @@ def removal_tier(slug: str, *, arxiv_id: str | None = None, openreview_id: str |
     try:
         pid = None
         for col, val in (("zotero_key", zotero_key), ("arxiv_id", arxiv_id),
-                         ("openreview_id", openreview_id)):
+                         ("openreview_id", openreview_id), ("doi", doi)):
             if pid is None and val:
                 r = con.execute(f"SELECT id FROM papers WHERE {col}=?", (val,)).fetchone()
                 pid = r["id"] if r else None

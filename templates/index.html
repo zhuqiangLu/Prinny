@@ -94,10 +94,13 @@
               <span class="block text-xs text-slate-500">{{ tr("Import a local folder of PDFs as a new collection.") }}</span></span>
             <span class="ml-auto text-slate-300">→</span>
           </button>
-          <div class="flex items-start gap-3 rounded-lg border border-dashed border-slate-200 p-3 opacity-60">
+          <button type="button" @click="step = 'links'; linkRaw = ''; linkEntries = []; linkSel = []; linkErr = ''; linkName = ''"
+                  class="flex w-full items-start gap-3 rounded-lg border border-slate-200 p-3 text-left hover:bg-slate-50 hover:border-slate-300">
             <span class="text-xl leading-none">🔗</span>
-            <span class="min-w-0"><span class="block font-medium text-slate-700">{{ tr("Other source") }} <span class="ml-1 text-[10px] rounded bg-slate-200 px-1.5 py-0.5 text-slate-500">{{ tr("coming soon") }}</span></span></span>
-          </div>
+            <span class="min-w-0"><span class="block font-medium text-slate-800">{{ tr("Links / DOI / arXiv") }}</span>
+              <span class="block text-xs text-slate-500">{{ tr("Paste arXiv, DOI, OpenReview, or direct PDF links and import them as a collection.") }}</span></span>
+            <span class="ml-auto text-slate-300">→</span>
+          </button>
         </div>
       </div>
 
@@ -240,6 +243,76 @@
               <button :disabled="!dsel.length || nameTaken(dname)"
                       class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
                       x-text="paT('Import {count} PDF(s)', {count: dsel.length})"></button>
+            </div>
+          </form>
+        </template>
+      </div>
+
+      <!-- LAYER 2c: Link / DOI import -->
+      <div x-show="step === 'links'" x-cloak>
+        <div class="flex items-center gap-2 mb-3 text-sm text-slate-500">
+          <span class="grid place-items-center w-7 h-7 shrink-0 rounded-lg bg-sky-50 text-sky-600">🔗</span>
+          <span>{{ tr("Import from links") }}</span>
+        </div>
+        <label class="block text-xs text-slate-500 mb-1">{{ tr("arXiv, DOI, OpenReview, or PDF links") }}</label>
+        <textarea x-model="linkRaw" rows="5"
+                  placeholder="https://arxiv.org/abs/2401.12345&#10;https://doi.org/10.1145/nnnnnnn.nnnnnnn&#10;https://example.org/paper.pdf"
+                  class="w-full rounded border border-slate-300 px-3 py-2 text-sm font-mono"></textarea>
+        <div class="flex items-center gap-2 mt-2 mb-2">
+          <button type="button" @click="parseLinks()" :disabled="linkParsing || !linkRaw.trim()"
+                  class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
+                  x-text="linkParsing ? paT('Parsing…') : paT('Parse links')"></button>
+          <p class="text-xs text-slate-400" x-show="linkParsing">{{ tr("Looking up metadata…") }}</p>
+          <p class="text-xs text-rose-600" x-text="paT(linkErr)" x-show="linkErr"></p>
+        </div>
+
+        <template x-if="linkEntries.length">
+          <form method="post" action="/collections/links-import">
+            <input type="hidden" name="tags" :value="JSON.stringify(tags)">
+            <input type="hidden" name="entries" :value="JSON.stringify(linkSelectedEntries())">
+            <label class="block text-xs text-slate-500 mb-1">{{ tr("Collection name") }}</label>
+            <input name="name" x-model="linkName" :placeholder="linkDefaultName()"
+                   class="w-full rounded border px-3 py-2 text-sm mb-1"
+                   :class="nameTaken(linkName) ? 'border-rose-400' : 'border-slate-300'">
+            <p x-show="nameTaken(linkName)" x-cloak class="mb-2 text-xs text-rose-600">{{ tr("That name is already used — pick a different one.") }}</p>
+            <label class="flex items-start gap-2 mb-2 text-xs text-slate-500 cursor-pointer">
+              <input type="checkbox" name="draft_wiki" checked class="mt-0.5 rounded border-slate-300">
+              <span>{{ tr("Draft a starter wiki from the abstracts") }} <span class="text-slate-400">{{ tr("— an AI-generated starting point you edit; not your own synthesis.") }}</span></span>
+            </label>
+            <div class="rounded-lg border border-slate-200 max-h-64 overflow-auto mb-3">
+              <label class="flex items-center gap-2 px-3 py-1.5 border-b border-slate-100 text-xs text-slate-500 cursor-pointer sticky top-0 bg-white">
+                <input type="checkbox" class="rounded border-slate-300"
+                       :checked="linkSel.length && linkSel.length === linkSelectable().length"
+                       :indeterminate.camel="linkSel.length > 0 && linkSel.length < linkSelectable().length"
+                       @change="linkSel = $event.target.checked ? linkSelectable() : []">
+                <span x-text="linkSel.length === linkSelectable().length ? paT('All importable selected') : paT('{selected} of {total} importable selected', {selected: linkSel.length, total: linkSelectable().length})"></span>
+              </label>
+              <div class="divide-y divide-slate-100">
+                <template x-for="(e, i) in linkEntries" :key="i">
+                  <label class="flex items-start gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50"
+                         :class="!e.ok ? 'opacity-60' : ''">
+                    <input type="checkbox" class="mt-0.5 rounded border-slate-300"
+                           :disabled="!e.ok"
+                           :checked="linkSel.includes(i)"
+                           @change="linkSel = $event.target.checked ? [...linkSel, i] : linkSel.filter(x => x !== i)">
+                    <span class="min-w-0">
+                      <span class="block text-slate-800" x-text="e.title || e.input"></span>
+                      <span class="block text-xs text-slate-400">
+                        <span x-text="(e.kind || 'link').toUpperCase()"></span>
+                        <span x-show="e.id"> · <span x-text="e.id"></span></span>
+                        <span x-show="e.authors"> · <span x-text="e.authors"></span></span>
+                      </span>
+                      <span class="block text-xs text-rose-600" x-show="!e.ok" x-text="paT(e.error)"></span>
+                      <span class="block text-xs text-amber-600" x-show="e.ok && e.note" x-text="paT(e.note)"></span>
+                    </span>
+                  </label>
+                </template>
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button :disabled="!linkSel.length || nameTaken(linkName)"
+                      class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
+                      x-text="paT('Import {count} link(s)', {count: linkSel.length})"></button>
             </div>
           </form>
         </template>
@@ -458,7 +531,7 @@
 </div>{# /gradient page #}
 
 <script>
-  // New-collection wizard: layer 1 (source) → layer 2 (Zotero/Directory: name, tags, preview).
+  // New-collection wizard: layer 1 (source) → layer 2 (Zotero/Directory/Links: name, tags, preview).
   function newWizard(available, existing) {
     return {
       newOpen: false, step: "source",
@@ -467,6 +540,7 @@
       localName: "",
       zslug: "", zname: "", zfilter: "", zpapers: [], zcount: 0, zloading: false, zerr: "", zsel: [],
       dpath: "", dname: "", ddirs: [], dparent: null, dpdfs: [], dloading: false, derr: "", dsel: [],
+      linkRaw: "", linkName: "", linkEntries: [], linkSel: [], linkParsing: false, linkErr: "",
       tags: [], tagLabel: "", tagColor: "#0ea5e9",
       nameTaken(n) { return this.existing.includes((n || "").trim().toLowerCase()); },
       open() {                       // always start at the top layer with a clean slate
@@ -474,6 +548,7 @@
         this.localName = "";
         this.zslug = ""; this.zname = ""; this.zfilter = ""; this.zpapers = []; this.zsel = []; this.zerr = "";
         this.dpath = ""; this.ddirs = []; this.dparent = null; this.dpdfs = []; this.dsel = []; this.derr = ""; this.dname = "";
+        this.linkRaw = ""; this.linkName = ""; this.linkEntries = []; this.linkSel = []; this.linkErr = ""; this.linkParsing = false;
         this.tags = []; this.tagLabel = "";
         this.newOpen = true;
       },
@@ -509,6 +584,26 @@
           this.dsel = [...this.dpdfs];                   // default: all PDFs in this folder
           this.dname = (d.path || "").split("/").filter(Boolean).pop() || this.dname;
         } catch (e) { this.dloading = false; this.derr = "Couldn't read that folder."; }
+      },
+      linkSelectable() { return this.linkEntries.map((e, i) => e.ok ? i : -1).filter(i => i >= 0); },
+      linkSelectedEntries() { return this.linkSel.map((i) => this.linkEntries[i]).filter((e) => e && e.ok); },
+      linkDefaultName() {
+        const first = this.linkEntries.find((e) => e.ok && e.title);
+        return first ? first.title.slice(0, 80) : paT("Imported links");
+      },
+      async parseLinks() {
+        this.linkParsing = true; this.linkErr = ""; this.linkEntries = []; this.linkSel = []; this.linkName = "";
+        try {
+          const r = await fetch("/collections/links-parse", {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ urls: this.linkRaw }),
+          });
+          const d = await r.json();
+          this.linkEntries = d.entries || [];
+          this.linkSel = this.linkSelectable();
+          if (!this.linkEntries.length) this.linkErr = "Nothing to parse.";
+        } catch (e) { this.linkErr = "Parse failed."; }
+        this.linkParsing = false;
       },
     };
   }

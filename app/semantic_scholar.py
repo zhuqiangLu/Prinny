@@ -37,11 +37,15 @@ def _headers() -> dict:
     return h
 
 
-def _to_candidate(p: dict) -> dict | None:
-    """Map an S2 paper object to our candidate shape. None if it has no abstract
-    (the validator needs one to ground relevance)."""
+def _to_candidate(p: dict, *, require_abstract: bool = True) -> dict | None:
+    """Map an S2 paper object to our candidate shape.
+
+    Discovery/ranking paths require an abstract because the validator needs one to
+    ground relevance. Exact identifier imports (DOI/arXiv link paste) can keep a
+    metadata-only result so the PDF source is still usable.
+    """
     abstract = (p.get("abstract") or "").strip()
-    if not abstract:
+    if require_abstract and not abstract:
         return None
     ext = p.get("externalIds") or {}
     oa = p.get("openAccessPdf") or {}
@@ -83,7 +87,7 @@ def search(query: str, max_results: int = 20) -> list[dict]:
     return out
 
 
-def fetch_batch(ids: list[str]) -> dict[str, dict]:
+def fetch_batch(ids: list[str], *, require_abstract: bool = True) -> dict[str, dict]:
     """Resolve S2 paper ids (the deep-search agent's scholar picks) to candidates in
     ONE request. ``ids`` are S2 paperIds (also accepts 'DOI:…' / 'ARXIV:…' forms).
     Returns ``{requested_id: candidate}`` for those that resolved with an abstract.
@@ -106,7 +110,7 @@ def fetch_batch(ids: list[str]) -> dict[str, dict]:
     for rid, p in zip(ids, data if isinstance(data, list) else []):
         if not p:
             continue
-        c = _to_candidate(p)
+        c = _to_candidate(p, require_abstract=require_abstract)
         if c:
             out[rid] = c
     return out
