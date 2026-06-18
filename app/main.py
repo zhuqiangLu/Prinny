@@ -1161,8 +1161,16 @@ def settings_post(
     if set(new_colors) != set(old_colors):
         ann_mod.remap_to_scheme(new_colors)
     # HTMX submit (page or modal) swaps just the form wrapper; a plain POST gets the page.
-    tmpl = "_settings_form.html" if request.headers.get("HX-Request") else "settings.html"
-    return templates.TemplateResponse(request, tmpl, _settings_ctx(saved=True, scheme=scheme))
+    is_hx = bool(request.headers.get("HX-Request"))
+    tmpl = "_settings_form.html" if is_hx else "settings.html"
+    resp = templates.TemplateResponse(request, tmpl, _settings_ctx(saved=True, scheme=scheme))
+    # Language drives the WHOLE UI (nav, other pages), but an HTMX save only swaps the form
+    # region — so the surrounding chrome would keep the old language until a manual reload,
+    # which reads as "the language didn't change". On an actual change, force a full reload.
+    new_lang = language if language in i18n.SUPPORTED else "en"
+    if is_hx and new_lang != (_cur.get("language") or "en"):
+        resp.headers["HX-Refresh"] = "true"
+    return resp
 
 
 _MAX_CHAT_IMAGES = 4
