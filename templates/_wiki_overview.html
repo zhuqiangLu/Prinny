@@ -436,7 +436,7 @@
   </div>
   {% if benchmarks.methods|length > 5 %}
   <button type="button" @click="showAll = !showAll" class="text-xs text-violet-600 hover:underline"
-          x-text="showAll ? 'Show top 5 methods' : 'Show all {{ benchmarks.methods|length }} methods'"></button>
+          x-text="showAll ? paT('Show top 5 methods') : paT('Show all {count} methods', {count: {{ benchmarks.methods|length }}})"></button>
   {% endif %}
   <p class="text-[10px] text-slate-400">{{ benchmarks.n_results }} result{{ 's' if benchmarks.n_results != 1 }} {{ tr("across") }} {{ benchmarks.benchmarks|length }} benchmark{{ 's' if benchmarks.benchmarks|length != 1 }}. {{ tr("Best per column = leading value for that metric's direction.") }}</p>
   {% endif %}
@@ -474,7 +474,7 @@
               return;
             }
             var p = document.getElementById("wiki-bench-prog");
-            if (p && job.total) p.textContent = "read " + job.done + " of " + job.total + " papers";
+            if (p && job.total) p.textContent = paT('read {done} of {total} papers', {done: job.done, total: job.total});
             setTimeout(tick, 1500);
           })
           .catch(function () { if (document.body.contains(cover)) setTimeout(tick, 2500); });
@@ -638,7 +638,7 @@
        Concepts show blurb + attention score and an Add button; all are paper-anchored. #}
     <div x-show="['concept','method','problem'].includes(mapView)" x-cloak class="mb-4">
       <div class="flex items-center gap-2 mb-2">
-        <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? 'Concepts — the recurring ideas in this collection; your highlights/notes on them drive Focus.' : mapView === 'method' ? 'Methods — the fixes (read-only; redrawn on Regenerate).' : 'Problems — the pains (read-only; redrawn on Regenerate).')"></p>
+        <p class="text-xs text-slate-500" x-text="(mapView === 'concept' ? paT('Concepts — the recurring ideas in this collection; your highlights/notes on them drive Focus.') : mapView === 'method' ? paT('Methods — the fixes (read-only; redrawn on Regenerate).') : paT('Problems — the pains (read-only; redrawn on Regenerate).'))"></p>
       </div>
       {% set ENT = {'concept': ('◈','border-slate-300','bg-slate-100','text-slate-700'),
                     'method':  ('🔧','border-sky-200','bg-sky-50','text-sky-800'),

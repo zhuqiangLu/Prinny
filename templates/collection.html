@@ -76,7 +76,7 @@
         <h2 class="font-semibold">🪦 Graveyard — “{{ name }}”</h2>
         <button type="button" @click="graveOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3">Papers you removed (newest first). <b>Restore</b> brings one back. <b>Permanently delete</b> moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it; <b>Purge</b> forgets it for good.</p>
+      <p class="text-sm text-slate-500 mb-3">{{ tr("Papers you removed (newest first).") }} <b>{{ tr("Restore") }}</b> {{ tr("brings one back.") }} <b>{{ tr("Permanently delete") }}</b> {{ tr("moves it to a tombstone (work kept, recoverable) so a Pull won't re-add it;") }} <b>{{ tr("Purge") }}</b> {{ tr("forgets it for good.") }}</p>
       <div id="graveyard-body"><span class="text-sm text-slate-400">{{ tr("Loading…") }}</span></div>
     </div>
   </div>
@@ -205,7 +205,7 @@
             <h2 class="font-semibold">{{ tr("Add papers") }}</h2>
             <button type="button" @click="addOpen = false" class="text-slate-400 hover:text-slate-700">✕</button>
           </div>
-          <p class="text-sm text-slate-500 mb-3">Paste arXiv or OpenReview URLs (or ids), or a direct <b>.pdf</b> link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.</p>
+          <p class="text-sm text-slate-500 mb-3">{{ tr("Paste arXiv, DOI, OpenReview URLs (or ids), or a direct") }} <b>.pdf</b> {{ tr("link — one per line or comma-separated. We’ll fetch each title, then you pick which to add.") }}</p>
           <textarea x-model="raw" rows="3" spellcheck="false" x-ref="urls"
                     placeholder="https://arxiv.org/abs/2409.14485&#10;https://openreview.net/forum?id=lh3Aa1u7kU&#10;https://example.org/papers/great-paper.pdf"
                     class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm font-mono"></textarea>
@@ -214,7 +214,7 @@
                     class="rounded bg-slate-900 text-white px-3 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40">
               <span x-show="!parsing">{{ tr("Parse") }}</span><span x-show="parsing" x-cloak>{{ tr("Parsing…") }}</span>
             </button>
-            <span x-show="err" x-cloak x-text="err" class="text-xs text-rose-600"></span>
+            <span x-show="err" x-cloak x-text="paT(err)" class="text-xs text-rose-600"></span>
           </div>
 
           <template x-if="entries.length">
@@ -224,7 +224,7 @@
                        :checked="sel.length && sel.length === selectable().length"
                        :indeterminate.camel="sel.length > 0 && sel.length < selectable().length"
                        @change="sel = $event.target.checked ? selectable() : []">
-                <span x-text="sel.length ? `${sel.length} selected` : 'Select all'"></span>
+                <span x-text="sel.length ? paT('{count} selected', {count: sel.length}) : paT('Select all')"></span>
               </label>
               <div class="rounded-lg border border-slate-200 max-h-72 overflow-auto divide-y divide-slate-100">
                 <template x-for="(e, i) in entries" :key="i">
@@ -235,13 +235,13 @@
                     <span class="min-w-0">
                       <span class="text-slate-800" x-text="e.ok ? e.title : e.input"></span>
                       <template x-if="e.ok">
-                        <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : e.kind === 'pdf' ? ' · PDF' : '')"></span>
+                        <span class="text-slate-400 text-xs" x-text="(e.authors ? ' · ' + e.authors : '') + (e.kind === 'openreview' ? ' · OpenReview' : e.kind === 'pdf' ? ' · PDF' : e.kind === 'doi' ? ' · DOI' : '')"></span>
                       </template>
-                      <template x-if="e.ok && e.note"><span class="ml-1 text-xs text-amber-600" x-text="e.note"></span></template>
+                      <template x-if="e.ok && e.note"><span class="ml-1 text-xs text-amber-600" x-text="paT(e.note)"></span></template>
                       <template x-if="e.dup"><span class="ml-1 text-xs text-amber-600">{{ tr("already in collection") }}</span></template>
                       <template x-if="e.removed === 'graveyard'"><span class="ml-1 text-xs text-sky-600">{{ tr("in graveyard — adding restores it") }}</span></template>
                       <template x-if="e.removed === 'deleted'"><span class="ml-1 text-xs text-sky-600">{{ tr("permanently deleted — adding restores it") }}</span></template>
-                      <template x-if="!e.ok"><span class="ml-1 text-xs text-rose-600" x-text="e.error"></span></template>
+                      <template x-if="!e.ok"><span class="ml-1 text-xs text-rose-600" x-text="paT(e.error)"></span></template>
                     </span>
                   </label>
                 </template>
@@ -250,7 +250,7 @@
                 <input type="hidden" name="entries" :value="JSON.stringify(sel.map(i => entries[i]))">
                 <button :disabled="!sel.length"
                         class="rounded bg-slate-900 text-white px-4 py-1.5 text-sm hover:bg-slate-700 disabled:opacity-40"
-                        x-text="`Add ${sel.length} paper(s)`"></button>
+                        x-text="paT('Add {count} paper(s)', {count: sel.length})"></button>
               </form>
             </div>
           </template>
