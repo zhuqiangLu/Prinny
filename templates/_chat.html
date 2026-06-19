@@ -143,7 +143,7 @@
         <span x-text="cmd ? cmd.c : ''" class="truncate"></span>
         <button type="button" @click="cmd = null" class="shrink-0 text-violet-400 hover:text-violet-700" title="{{ tr('Remove command') }}">✕</button>
       </span>
-      <span class="ml-1 text-[11px] text-slate-400" x-text="cmd ? (cmd.kind === 'modifier' ? 'stays on until removed' : (cmd.hint || 'type your input…')) : ''"></span>
+      <span class="ml-1 text-[11px] text-slate-400" x-text="cmd ? (cmd.kind === 'modifier' ? paT('stays on until removed') : (cmd.hint ? paT(cmd.hint) : paT('type your input…'))) : ''"></span>
     </div>
 
     <!-- drag lever: pull up/down to resize the input -->
@@ -480,14 +480,14 @@
           wrap.setAttribute("x-data", "{ open: false }");
           wrap.innerHTML =
             '<div class="text-xs">'
-            + '<button type="button" @click="open=!open" class="text-slate-500 hover:text-slate-800 underline">＋ capture to thoughts</button>'
+            + '<button type="button" @click="open=!open" class="text-slate-500 hover:text-slate-800 underline">＋ ' + paT('capture to thoughts') + '</button>'
             + '<form x-show="open" x-cloak class="mt-1 space-y-1 rounded border border-slate-200 bg-slate-50 p-2 w-80" '
             +   'hx-post="/c/' + slug + '/thoughts/capture" hx-target="find .cap-status" hx-swap="innerHTML">'
             +   '<input type="hidden" name="agent_text">'
             +   '<input type="hidden" name="paper_key" value="' + (this.paperKey || '') + '">'
-            +   '<p class="text-slate-500">Saves the reply as a <em>seed (agent)</em> — it can’t ground a wiki assertion. Add your own reasoning to make it count.</p>'
-            +   '<textarea name="your_take" rows="2" placeholder="your take (optional → reasoning)…" class="w-full rounded border border-slate-300 px-2 py-1"></textarea>'
-            +   '<div class="flex items-center gap-2"><button type="submit" class="rounded bg-slate-900 px-2 py-0.5 text-white">Capture</button><span class="cap-status text-emerald-700"></span></div>'
+            +   '<p class="text-slate-500">' + paT('Saves the reply as a') + ' <em>' + paT('seed (agent)') + '</em> — ' + paT('it cannot ground a wiki assertion. Add your own reasoning to make it count.') + '</p>'
+            +   '<textarea name="your_take" rows="2" placeholder="' + paT('your take (optional → reasoning)…') + '" class="w-full rounded border border-slate-300 px-2 py-1"></textarea>'
+            +   '<div class="flex items-center gap-2"><button type="submit" class="rounded bg-slate-900 px-2 py-0.5 text-white">' + paT('Capture') + '</button><span class="cap-status text-emerald-700"></span></div>'
             + '</form></div>';
           wrap.querySelector('input[name="agent_text"]').value = text;
           afterEl.insertAdjacentElement("afterend", wrap);

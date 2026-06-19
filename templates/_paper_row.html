@@ -58,7 +58,7 @@
       <button hx-post="/c/{{ slug }}/p/{{ p.id }}/drop" hx-target="closest li" hx-swap="outerHTML"
               class="text-xs rounded border border-rose-300 px-2 py-0.5 text-rose-600 hover:bg-rose-50">{{ tr("Remove") }}</button>
       {% elif p.has_pdf %}
-      <button x-show="!toolsOpen" @click="open = !open" class="text-xs rounded border border-slate-200 px-2 py-0.5 text-slate-500 hover:bg-slate-50" x-text="open ? 'Hide' : 'Preview'"></button>
+      <button x-show="!toolsOpen" @click="open = !open" class="text-xs rounded border border-slate-200 px-2 py-0.5 text-slate-500 hover:bg-slate-50" x-text="open ? paT('Hide') : paT('Preview')"></button>
       {% else %}
       <span x-show="!toolsOpen" class="text-xs rounded bg-slate-100 text-slate-400 px-1.5 py-0.5">{{ tr("no PDF") }}</span>
       {% endif %}

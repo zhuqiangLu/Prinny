@@ -10,6 +10,7 @@ Routes:
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import threading
@@ -86,6 +87,7 @@ templates.env.globals["pa_branding"] = theme_mod.branding
 # the topic object in topic.html and a loop var in base.html. Global setting; see app/i18n.py.
 templates.env.globals["tr"] = i18n.t
 templates.env.globals["pa_lang"] = i18n.current_lang
+templates.env.globals["pa_js_catalog"] = i18n.js_catalog
 
 
 def _asset_v(name: str) -> int:
@@ -98,6 +100,45 @@ def _asset_v(name: str) -> int:
 
 
 templates.env.globals["asset_v"] = _asset_v
+
+
+_raw_template_response = templates.TemplateResponse
+_template_response_first_param = next(iter(inspect.signature(_raw_template_response).parameters))
+
+
+def _template_response_compat(
+    request: Request,
+    name: str,
+    context: dict | None = None,
+    status_code: int = 200,
+    headers: dict | None = None,
+    media_type: str | None = None,
+    background=None,
+) -> HTMLResponse:
+    """Support both old and new Starlette TemplateResponse call signatures."""
+    ctx = dict(context or {})
+    ctx.setdefault("request", request)
+    if _template_response_first_param == "request":
+        return _raw_template_response(
+            request,
+            name,
+            ctx,
+            status_code=status_code,
+            headers=headers,
+            media_type=media_type,
+            background=background,
+        )
+    return _raw_template_response(
+        name,
+        ctx,
+        status_code=status_code,
+        headers=headers,
+        media_type=media_type,
+        background=background,
+    )
+
+
+templates.TemplateResponse = _template_response_compat
 
 
 def _pa_nav() -> dict:
@@ -127,6 +168,15 @@ templates.env.globals["pa_nav"] = _pa_nav
 
 app = FastAPI(title="Prinny")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+@app.post("/language")
+def set_language(request: Request, lang: str = Form("en"), next: str = Form("/")) -> RedirectResponse:
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    save_config({"language": lang if lang in i18n.SUPPORTED else "en"})
+    i18n.refresh()
+    response = RedirectResponse(target, status_code=303)
+    return response
 
 
 @app.on_event("startup")
@@ -213,7 +263,12 @@ def notifications_feed() -> JSONResponse:
     """Global background-job feed + running jobs + items awaiting review."""
     jobs = _active_jobs()
     review = _to_review_items()
-    return JSONResponse({**notify.feed(), "running": len(jobs), "running_jobs": jobs,
+    feed = notify.feed()
+    feed["items"] = [{**n, "message": i18n.t(n.get("message", ""))}
+                     for n in feed.get("items", [])]
+    jobs = [{**j, "label": i18n.t(j.get("label", ""))} for j in jobs]
+    review = [{**r, "kind": i18n.t(r.get("kind", ""))} for r in review]
+    return JSONResponse({**feed, "running": len(jobs), "running_jobs": jobs,
                          "to_review": len(review), "to_review_items": review})
 
 
@@ -1390,6 +1445,54 @@ def dir_preview(path: str = Form("")) -> dict:
         return {"error": str(exc)}
 
 
+@app.post("/collections/links-parse")
+def links_parse(urls: str = Form("")) -> dict:
+    """Parse pasted arXiv / DOI / OpenReview / direct-PDF links for the homepage import
+    wizard. This is collection-neutral; duplicate handling happens after import."""
+    return {"entries": discover.parse_add_input(urls)}
+
+
+def _default_link_collection_name(entries: list[dict]) -> str:
+    first = next((e for e in entries if e.get("ok") and (e.get("title") or "").strip()), None)
+    title = (first.get("title") if first else "") if first else ""
+    if title:
+        return title[:80]
+    return "Imported links"
+
+
+@app.post("/collections/links-import")
+def links_import(
+    name: str = Form(""), entries: str = Form("[]"), tags: str = Form("[]"),
+    draft_wiki: str = Form(""),
+) -> RedirectResponse:
+    """Create a local collection from parsed link entries and start PDF downloads when a
+    source URL is available."""
+    try:
+        parsed = json.loads(entries or "[]")
+    except (json.JSONDecodeError, TypeError):
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    selected = [e for e in parsed if isinstance(e, dict) and e.get("ok")]
+    if not selected:
+        raise HTTPException(status_code=400, detail="No importable links selected")
+
+    disp = (name or "").strip() or _default_link_collection_name(selected)
+    if name.strip():
+        _require_unique_name(disp)
+    slug = library.create_local_collection(disp)
+    try:
+        parsed_tags = json.loads(tags or "[]")
+        if isinstance(parsed_tags, list):
+            library.set_tags(slug, parsed_tags)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    triage_mod.add_entries(slug, selected)
+    if draft_wiki:
+        threading.Thread(target=library._maybe_seed_wiki, args=(slug, True), daemon=True).start()
+    return RedirectResponse(f"/c/{slug}?tab=papers", status_code=303)
+
+
 @app.post("/collections/dir-import")
 def dir_import(
     name: str = Form(""), path: str = Form(""), tags: str = Form("[]"),
@@ -1448,22 +1551,25 @@ def collection_download_all(slug: str) -> RedirectResponse:
 
 @app.post("/c/{slug}/papers/parse")
 def papers_parse(slug: str, urls: str = Form("")) -> dict:
-    """Parse a chunk of arXiv/OpenReview/direct-PDF URLs (newline/comma separated) into
+    """Parse a chunk of arXiv/DOI/OpenReview/direct-PDF URLs (newline/comma separated) into
     entries with fetched metadata, for the Add-paper wizard. Flags ones already in this
     collection."""
     _require_collection(slug)
     entries = discover.parse_add_input(urls)
     have_arxiv = {p["arxiv_id"] for p in library.list_papers(slug) if p.get("arxiv_id")}
     have_or = {p.get("openreview_id") for p in library.list_papers(slug) if p.get("openreview_id")}
+    have_doi = library.collection_dois(slug)
     have_pdf = library.collection_pdf_urls(slug)
     for e in entries:
         e["dup"] = (e["kind"] == "arxiv" and e["id"] in have_arxiv) or \
                    (e["kind"] == "openreview" and e["id"] in have_or) or \
+                   (e["kind"] == "doi" and (e["id"] or "").lower() in have_doi) or \
                    (e["kind"] == "pdf" and e["id"] in have_pdf)
         # If it's currently removed (graveyard/permanently-deleted), adding restores it.
         e["removed"] = None if e["dup"] or not e.get("ok") else library.removal_tier(
             slug, arxiv_id=e["id"] if e["kind"] == "arxiv" else None,
-            openreview_id=e["id"] if e["kind"] == "openreview" else None)
+            openreview_id=e["id"] if e["kind"] == "openreview" else None,
+            doi=e["id"] if e["kind"] == "doi" else None)
     return {"entries": entries}
 
 

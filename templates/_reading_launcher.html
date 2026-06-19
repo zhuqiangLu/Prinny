@@ -55,15 +55,15 @@
         <span x-show="mode==='custom'">{{ tr("Describe what you're looking for") }} <span class="text-slate-400">{{ tr("(optional)") }}</span></span>
       </label>
       <textarea name="custom" x-model="q" maxlength="500" rows="3" {% if reading_running %}disabled{% endif %}
-                :placeholder="mode==='approach' ? 'e.g., We contrast frame-difference signals with a learned memory to localize events in long video' : 'e.g., {{ launcher_placeholder }}'"
+                :placeholder="mode==='approach' ? paT('e.g., We contrast frame-difference signals with a learned memory to localize events in long video') : paT('e.g., {placeholder}', {placeholder: '{{ launcher_placeholder }}'})"
                 class="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"></textarea>
       <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
-        <span x-text="mode==='approach' ? '🧬 Match on how it\'s done — be concrete about the technique' : '💡 Be specific for better results'"></span>
+        <span x-text="mode==='approach' ? '🧬 ' + paT('Match on how it is done — be concrete about the technique') : '💡 ' + paT('Be specific for better results')"></span>
         <span class="tabular-nums" x-text="q.length + '/500'"></span>
       </div>
       {% if examples %}
       <div x-data="{ ex: false }" x-show="mode==='custom'" class="mt-1">
-        <button type="button" @click="ex = !ex" class="text-[11px] text-violet-600 hover:underline"><span x-text="ex ? 'Hide examples ▴' : 'Examples ▾'"></span></button>
+        <button type="button" @click="ex = !ex" class="text-[11px] text-violet-600 hover:underline"><span x-text="ex ? paT('Hide examples') + ' ▴' : paT('Examples') + ' ▾'"></span></button>
         <ul x-show="ex" x-cloak class="mt-1 space-y-1">
           {% for e in examples %}
           <li><button type="button" data-ex="{{ e }}" @click="q = $el.dataset.ex; mode='custom'" class="text-left text-[11px] text-slate-600 hover:text-violet-700">“{{ e }}”</button></li>

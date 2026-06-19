@@ -56,7 +56,7 @@
               {% set mi = "w-full flex items-center gap-2 px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50" %}
               <form method="post" action="/t/{{ t.slug }}/generate" @submit="open=false"><button class="{{ mi }}">↻ {{ tr("Regenerate investigation") }}</button></form>
               <button @click="open=false; manage=true" class="{{ mi }}">⛓ {{ tr("Manage collections") }}</button>
-              <form method="post" action="/t/{{ t.slug }}/delete" onsubmit="return confirm('Delete this research topic? (collections and papers are untouched)')"><button class="{{ mi }} text-rose-600 hover:bg-rose-50">🗑 {{ tr("Delete topic") }}</button></form>
+              <form method="post" action="/t/{{ t.slug }}/delete" onsubmit="return confirm('{{ tr('Delete this research topic? (collections and papers are untouched)') }}')"><button class="{{ mi }} text-rose-600 hover:bg-rose-50">🗑 {{ tr("Delete topic") }}</button></form>
             </div>
           </div>
         </div>

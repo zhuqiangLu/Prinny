@@ -3,6 +3,7 @@ PDF store, and additive sync — all with a fake Zotero + temp dirs (no network)
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 import pytest
@@ -622,6 +623,23 @@ def test_parse_add_input_arxiv_openreview_and_bad(wired, monkeypatch):
     assert out[1]["id"] == "abc123"
 
 
+def test_parse_add_input_doi_url(wired, monkeypatch):
+    import app.discover as discover
+    monkeypatch.setattr(discover.semantic_scholar, "fetch_batch", lambda ids, require_abstract=True: {
+        "DOI:10.1145/123.456": {
+            "doi": "10.1145/123.456", "arxiv_id": "2401.00001",
+            "title": "DOI Paper", "authors": "Ada", "year": "2025",
+            "summary": "abstract", "pdf_url": "https://example.org/doi.pdf",
+        }
+    })
+    out = discover.parse_add_input("https://doi.org/10.1145/123.456")
+    assert len(out) == 1
+    assert out[0]["kind"] == "doi" and out[0]["ok"]
+    assert out[0]["id"] == "10.1145/123.456"
+    assert out[0]["arxiv_id"] == "2401.00001"
+    assert out[0]["pdf_url"] == "https://example.org/doi.pdf"
+
+
 def test_add_entries_creates_and_starts_downloads(wired, monkeypatch):
     import app.triage as triage
     started = []
@@ -638,6 +656,64 @@ def test_add_entries_creates_and_starts_downloads(wired, monkeypatch):
     con = library.connect()
     assert con.execute("SELECT openreview_id FROM papers WHERE id=?", (pids[1],)).fetchone()[0] == "OR1"
     con.close()
+
+
+def test_add_entries_doi_uses_pdf_url_for_download(wired, monkeypatch):
+    import app.triage as triage
+    started = []
+    monkeypatch.setattr(pdf_store, "has_pdf", lambda pid: False)
+    monkeypatch.setattr(pdf_store, "start_download", lambda pid: started.append(pid) or True)
+    slug = library.create_local_collection("DOI Box")
+    pids = triage.add_entries(slug, [
+        {"kind": "doi", "id": "10.1145/123.456", "title": "DOI Paper",
+         "authors": "Ada", "year": "2025", "abstract": "a",
+         "pdf_url": "https://example.org/doi.pdf"},
+    ])
+    assert started == pids
+    papers = library.list_papers(slug)
+    assert papers[0]["doi"] == "10.1145/123.456"
+    assert papers[0]["pdf_url"] == "https://example.org/doi.pdf"
+    assert papers[0]["has_pdf"]
+
+
+def test_collection_parse_flags_duplicate_doi(wired, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.discover as discover
+    import app.main as main
+
+    slug = library.create_local_collection("Dup DOI")
+    pid = library.upsert_paper(doi="10.1145/123.456", title="Existing")
+    library.add_membership(slug, pid)
+    monkeypatch.setattr(discover, "fetch_doi_metadata", lambda doi: {
+        "doi": doi, "title": "Existing", "authors": "Ada", "year": "2025",
+        "summary": "abstract", "pdf_url": "https://example.org/doi.pdf",
+    })
+    r = TestClient(main.app).post(f"/c/{slug}/papers/parse", data={"urls": "https://doi.org/10.1145/123.456"})
+    assert r.status_code == 200
+    entry = r.json()["entries"][0]
+    assert entry["kind"] == "doi" and entry["dup"] is True
+
+
+def test_homepage_links_import_creates_collection_and_downloads(wired, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as main
+
+    started = []
+    monkeypatch.setattr(pdf_store, "has_pdf", lambda pid: False)
+    monkeypatch.setattr(pdf_store, "start_download", lambda pid: started.append(pid) or True)
+    entry = {"kind": "doi", "id": "10.1145/123.456", "title": "Imported DOI",
+             "authors": "Ada", "year": "2025", "abstract": "a",
+             "pdf_url": "https://example.org/doi.pdf", "ok": True}
+    r = TestClient(main.app).post(
+        "/collections/links-import",
+        data={"name": "Link Box", "entries": json.dumps([entry])},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    col = next(c for c in library.list_collections() if c["name"] == "Link Box")
+    assert r.headers["location"] == f"/c/{col['slug']}?tab=papers"
+    assert [p["title"] for p in library.list_papers(col["slug"])] == ["Imported DOI"]
+    assert len(started) == 1
 
 
 def test_drop_paper_hard_deletes_no_graveyard(wired, monkeypatch):

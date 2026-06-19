@@ -57,7 +57,7 @@
             <textarea form="edit-{{ t.id }}" name="text" rows="4" class="w-full rounded border border-slate-300 px-2 py-1">{{ t.body }}</textarea>
           </div>
           <div class="mt-2 flex gap-3 text-xs text-slate-500">
-            <button type="button" @click="edit=!edit" x-text="edit?'cancel':'edit'"></button>
+            <button type="button" @click="edit=!edit" x-text="edit ? paT('cancel') : paT('edit')"></button>
             <button form="edit-{{ t.id }}" type="submit" x-show="edit" class="text-slate-700">{{ tr("save") }}</button>
             <button form="supersede-{{ t.id }}" type="submit" class="hover:text-slate-700">{{ tr("supersede") }}</button>
             <button form="delete-{{ t.id }}" type="submit" class="hover:text-rose-700"
