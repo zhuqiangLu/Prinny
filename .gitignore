@@ -8,6 +8,11 @@ venv/
 build/
 dist/
 
+# Cached paper PDFs — the store lives outside the repo (~/.prinny/pdfs). These are
+# named <paper-id>.pdf and only ever land here if pdf_store_path resolves to the CWD
+# (now guarded against in app/pdf_store.store_dir). Never commit them — they're a cache.
+*.pdf
+
 # Playwright
 node_modules/
 /test-results/

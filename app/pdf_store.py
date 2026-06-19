@@ -26,7 +26,17 @@ log = logging.getLogger("paper_agent.pdf_store")
 
 
 def store_dir() -> Path:
-    return Path(load_config()["pdf_store_path"])
+    """The PDF cache directory. NEVER a relative/empty path — a blank or relative
+    ``pdf_store_path`` would resolve against the current working directory (e.g. the repo
+    root when running from a checkout) and scatter ``<id>.pdf`` files there. Fall back to the
+    absolute default in that case."""
+    from .config import APP_DIR
+    raw = (load_config().get("pdf_store_path") or "").strip()
+    p = Path(raw).expanduser() if raw else (APP_DIR / "pdfs")
+    if not p.is_absolute():
+        log.warning("pdf_store_path %r is not absolute; falling back to the default store", raw)
+        p = APP_DIR / "pdfs"
+    return p
 
 
 def store_available() -> bool:
